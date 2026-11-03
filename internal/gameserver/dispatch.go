@@ -57,6 +57,19 @@ func (c *Ctx) Reply(body []byte) {
 	c.Sess.SendEnvelope(proto.BuildResponseEnvelope(c.CallID, body))
 }
 
+// ReplyFailure 返回业务错误，不能降级为合成成功对象。
+func (c *Ctx) ReplyFailure(errorType, message string) {
+	if !c.ExpectResponse {
+		return
+	}
+	envelope := proto.BuildFailureEnvelope(c.CallID, errorType, message)
+	if c.replyCapture != nil {
+		c.replyCapture.captureFailure(envelope)
+		return
+	}
+	c.Sess.SendEnvelope(envelope)
+}
+
 // ReplyValue 编码 payload 值并回包。
 func (c *Ctx) ReplyValue(v *proto.Value) error {
 	body, err := proto.EncodeValue(v, c.Sess.Table())
