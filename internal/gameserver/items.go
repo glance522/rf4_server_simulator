@@ -58,6 +58,7 @@ var categoryWireClass = map[int64]wireClassEntry{
 	42: {"nacllfpgomk", 142}, // 工坊材料，可堆叠；定义类型 12026 夹在拟饵 141 与地图 143 之间
 	44: {"fcdgfdomnjm", 160}, // Sbirolino
 	46: {"cilmgoaoofg", 120}, // 成品窝料
+	47: {"eebdgfednim", 700}, // 铃铛/咬钩信号器 dadgbbiijki
 	48: {"npnkhkicfkg", 613}, // 渔轮导线环
 	49: {"bnfpgceodij", 616}, // 制动钮
 	50: {"jjikombcnnj", 614}, // 轮手柄
@@ -840,10 +841,10 @@ func netTicksNow() int64 {
 }
 
 // reclassifyStoredItem 把误落成钓线类的物品改写成该类别自己的实例类。
-// 已经买进背包的工坊工具和材料靠这一步恢复图标，不必扔掉重买。
+// 已购工具、材料和铃铛靠这一步恢复实例类型，不必重买。
 // guid、容器、数量、耐久和工艺保持不变。类别已经对上，或不是钓线回退类时不改。
 func (s *Server) reclassifyStoredItem(ctx context.Context, it *store.Item, def *store.ItemDef) (bool, error) {
-	if it == nil || def == nil {
+	if it == nil || def == nil || (def.Category != 41 && def.Category != 42 && def.Category != 47) {
 		return false, nil
 	}
 	cls, ok := categoryWireClass[def.Category]
@@ -858,6 +859,19 @@ func (s *Server) reclassifyStoredItem(ctx context.Context, it *store.Item, def *
 		return false, err
 	}
 	s.applyDefAttrs(def, cls.Class, obj)
+	if def.Category == 47 {
+		old, err := FieldsFromJSON(it.FieldsJSON)
+		if err != nil {
+			return false, err
+		}
+		// 换实例类型时保留已挂载铃铛的父引用和共同状态字段。
+		for _, field := range wiregen.ClassMeta[cls.Class].Fields {
+			idx := fieldIdxByCS(it.WireClass, field.Name)
+			if idx >= 0 && idx < len(old) && old[idx].Op == obj.Fields[field.Idx].Op {
+				obj.Fields[field.Idx] = old[idx]
+			}
+		}
+	}
 	setHex := func(cs, v string) {
 		if idx := fieldIdxByCS(cls.Class, cs); idx >= 0 {
 			obj.Fields[idx].Hex = v
@@ -871,22 +885,13 @@ func (s *Server) reclassifyStoredItem(ctx context.Context, it *store.Item, def *
 	setHex(csGUID, it.GUID)
 	setNum(csNumericID, uint64(def.NumericID))
 	rowQty := it.Qty
-	if rowQty < 1 {
-		rowQty = 1
-	}
 	if countableCategories[def.Category] {
 		if idx := fieldIdxByCS(cls.Class, csQty); idx >= 0 {
 			obj.Fields[idx].Num = ptrU64(uint64(rowQty))
 		}
 	}
 	workmanship := it.Workmanship
-	if workmanship <= 0 {
-		workmanship = 1
-	}
 	durability := it.Durability
-	if durability <= 0 {
-		durability = 1
-	}
 	s.materializeInto(ctx, cls.Class, def, obj, it.GUID, workmanship, durability)
 	if idx := fieldIdxByCS(cls.Class, csCreated); idx >= 0 && u64Of(obj.Fields[idx].Num) == 0 {
 		obj.Fields[idx].Num = ptrU64(uint64(netTicksNow()))
@@ -894,7 +899,7 @@ func (s *Server) reclassifyStoredItem(ctx context.Context, it *store.Item, def *
 	if idx := fieldIdxByCS(cls.Class, csUpdated); idx >= 0 && u64Of(obj.Fields[idx].Num) == 0 {
 		obj.Fields[idx].Num = ptrU64(uint64(proto.WindowsFiletimeNow()))
 	}
-	if idx := fieldIdxByCS(cls.Class, csStateEnum); idx >= 0 {
+	if idx := fieldIdxByCS(cls.Class, csStateEnum); idx >= 0 && (def.Category != 47 || u64Of(obj.Fields[idx].Num) == 0) {
 		st := u64Of(obj.Fields[idx].Num)
 		if defBits, ok := defAttrU64(def, "hgaijieklek"); ok {
 			st = defBits
