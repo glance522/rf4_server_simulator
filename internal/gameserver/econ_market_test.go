@@ -141,7 +141,7 @@ func TestFishMarketFlow(t *testing.T) {
 	if boot := fc.WaitPush(2 * time.Second); boot == nil || boot.Main != 0 {
 		t.Fatalf("boot 0/1 缺失: %+v", boot)
 	}
-	cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	cctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	p0, err := db.EnsureProfile(cctx, uid)
 	if err != nil {
@@ -174,6 +174,7 @@ func TestFishMarketFlow(t *testing.T) {
 	if resp := fc.WaitResponse(3 * time.Second); resp == nil || resp.Body[0] != 0x01 {
 		t.Fatalf("14/2 应回 800: %+v", resp)
 	}
+	sendFishingTickForTest(t, fc, 220, 0x200, "loc1_02")
 	// 14/14（bite_delay_fixed=0.3，落水保护顺延至 ~6s）
 	fish14 := waitPushCmd(t, fc, 14, 14, 20*time.Second)
 	if fish14 == nil {

@@ -88,11 +88,11 @@ func TestGearWeightCapIncludesHookStrengthAndHookSize(t *testing.T) {
 		RodPowerKg: 100, LineStrengthKg: 100, LeaderStrengthKg: 100,
 		HookPresent: true, HookStrengthKg: 80, HookLengthMM: 5, HookSize: 12, LineStretch: 0,
 	}
-	if got := gearWeakestPart(spec); got != "rod" {
-		t.Fatalf("最弱断件=%q，期望 rod；鱼钩只限制派鱼口径，不进入用户定义的炸杆链", got)
+	if got := gearWeakestPart(spec); got != "hook" {
+		t.Fatalf("最弱断件=%q，期望 hook", got)
 	}
-	if got := gearBreakLimitKg(spec); math.Abs(got-100) > 1e-9 {
-		t.Fatalf("承力链限额=%f，期望竿/线/子线 100kg", got)
+	if got := gearBreakLimitKg(spec); math.Abs(got-80) > 1e-9 {
+		t.Fatalf("承力链限额=%f，期望鱼钩 80kg", got)
 	}
 	// 5mm 钩按立方口径上限 = 8 * 5^3 = 1000g，再允许 35% 控鱼余量。
 	if got := gearWeightCapKg(spec); math.Abs(got-1.35) > 1e-9 {
@@ -333,10 +333,18 @@ func TestDBRollHonorsDynamicGearCap(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv := NewServerForGearTest(t, db)
+	matched := 0
 	for i := 0; i < 300; i++ {
 		f := srv.rollFishFromDBWithRules("level_001_lake", "", 0.25, neutralFishingSkillBonus())
-		if f == nil || f.WeightG > 250 {
+		if f == nil {
+			continue
+		}
+		matched++
+		if f.WeightG > 250 {
 			t.Fatalf("DB 体重=%v，超过物理上限250g", f)
 		}
+	}
+	if matched == 0 {
+		t.Fatal("没有匹配的鱼")
 	}
 }

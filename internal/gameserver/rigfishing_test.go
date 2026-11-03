@@ -313,6 +313,7 @@ func TestLureBiteGating(t *testing.T) {
 	if resp := fc.WaitResponse(3 * time.Second); len(resp.Body) == 0 || resp.Body[0] != 0x01 {
 		t.Fatalf("14/2 应回 800: %x", resp.Body)
 	}
+	sendFishingTickForTest(t, fc, 420, 0x400, "loc1_02")
 
 	// 路亚应在 6 秒窗口内咬钩，额外等待落水时间。
 	fish14 := waitPushCmd(t, fc, 14, 14, 15*time.Second)
@@ -343,6 +344,7 @@ func TestLureBiteGating(t *testing.T) {
 	if resp := fc.WaitResponse(3 * time.Second); len(resp.Body) == 0 || resp.Body[0] != 0x01 {
 		t.Fatalf("14/2 应回 800: %x", resp.Body)
 	}
+	sendFishingTickForTest(t, fc, 421, 0x400, "loc1_02")
 	fish14b := waitPushCmd(t, fc, 14, 14, 15*time.Second)
 	if fish14b == nil {
 		t.Fatal("未挂载时 14/14 也应到达（服务端判鱼照常），此处校验其 f23 形态")

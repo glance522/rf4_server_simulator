@@ -154,6 +154,8 @@ func rolledFishToStore(f *RolledFish) *store.FishingFish {
 	}
 	return &store.FishingFish{
 		FishGUID: f.FishGUID,
+		Stamina:  f.Stamina,
+		Force:    f.Force,
 		Species:  f.Species,
 		Grade:    f.Grade,
 		WeightG:  f.WeightG,
@@ -172,6 +174,8 @@ func rolledFishFromStore(f *store.FishingFish) *RolledFish {
 	}
 	return &RolledFish{
 		FishGUID: f.FishGUID,
+		Stamina:  f.Stamina,
+		Force:    f.Force,
 		Species:  f.Species,
 		Grade:    f.Grade,
 		WeightG:  f.WeightG,

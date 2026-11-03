@@ -74,14 +74,22 @@ func (s *Server) loadFightCurves() {
 }
 
 // buildFightCurves 构造 26 行曲线池，并按基础行 f8 缩放张力。
-func (s *Server) buildFightCurves(species string, pull float64) *proto.Value {
+func (s *Server) fightCurveRows(species string) [][19]float64 {
 	s.curveMu.Lock()
 	rows := s.curves[species]
+	if len(rows) == 0 {
+		rows = s.curves[performanceForFish(species).motion]
+	}
 	if len(rows) == 0 {
 		rows = s.curves["crucian"]
 	}
 	s.curveMu.Unlock()
 
+	return rows
+}
+
+func (s *Server) buildFightCurves(species string, pull float64) *proto.Value {
+	rows := s.fightCurveRows(species)
 	out := proto.Args(proto.S("27"))
 	if len(rows) == 0 {
 		return out
@@ -108,7 +116,7 @@ func (s *Server) buildFightCurves(species string, pull float64) *proto.Value {
 	return out
 }
 
-// buildFightItems 构造 4/22 物品同步元素：full 返回竿和线，非 full 返回钩。
+// buildFightItems 全量同步当前承力链，刺中单钩同步仍保持原协议。
 // 14/11 以钩强 f0 作为负载比基准，因此非 full 分支不能返回竿树。
 func (s *Server) buildFightItems(ctx context.Context, uid int64, full bool) ([]*proto.Value, error) {
 	st := s.stateFor(uid)
@@ -145,14 +153,25 @@ func (s *Server) buildFightItems(ctx context.Context, uid int64, full bool) ([]*
 		return nil, err
 	}
 	out = append(out, rodTree)
-	// 线 = 挂装槽 11 的物品树
-	if lineGUID, err := s.DB.GetItemGUIDByRigSlot(ctx, gear, 11); err == nil && lineGUID != "" {
-		if lineRow, err := s.DB.GetItemByGUID(ctx, lineGUID); err == nil {
-			lineTree, err := s.ItemToTree(ctx, lineRow)
-			if err == nil {
-				out = append(out, lineTree)
-			}
+	ids := s.rigGearIDs(ctx, uid, gear)
+	seen := map[string]bool{gear: true}
+	for _, guid := range []string{ids.LineGUID, ids.ReelGUID, ids.LeaderGUID, ids.ConnectorGUID} {
+		if guid == "" || seen[guid] {
+			continue
 		}
+		row, err := s.DB.GetItemByGUID(ctx, guid)
+		if err != nil || row == nil || row.UID != uid {
+			continue
+		}
+		tree, err := s.ItemToTree(ctx, row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, tree)
+		seen[guid] = true
+	}
+	if hook := s.buildMountedHookTree(ctx, gear); hook != nil {
+		out = append(out, hook)
 	}
 	return out, nil
 }

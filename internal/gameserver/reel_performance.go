@@ -158,11 +158,12 @@ func (s *Server) syncReelPerformance(ctx context.Context, row *store.Item) (*sto
 	if durability > 1 {
 		durability = 1
 	}
+	def, _ := s.itemDefForRow(ctx, row)
 	v := &store.ReelPerformance{
 		ReelGUID:       row.GUID,
 		UID:            row.UID,
 		BaseDragKg:     base,
-		LockedDragKg:   base * reelLockMultiplier(durability) * bearingFactor,
+		LockedDragKg:   reelLockedLoadKg(def, base, durability, bearingFactor),
 		Durability:     durability,
 		BearingItemID:  bearingItemID,
 		BearingQuality: bearingQuality,

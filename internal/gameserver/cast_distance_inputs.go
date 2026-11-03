@@ -85,9 +85,15 @@ func (s *Server) castLineStats(ctx context.Context, rodGUID, lineItemID string) 
 	out.Stretch = lineStretch(def)
 	out.Material = itemDefInt(def, castAttrLineMaterial)
 	out.LinearDensityGPM = lineDensityGPM(def)
-	lineGUID := s.rigComponentGuidOf(ctx, rodGUID, catLine)
+	lineGUID := ""
+	if rod, err := s.DB.GetItemByGUID(ctx, rodGUID); err == nil && rod != nil {
+		lineGUID, _ = s.storedRigItemGUID(ctx, rod, csLine)
+	}
+	if lineGUID == "" {
+		lineGUID = s.rigComponentGuidOf(ctx, rodGUID, catLine)
+	}
 	if row, rerr := s.DB.GetItemByGUID(ctx, lineGUID); rerr == nil && row != nil {
-		if n := s.itemLength(ctx, row); n > 0 {
+		if n := s.itemLength(ctx, row); n >= 0 {
 			out.LengthM = float64(n)
 		}
 	}

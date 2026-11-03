@@ -12,6 +12,8 @@ import (
 // 重量与曲线输入，禁止重启后重新 roll。
 type FishingFish struct {
 	FishGUID string  `json:"fish_guid"`
+	Stamina  float64 `json:"stamina,omitempty"`
+	Force    float64 `json:"force,omitempty"`
 	Species  string  `json:"species"`
 	Grade    int64   `json:"grade"`
 	WeightG  int64   `json:"weight_g"`

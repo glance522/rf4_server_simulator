@@ -500,6 +500,14 @@ func (s *Server) reconcileRigProjection(ctx context.Context, rodGUID string) err
 	if idx < 0 || idx >= len(fields) {
 		return nil // 非竿容器：由调用方走各自旧投影逻辑
 	}
+	return s.DB.ReplaceRigComponents(ctx, rodGUID, rigProjectionFields(row.WireClass, fields))
+}
+
+func rigProjectionFields(class string, fields []proto.Field) []store.RigComponent {
+	idx := fieldIdxByCS(class, csRigObject)
+	if idx < 0 || idx >= len(fields) {
+		return nil
+	}
 	rigType := int64(0)
 	if f5 := fields[idx].Val; f5 != nil {
 		if _, rt, ok := rigIdentity(f5); ok {
@@ -535,7 +543,7 @@ func (s *Server) reconcileRigProjection(ctx context.Context, rodGUID string) err
 	}
 	for _, cat := range []int64{catReel, catLine} {
 		csName := categorySlotField[cat]
-		sidx := fieldIdxByCS(row.WireClass, csName)
+		sidx := fieldIdxByCS(class, csName)
 		if sidx < 0 || sidx >= len(fields) || !validRigGUID(fields[sidx].Hex) {
 			continue
 		}
@@ -550,7 +558,7 @@ func (s *Server) reconcileRigProjection(ctx context.Context, rodGUID string) err
 		}
 		return out[i].Ordinal < out[j].Ordinal
 	})
-	return s.DB.ReplaceRigComponents(ctx, rodGUID, out)
+	return out
 }
 
 // cloneFields 深拷贝字段数组，供拆分子实例使用。

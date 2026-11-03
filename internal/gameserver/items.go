@@ -227,7 +227,7 @@ func (s *Server) materializeInto(ctx context.Context, class string, def *store.I
 	switch class {
 	case "dgjinoebdop": // 渔轮 f2..f14
 		fill(reelPartKeys, false)
-	case "oldfpclaabo": // 前导 f1/f2（f3 线槽 def 无配置恒 null）
+	case "oldfpclaabo": // 前导材料；制作主线保存在 f3，静态定义不填该槽。
 		fill(leaderPartKeys, false)
 		// f0 强度等于钢丝配置 kngaaefkpka 乘以工艺。
 		if idx := fieldIdxByCS(class, csStrength); idx >= 0 && fieldIsFloat(class, idx) && obj.Fields[idx].Float == 0 {
@@ -339,6 +339,11 @@ func (s *Server) canonicalizeItemPhysicalFields(ctx context.Context, it *store.I
 	if s.canonicalizeNestedItemPhysicalFields(ctx, class, fields, it.Workmanship, it.Durability) {
 		changed = true
 	}
+	if class == "oldfpclaabo" {
+		if setWireFloat(fields, class, fieldIdxByCS(class, csStrength), leaderFieldsStrength(fields, it.Durability)) {
+			changed = true
+		}
+	}
 	return changed
 }
 
@@ -359,7 +364,7 @@ func (s *Server) canonicalizeNestedItemPhysicalFields(ctx context.Context, class
 	case "dgjinoebdop":
 		appendRange(2, 14)
 	case "oldfpclaabo":
-		appendRange(1, 2)
+		appendRange(1, 3)
 	case "ioombppcnlh":
 		if len(fields) > 0 && fields[0].Val != nil {
 			objs = append(objs, fields[0].Val.Items...)
@@ -375,12 +380,13 @@ func (s *Server) canonicalizeNestedItemPhysicalFields(ctx context.Context, class
 		}
 		// 子件耐久是零件自己的磨损数据（工坊修复/换件依赖它），
 		// 只在缺失（nil/0）时用母物品耐久初始化，已有值必须保留。
+		// 前导材料和出厂钩的零耐久表示损坏，不能重新初始化。
 		if si := fieldIdxByCS(obj.Class, csDurability); si >= 0 && si < len(obj.Fields) {
 			cur := 0.0
 			if f := obj.Fields[si]; f.Num != nil {
 				cur = float64(proto.F32FromBits(uint32(*f.Num)))
 			}
-			if cur <= 0 && setWireFloat(obj.Fields, obj.Class, si, durability) {
+			if (obj.Fields[si].Num == nil || (cur <= 0 && class != "oldfpclaabo" && class != "ioombppcnlh")) && setWireFloat(obj.Fields, obj.Class, si, durability) {
 				changed = true
 			}
 		}
@@ -398,9 +404,13 @@ func (s *Server) canonicalizeNestedItemPhysicalFields(ctx context.Context, class
 			strength = itemDefF32(def, gearAttrRatio) * workmanship
 			strengthOK = strength > 0
 		} else {
-			strength, strengthOK = strengthBitsFor(def, durability)
+			partDurability := durability
+			if si := fieldIdxByCS(obj.Class, csDurability); si >= 0 && si < len(obj.Fields) && obj.Fields[si].Num != nil {
+				partDurability = float64(proto.F32FromBits(uint32(u64Of(obj.Fields[si].Num))))
+			}
+			strength, strengthOK = strengthBitsFor(def, partDurability)
 		}
-		if strengthOK && strength > 0 {
+		if strengthOK && (strength > 0 || class == "oldfpclaabo" || class == "ioombppcnlh") {
 			if setWireFloat(obj.Fields, obj.Class, fieldIdxByCS(obj.Class, csStrength), strength) {
 				changed = true
 			}
@@ -433,7 +443,7 @@ func canonicalizeNestedItemContainers(class string, fields []proto.Field) bool {
 			setObj(fields[i].Val)
 		}
 	case "oldfpclaabo":
-		for i := 1; i <= 2 && i < len(fields); i++ {
+		for i := 1; i <= 3 && i < len(fields); i++ {
 			setObj(fields[i].Val)
 		}
 	case "ioombppcnlh":

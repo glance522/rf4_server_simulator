@@ -140,7 +140,9 @@ func hDynamicRodBreak(ctx *Ctx) ([]byte, bool) {
 				st.GearGuid = ""
 			}
 			st.mu.Unlock()
-			if outcome.ReelDamaged {
+			if outcome.BreakPart == "hook" || outcome.BreakPart == "leader_lock" {
+				srv.bumpFishingCounter(ctx.Sess.Userid, "escapes")
+			} else if outcome.ReelDamaged {
 				// 轮子只是降一个耐久阶段，仍留在竿上；本次鱼按超载跑鱼处理。
 				srv.bumpFishingCounter(ctx.Sess.Userid, "escapes")
 			} else if outcome.LineBroken {

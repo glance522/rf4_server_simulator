@@ -1,0 +1,287 @@
+{
+  "alfonsino": {
+    "k": 0.04,
+    "reference_g": 8402,
+    "reference_m": 0.81
+  },
+  "ambl_h": {
+    "k": 0.0468,
+    "reference_g": 6027,
+    "reference_m": 0.85
+  },
+  "ambl_r": {
+    "k": 0.0429,
+    "reference_g": 12592,
+    "reference_m": 1
+  },
+  "atl_cod": {
+    "k": 0.0425,
+    "reference_g": 44171,
+    "reference_m": 1.5
+  },
+  "atl_herring": {
+    "k": 0.05,
+    "reference_g": 472,
+    "reference_m": 0.39
+  },
+  "b_scabbardfish": {
+    "k": 0.0873,
+    "reference_g": 1996,
+    "reference_m": 1.1
+  },
+  "c_anguineus": {
+    "k": 0.0466,
+    "reference_g": 48513,
+    "reference_m": 1.7
+  },
+  "c_squid": {
+    "k": 0.06,
+    "reference_g": 1455,
+    "reference_m": 0.68
+  },
+  "centroloph_n": {
+    "k": 0.037,
+    "reference_g": 14364,
+    "reference_m": 0.9
+  },
+  "cetorhinus_m": {
+    "k": 0.0549,
+    "reference_g": 252723,
+    "reference_m": 3.47
+  },
+  "chimaera": {
+    "k": 0.06,
+    "reference_g": 1555,
+    "reference_m": 0.7
+  },
+  "chlamys_isl": {
+    "k": 0.0124,
+    "reference_g": 269,
+    "reference_m": 0.08
+  },
+  "coalfish": {
+    "k": 0.0412,
+    "reference_g": 19055,
+    "reference_m": 1.1
+  },
+  "conger": {
+    "k": 0.0588,
+    "reference_g": 52136,
+    "reference_m": 2.2
+  },
+  "d_zubatka": {
+    "k": 0.0538,
+    "reference_g": 6381,
+    "reference_m": 1
+  },
+  "ed_crab": {
+    "k": 0.0164,
+    "reference_g": 1806,
+    "reference_m": 0.2
+  },
+  "halibut_b": {
+    "k": 0.0437,
+    "reference_g": 16049,
+    "reference_m": 1.1
+  },
+  "halibut_w": {
+    "k": 0.0475,
+    "reference_g": 128700,
+    "reference_m": 2.4
+  },
+  "himant_g": {
+    "k": 0.037,
+    "reference_g": 4289,
+    "reference_m": 0.6
+  },
+  "hippoglos_p": {
+    "k": 0.042,
+    "reference_g": 2923,
+    "reference_m": 0.6
+  },
+  "katran": {
+    "k": 0.0595,
+    "reference_g": 6369,
+    "reference_m": 1.1
+  },
+  "lamna_n": {
+    "k": 0.05,
+    "reference_g": 85107,
+    "reference_m": 2.2
+  },
+  "lampris_g": {
+    "k": 0.0359,
+    "reference_g": 88566,
+    "reference_m": 1.6
+  },
+  "lh_kambala": {
+    "k": 0.0403,
+    "reference_g": 3300,
+    "reference_m": 0.6
+  },
+  "lophius_p": {
+    "k": 0.0453,
+    "reference_g": 36356,
+    "reference_m": 1.5
+  },
+  "lycodes_e": {
+    "k": 0.0508,
+    "reference_g": 1658,
+    "reference_m": 0.6
+  },
+  "lycodes_s": {
+    "k": 0.0517,
+    "reference_g": 658,
+    "reference_m": 0.45
+  },
+  "m_molva": {
+    "k": 0.0506,
+    "reference_g": 13366,
+    "reference_m": 1.2
+  },
+  "m_scorpius": {
+    "k": 0.0322,
+    "reference_g": 2716,
+    "reference_m": 0.45
+  },
+  "m_zubatka": {
+    "k": 0.0468,
+    "reference_g": 13120,
+    "reference_m": 1.1
+  },
+  "macrourus_b": {
+    "k": 0.064,
+    "reference_g": 1949,
+    "reference_m": 0.8
+  },
+  "makrel": {
+    "k": 0.0413,
+    "reference_g": 1777,
+    "reference_m": 0.5
+  },
+  "meagre": {
+    "k": 0.0442,
+    "reference_g": 47383,
+    "reference_m": 1.6
+  },
+  "menek": {
+    "k": 0.0422,
+    "reference_g": 13415,
+    "reference_m": 1
+  },
+  "merlang": {
+    "k": 0.0395,
+    "reference_g": 3484,
+    "reference_m": 0.6
+  },
+  "merluza": {
+    "k": 0.0526,
+    "reference_g": 5074,
+    "reference_m": 0.9
+  },
+  "molva": {
+    "k": 0.0691,
+    "reference_g": 10204,
+    "reference_m": 1.5
+  },
+  "mytilus_ed": {
+    "k": 0.0136,
+    "reference_g": 136,
+    "reference_m": 0.07
+  },
+  "ostrea_ed": {
+    "k": 0.0179,
+    "reference_g": 303,
+    "reference_m": 0.12
+  },
+  "p_zubatka": {
+    "k": 0.0574,
+    "reference_g": 9129,
+    "reference_m": 1.2
+  },
+  "piksha": {
+    "k": 0.0422,
+    "reference_g": 9738,
+    "reference_m": 0.9
+  },
+  "pinagor": {
+    "k": 0.032,
+    "reference_g": 3803,
+    "reference_m": 0.5
+  },
+  "pollachius": {
+    "k": 0.0459,
+    "reference_g": 7534,
+    "reference_m": 0.9
+  },
+  "polyprion": {
+    "k": 0.0441,
+    "reference_g": 47781,
+    "reference_m": 1.6
+  },
+  "poutassou": {
+    "k": 0.0449,
+    "reference_g": 467,
+    "reference_m": 0.35
+  },
+  "red_fish": {
+    "k": 0.0421,
+    "reference_g": 1217,
+    "reference_m": 0.45
+  },
+  "rk_crab": {
+    "k": 0.0175,
+    "reference_g": 5355,
+    "reference_m": 0.31
+  },
+  "s_saurus": {
+    "k": 0.0764,
+    "reference_g": 484,
+    "reference_m": 0.6
+  },
+  "sardina_p": {
+    "k": 0.0452,
+    "reference_g": 116,
+    "reference_m": 0.22
+  },
+  "sea_kambala": {
+    "k": 0.039,
+    "reference_g": 2827,
+    "reference_m": 0.55
+  },
+  "sebastes_m": {
+    "k": 0.0369,
+    "reference_g": 5456,
+    "reference_m": 0.65
+  },
+  "sebastes_n": {
+    "k": 0.0343,
+    "reference_g": 5358,
+    "reference_m": 0.6
+  },
+  "somniosus_m": {
+    "k": 0.0635,
+    "reference_g": 250546,
+    "reference_m": 4
+  },
+  "thynnus_t": {
+    "k": 0.0404,
+    "reference_g": 162037,
+    "reference_m": 2.2
+  },
+  "turbot": {
+    "k": 0.0386,
+    "reference_g": 12720,
+    "reference_m": 0.9
+  },
+  "x_gladius": {
+    "k": 0.0512,
+    "reference_g": 181468,
+    "reference_m": 2.9
+  },
+  "zoarces_v": {
+    "k": 0.0424,
+    "reference_g": 841,
+    "reference_m": 0.4
+  }
+}

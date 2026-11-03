@@ -129,7 +129,7 @@ func TestWorkshopOrderRefreshesDragVersionAndPerformance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantLocked := 3.5 * 1.4 * reelBearingFactor(10)
+	wantLocked := 3.4 // 换刹车片只改变泄力，不增加轮体锁轮承力。
 	if math.Abs(perf.BaseDragKg-3.5) > 0.001 || math.Abs(perf.LockedDragKg-wantLocked) > 0.001 {
 		t.Fatalf("轮子物理参数=%+v，期望 base=3.5 locked=%f", perf, wantLocked)
 	}
@@ -278,7 +278,7 @@ func TestReelOverloadUsesDurabilityStages(t *testing.T) {
 		t.Fatalf("轮子耐久=%f，期望 0.8", fresh.Durability)
 	}
 	perf, _ := db.GetReelPerformance(ctx, reel.GUID)
-	if math.Abs(perf.LockedDragKg-perf.BaseDragKg*1.3*perf.BearingFactor) > 0.001 {
+	if math.Abs(perf.LockedDragKg-3.4*1.3/1.4) > 0.001 {
 		t.Fatalf("80%% 耐久锁轮参数错误: %+v", perf)
 	}
 	if got, _ := db.GetItemByGUID(ctx, reel.GUID); got == nil {

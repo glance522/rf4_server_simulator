@@ -358,7 +358,7 @@ func (s *Session) Push4_21(guids []string) {
 	s.Push(4, 21, proto.Args524(proto.GuidArr(guids)))
 }
 
-// Push4_22Full 搏鱼全量同步：args("61")[157竿, 140线]。
+// Push4_22Full 用 args("61") 同步当前钓组的承力件。
 func (s *Session) Push4_22Full() {
 	items, err := s.Srv.buildFightItems(s.pushCtx(), s.Userid, true)
 	if err != nil || len(items) == 0 {

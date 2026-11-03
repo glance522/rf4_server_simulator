@@ -57,6 +57,7 @@ const bundleCategory = 55
 
 // craftSlot 表示 koelkolmmee 槽位：f0 是需求 id，f1 是物品实例 GUID。
 // 部分界面使用客户端临时 GUID，服务端会再按需求 id 定位材料。
+// 制作前导须使用实际背包 GUID，以保存玩家所选材料的属性。
 type craftSlot struct {
 	ItemID string
 	GUID   string
@@ -313,6 +314,29 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 		return srv.replyCraftResult(ctx, false, nil, nil, nil)
 	}
 
+	preparedRows := []*store.Item{producedRow}
+	var leaderMaterials []leaderCraftMaterial
+	if isCraftedLeader(producedRow) {
+		leaderMaterials, err = srv.leaderCraftMaterials(cctx, uid, req, demands)
+		if err != nil {
+			ctx.Log.Warn("制作前导选材失败", "err", err)
+			return srv.replyCraftResult(ctx, false, nil, nil, nil)
+		}
+		for i := int64(1); i < times; i++ {
+			item, err := srv.prepareNewItem(cctx, uid, outputID, "backpack", 1, "")
+			if err != nil {
+				return srv.replyCraftResult(ctx, false, nil, nil, nil)
+			}
+			preparedRows = append(preparedRows, item)
+		}
+		for _, item := range preparedRows {
+			if err := materializeCraftedLeader(item, leaderMaterials); err != nil {
+				ctx.Log.Warn("制作前导物化失败", "err", err)
+				return srv.replyCraftResult(ctx, false, nil, nil, nil)
+			}
+		}
+	}
+
 	tx, err := beginEconomyTx(cctx, srv.DB)
 	if err != nil {
 		ctx.Log.Warn("9/1 开启事务失败", "err", err)
@@ -326,7 +350,12 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 		return srv.replyCraftResult(ctx, false, nil, nil, nil)
 	}
 
-	if len(demands) > 0 && allDemandsExplicit(demands) {
+	if len(leaderMaterials) > 0 {
+		touched, err = consumeLeaderMaterials(cctx, tx, leaderMaterials, times)
+		if err != nil {
+			return fail("前导材料扣除失败", "err", err)
+		}
+	} else if len(demands) > 0 && allDemandsExplicit(demands) {
 		need := scaleDemands(demands, times)
 		rows, lerr := listItemsTx(cctx, tx, uid, []string{"backpack", "rig"})
 		if lerr != nil {
@@ -441,11 +470,14 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 	}
 
 	// 鱼饵和作者现有可堆叠物品一样并入同编号背包堆，避免每做一次多出一个 30 个的独立堆。
-	row, merged, err := grantPreparedItemTx(cctx, tx, producedRow, isBaitCraft)
-	if err != nil {
-		return fail("产出物入库失败", "output", outputID, "err", err)
+	var grantedRows []*store.Item
+	for _, prepared := range preparedRows {
+		row, _, err := grantPreparedItemTx(cctx, tx, prepared, isBaitCraft)
+		if err != nil {
+			return fail("产出物入库失败", "output", outputID, "err", err)
+		}
+		grantedRows = append(grantedRows, row)
 	}
-	_ = merged
 	if err := addTxnTx(cctx, tx, uid, "craft", outputID, "",
 		0, 0, fmt.Sprintf("recipe=%s qty=%d", recipe.RecipeID, times)); err != nil {
 		return fail("制作流水写入失败", "err", err)
@@ -471,8 +503,10 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 		"took", len(touched), "recipe", recipe.RecipeID, "mastery_gain", masteryGain)
 
 	produced := make([]*proto.Value, 0, 1)
-	if tree, terr := srv.ItemToTree(cctx, row); terr == nil {
-		produced = append(produced, tree)
+	for _, row := range grantedRows {
+		if tree, terr := srv.ItemToTree(cctx, row); terr == nil {
+			produced = append(produced, tree)
+		}
 	}
 	upsert := append([]*proto.Value{}, produced...)
 	var removed []string

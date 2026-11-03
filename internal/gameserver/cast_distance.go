@@ -460,6 +460,10 @@ func (s *Server) castDistanceForRig(ctx context.Context, uid int64, rodGUID stri
 	}
 
 	line := s.castLineStats(ctx, rodGUID, ids.Line)
+	if ids.LineGUID != "" && line.LengthM <= 0 {
+		p.DistanceM = 0
+		return p
+	}
 	p.LineDiameterMM = line.DiameterMM
 	p.LineLengthM = line.LengthM
 	p.LineStretch = line.Stretch

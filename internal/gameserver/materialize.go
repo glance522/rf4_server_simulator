@@ -22,7 +22,7 @@ var reelPartKeys = []string{
 	"dfjpnambjcj",
 }
 
-// leaderPartKeys 保存前导子实例键：f1 钢丝、f2 配件；f3 没有嵌套配置。
+// leaderPartKeys 保存前导子实例键：f1 钢丝、f2 配件、f3 制作时选用的主线。
 var leaderPartKeys = []string{"mbnambppbom", "lbadjgllglo", "baadhdmaonp"}
 
 // subUnbuildedKinds 列出暂不物化的子部件类型；当前包含 kind 81。

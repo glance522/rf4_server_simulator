@@ -236,6 +236,19 @@ func TestFishingLoopFull(t *testing.T) {
 
 // ---- 辅助 ----
 
+// sendFishingTickForTest 通过真实 14/7 报文上报入水状态，不直接改服务端状态。
+func sendFishingTickForTest(t *testing.T, fc *testutil.FakeClient, callID uint32, anim uint32, loc string) {
+	t.Helper()
+	tick := wiregen.MustMakeObj("lobemkloehp", map[int]*proto.Value{
+		3: proto.StrVal(loc), 5: proto.U32(anim), 14: proto.U32(1),
+	})
+	body, err := proto.EncodeValue(proto.Args524(tick), wiregen.Table())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc.SendRequest(callID, 14, 7, body...)
+}
+
 func waitPushCmd(t *testing.T, fc *testutil.FakeClient, main, sub uint8, timeout time.Duration) *proto.Envelope {
 	t.Helper()
 	deadline := time.After(timeout)
