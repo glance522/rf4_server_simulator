@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"rf4server/internal/config"
 	"rf4server/internal/logging"
 	"rf4server/internal/proto"
+	"rf4server/internal/store"
 )
 
 func TestBreakReportCannotDamageUnrelatedRod(t *testing.T) {
@@ -220,5 +222,98 @@ func TestHookDamageRollbackPreservesTackleAndFish(t *testing.T) {
 	st.mu.Unlock()
 	if !same {
 		t.Fatal("failed hook damage discarded fishing state")
+	}
+}
+
+func TestFactoryRodPartBreakPersistsAndRejectsOtherRodPart(t *testing.T) {
+	srv, db := newRigTestServer(t)
+	ctx := context.Background()
+	sess := newProbeSess(srv)
+	rod, err := srv.CreateItem(ctx, sess.Userid, "spin_10158_M88HH", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := srv.CreateItem(ctx, sess.Userid, "spin_10158_M88HH", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partGUID := func(rowGUID string) string {
+		tree, err := srv.ItemToTree(ctx, mustItem(t, db, rowGUID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		part := tree.Fields[0].Val
+		return part.Fields[fieldIdxByCS(part.Class, csGUID)].GuidHex()
+	}
+	if _, err := srv.breakLineOrRod(ctx, sess.Userid, rod.GUID, partGUID(other.GUID)); err == nil {
+		t.Fatal("accepted another rod's factory part")
+	}
+	broken := partGUID(rod.GUID)
+	if row, _ := db.GetItemByGUID(ctx, broken); row != nil {
+		t.Fatal("factory part must remain embedded")
+	}
+	st := srv.stateFor(sess.Userid)
+	st.mu.Lock()
+	st.GearGuid, st.CastActive, st.Hooked = rod.GUID, true, true
+	st.Pending = &RolledFish{FishGUID: "11111111111111111111111111111111", WeightG: 500}
+	st.mu.Unlock()
+	request := dynamicTestCtx(srv, rigRequestTree(t, proto.Guid(rod.GUID), proto.Guid(broken), proto.Null()))
+	request.Sess = sess
+	request.Main, request.Sub = 17, 9
+	result := srv.dispatch.executeRequest(request, true)
+	if result.failed || result.nativeFailure || !result.hasResponse {
+		t.Fatalf("valid factory break rejected: %+v", result)
+	}
+	if mustItem(t, db, rod.GUID).Durability != 0 || mustItem(t, db, other.GUID).Durability != 1 {
+		t.Fatal("wrong rod durability")
+	}
+	tree, err := srv.ItemToTree(ctx, mustItem(t, db, rod.GUID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	part := tree.Fields[0].Val
+	if u64Of(part.Fields[fieldIdxByCS(part.Class, csDurability)].Num) != 0 {
+		t.Fatal("factory part healed on reread")
+	}
+	st.mu.Lock()
+	finished := st.Pending == nil && !st.CastActive && !st.Hooked && st.GearGuid == ""
+	st.mu.Unlock()
+	if !finished {
+		t.Fatal("broken rod retained the active fish")
+	}
+	logs, err := db.ListItemDamageLogs(ctx, sess.Userid, 10)
+	if err != nil || len(logs) != 1 || logs[0].BrokenGUID != broken {
+		t.Fatalf("missing factory damage history: %+v %v", logs, err)
+	}
+	path := db.Path
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	restarted := NewServer(config.Game{}, logging.Discard(), nil)
+	restarted.SetDB(reopened)
+	for i := 0; i < 2; i++ {
+		if err := reopened.Migrate(); err != nil {
+			t.Fatal(err)
+		}
+		if err := restarted.RepairItemPhysics(ctx); err != nil {
+			t.Fatal(err)
+		}
+		row := mustItem(t, reopened, rod.GUID)
+		if row.Durability != 0 || !restarted.itemBrokenForMount(ctx, row) {
+			t.Fatal("startup healed the broken rod")
+		}
+		tree, err := restarted.ItemToTree(ctx, row)
+		if err != nil {
+			t.Fatal(err)
+		}
+		part := tree.Fields[0].Val
+		if u64Of(part.Fields[fieldIdxByCS(part.Class, csDurability)].Num) != 0 {
+			t.Fatal("startup healed the factory part")
+		}
 	}
 }

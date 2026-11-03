@@ -149,6 +149,21 @@ func (s *Server) breakLineOrRod(ctx context.Context, uid int64, rodGUID, brokenG
 	if brokenGUID == rodGUID {
 		return s.breakRodTx(ctx, uid, rodGUID, brokenGUID)
 	}
+	// 出厂竿件只存在于母竿内，按现有整竿耐久规则处理断裂。
+	tree, treeErr := s.ItemToTree(ctx, rod)
+	if treeErr != nil {
+		return nil, treeErr
+	}
+	for i := 0; i < 3 && i < len(tree.Fields); i++ {
+		part := tree.Fields[i].Val
+		if part == nil || part.Kind != proto.KindObj {
+			continue
+		}
+		idx := fieldIdxByCS(part.Class, csGUID)
+		if idx >= 0 && idx < len(part.Fields) && part.Fields[idx].GuidHex() == brokenGUID {
+			return s.breakRodTx(ctx, uid, rodGUID, brokenGUID)
+		}
+	}
 	brokenRow, err := s.DB.GetItemByGUID(ctx, brokenGUID)
 	if err != nil || brokenRow == nil || brokenRow.UID != uid {
 		return nil, sql.ErrNoRows
