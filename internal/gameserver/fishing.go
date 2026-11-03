@@ -54,18 +54,21 @@ type FishState struct {
 
 // RolledFish 待结算/已结算的鱼。
 type RolledFish struct {
-	FishGUID string
-	Species  string
-	Grade    int64
-	WeightG  int64
-	LengthM  float64
-	XP       int64
-	Silver   int64
-	LocLevel string
-	Stamina  float64 // obj27#05 搏鱼体力池；0=按体重和已验证兜底比例计算
-	Force    float64 // obj27#08 拉力；0=按体重和已验证比例计算
-	NamedID  string  // 被命名鱼
-	Name     string
+	BaitGUIDs    string
+	BaitsKnown   bool
+	baitInterest float64 // 仅用于派鱼前的吃饵概率，不写入存档。
+	FishGUID     string
+	Species      string
+	Grade        int64
+	WeightG      int64
+	LengthM      float64
+	XP           int64
+	Silver       int64
+	LocLevel     string
+	Stamina      float64 // obj27#05 搏鱼体力池；0=按体重和已验证兜底比例计算
+	Force        float64 // obj27#08 拉力；0=按体重和已验证比例计算
+	NamedID      string  // 被命名鱼
+	Name         string
 }
 
 // stateFor 按 uid 取/建状态。
@@ -379,26 +382,55 @@ func (s *Server) rollFish(loc string, bait string) *RolledFish {
 
 // rollFishForRig 是判鱼入口：先计算当前钓组的最弱环体重上限，
 // 再对静态鱼库和内置鱼池应用该上限及奖杯幸运。
-func (s *Server) rollFishForRig(ctx context.Context, uid int64, gearGUID, loc, bait string, bonus fishingSkillBonus) *RolledFish {
+func (s *Server) rollFishForRig(ctx context.Context, uid int64, gearGUID, loc, bait string, bonus fishingSkillBonus, contexts ...fishRollContext) *RolledFish {
 	capKg, ids, weakest := s.gearWeightCapForRig(ctx, uid, gearGUID)
 	if capKg > 0 {
 		s.log.Info("钓鱼物理上限", "rod", ids.Rod, "reel", ids.Reel,
 			"line", ids.Line, "leader", ids.Leader, "weakest", weakest, "cap_kg", capKg)
 	}
-	return s.rollFishWithRules(loc, bait, capKg, bonus)
+	c := rollContext(contexts)
+	if s.DB != nil && gearGUID != "" {
+		if rod, _ := s.DB.GetItemByGUID(ctx, gearGUID); rod != nil {
+			if rod.UID != uid {
+				return nil
+			}
+			mounted := s.currentBaits(ctx, gearGUID)
+			if len(mounted) == 0 {
+				return nil
+			}
+			if s.tunableF("fish_bait_rules_enabled", 0) == 1 {
+				c.baits = mounted
+			}
+		}
+	}
+	f := s.rollFishWithRules(loc, bait, capKg, bonus, c)
+	if f != nil && f.baitInterest > 0 && rand.Float64() >= f.baitInterest {
+		return nil
+	}
+	return f
 }
 
-func (s *Server) rollFishWithRules(loc, bait string, gearCapKg float64, bonus fishingSkillBonus) *RolledFish {
-	if s.tunableF("fish_bait_rules_enabled", 0) == 1 {
-		if s.DB == nil {
-			return nil
-		}
-		return s.rollFishFromDBWithRules(loc, bait, gearCapKg, bonus)
-	}
+func (s *Server) rollFishWithRules(loc, bait string, gearCapKg float64, bonus fishingSkillBonus, contexts ...fishRollContext) *RolledFish {
+	c := rollContext(contexts)
+	baitRules := s.tunableF("fish_bait_rules_enabled", 0) == 1
+	distribution := s.tunableF("fish_distribution_enabled", 0) == 1
 	if s.DB != nil {
-		if f := s.rollFishFromDBWithRules(loc, bait, gearCapKg, bonus); f != nil {
+		if f := s.rollFishFromDBWithRules(loc, bait, gearCapKg, bonus, c); f != nil {
 			return f
 		}
+		// 已知地图没有候选鱼时不能用默认鱼池绕过禁用、禁饵或地图名册。
+		if distribution || baitRules && s.DB.ResolveStatLoc(s.dbCtx(), loc) != "" {
+			return nil
+		}
+	}
+	if distribution || baitRules && s.DB == nil {
+		return nil
+	}
+	if baitRules {
+		if c.baits == nil {
+			c.baits = []string{bait}
+		}
+		return s.rollFishPoolsWithRules(loc, gearCapKg, bonus, c)
 	}
 	return s.rollFishPoolsWithRules(loc, gearCapKg, bonus)
 }
@@ -410,8 +442,10 @@ func (s *Server) rollFishFromDB(loc, bait string) *RolledFish {
 	return s.rollFishFromDBWithRules(loc, bait, 0, fishingSkillBonus{BiteSpeed: 1})
 }
 
-func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bonus fishingSkillBonus) *RolledFish {
+func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bonus fishingSkillBonus, contexts ...fishRollContext) *RolledFish {
+	c := rollContext(contexts)
 	strict := s.tunableF("fish_bait_rules_enabled", 0) == 1
+	distribution := s.tunableF("fish_distribution_enabled", 0) == 1
 	cctx := s.dbCtx()
 	statLoc := s.DB.ResolveStatLoc(cctx, loc)
 	if statLoc == "" {
@@ -428,8 +462,7 @@ func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bo
 		wts = append(wts, r.Catches)
 	}
 	// 管理后台鱼口覆盖：静态名册保持不变，覆盖值和额外鱼种在运行时叠加。
-	// 若所有有效权重都被关成 0，则忽略整组覆盖，避免 weightedChoice 落到
-	// 最后一个已禁用的鱼种。
+	// 两个开关均关闭时保留旧覆盖回退；启用新规则时不恢复已禁用的鱼种。
 	if s.DB != nil {
 		if ovs, oerr := s.DB.FishWeightOverrides(cctx, statLoc); oerr == nil && len(ovs) > 0 {
 			seen := make(map[string]int, len(keys))
@@ -453,18 +486,42 @@ func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bo
 				wts[i] = ov.Weight
 				hasPositive = true
 			}
-			if !hasPositive && !strict {
+			if !hasPositive && !strict && !distribution {
 				copy(wts, base)
 				keys = keys[:len(roster)]
 				wts = wts[:len(roster)]
 			}
 		}
 	}
+	interests := map[string]float64{}
 	if strict {
-		keys, wts = s.filterFishBaits(statLoc, bait, keys, wts)
+		base := map[string]float64{}
+		for i, key := range keys {
+			base[key] = wts[i]
+		}
+		if c.baits == nil {
+			c.baits = []string{bait}
+		}
+		keys, wts = s.filterFishBaitSet(statLoc, c.baits, keys, wts, c.now)
 		if len(keys) == 0 {
 			return nil
 		}
+		for i, key := range keys {
+			interests[key] = math.Min(1, wts[i]/base[key]/maxBaitPreference)
+		}
+	}
+	if distribution {
+		applyFishDistribution(loc, keys, wts, c)
+	}
+	positive := false
+	for _, w := range wts {
+		if w > 0 {
+			positive = true
+			break
+		}
+	}
+	if !positive {
+		return nil
 	}
 	// companion 周纪录饵效（config bait_pref_scale / bait_pref_weight_shift；
 	// 缺表=空，运行中性）。tier：top5=3 / top20=2 / 在列=1 → ×8/×4/×2；
@@ -473,7 +530,7 @@ func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bo
 	prefShift := s.tunableF("bait_pref_weight_shift", 1.0)
 	var tiers map[string]int64
 	var meta map[string]int64
-	if bait != "" && prefScale > 0 {
+	if !strict && bait != "" && prefScale > 0 {
 		tiers = s.DB.BaitTiers(cctx, bait)
 		if tiers != nil {
 			meta = s.DB.CompanionEvidence(cctx)
@@ -520,11 +577,12 @@ func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bo
 	length := lk * math.Pow(float64(w), lp)
 	length = math.Round(length*100000) / 100000
 	f := &RolledFish{
-		FishGUID: newFishGUID(),
-		Species:  key,
-		Grade:    grade,
-		WeightG:  w,
-		LengthM:  length,
+		baitInterest: interests[key],
+		FishGUID:     newFishGUID(),
+		Species:      key,
+		Grade:        grade,
+		WeightG:      w,
+		LengthM:      length,
 	}
 	if baitHit {
 		s.log.Info("roll_from_db 命中饵效", "鱼种", key, "重量", w, "tier", t)
@@ -674,12 +732,39 @@ func (s *Server) rollFishPools(loc string) *RolledFish {
 	return s.rollFishPoolsWithRules(loc, 0, fishingSkillBonus{BiteSpeed: 1})
 }
 
-func (s *Server) rollFishPoolsWithRules(loc string, gearCapKg float64, bonus fishingSkillBonus) *RolledFish {
+func (s *Server) rollFishPoolsWithRules(loc string, gearCapKg float64, bonus fishingSkillBonus, contexts ...fishRollContext) *RolledFish {
 	pool := fishPools[loc]
 	if len(pool) == 0 {
 		pool = defaultFishPool
 	}
 	e := pool[rand.Intn(len(pool))]
+	interest := 0.0
+	if len(contexts) > 0 {
+		c := rollContext(contexts)
+		keys := make([]string, len(pool))
+		wts := make([]float64, len(pool))
+		for i, p := range pool {
+			keys[i] = p.species
+			wts[i] = 1
+		}
+		keys, wts = s.filterFishBaitSet("", c.baits, keys, wts, c.now)
+		if len(keys) == 0 {
+			return nil
+		}
+		key := weightedChoice(keys, wts)
+		for i, k := range keys {
+			if k == key {
+				interest = math.Min(1, wts[i]/maxBaitPreference)
+				break
+			}
+		}
+		for _, p := range pool {
+			if p.species == key {
+				e = p
+				break
+			}
+		}
+	}
 	// 三角分布（偏向 min + 30% 区间）
 	mode := float64(e.minG) + float64(e.maxG-e.minG)*0.3
 	w := triangular(float64(e.minG), float64(e.maxG), mode)
@@ -707,11 +792,12 @@ func (s *Server) rollFishPoolsWithRules(loc string, gearCapKg float64, bonus fis
 	length = math.Round(length*100000) / 100000
 
 	return &RolledFish{
-		FishGUID: newFishGUID(),
-		Species:  e.species,
-		Grade:    grade,
-		WeightG:  weightG,
-		LengthM:  length,
+		baitInterest: interest,
+		FishGUID:     newFishGUID(),
+		Species:      e.species,
+		Grade:        grade,
+		WeightG:      weightG,
+		LengthM:      length,
 	}
 }
 
@@ -1163,7 +1249,7 @@ func (s *Server) onBiteTimer(uid int64, gen uint64) {
 		st.mu.Unlock()
 		return
 	}
-	f := s.rollFishForRig(s.dbCtx(), uid, st.GearGuid, st.Loc, st.Bait, st.Bonus)
+	f := s.rollFishForRig(s.dbCtx(), uid, st.GearGuid, st.Loc, st.Bait, st.Bonus, fishRollContext{x: st.PosX, z: st.PosZ, hasPos: st.HasPos, spot: st.Spot, now: now})
 	if f == nil {
 		st.PushSent = false
 		st.Pending = nil
@@ -1171,14 +1257,14 @@ func (s *Server) onBiteTimer(uid int64, gen uint64) {
 		st.mu.Unlock()
 		return
 	}
+	f.BaitGUIDs, f.BaitsKnown = s.biteBaitSnapshot(s.dbCtx(), st.GearGuid)
 	f.LocLevel = s.currentLevel(uid)
 	st.Pending = f
 	gear := st.GearGuid
 	st.mu.Unlock()
 
 	// f23 = 线末端钩 guid（槽 12 钩 → 路亚拟饵出厂钩回退；送错=鱼秒弃咬 f0=5）
-	hookGUID := s.mountedHookGuid(s.dbCtx(), gear)
-	sess.Push14_14(f, hookGUID, gear)
+	s.pushBaitedFish(sess, f, gear)
 }
 
 // repushPending14_14 在 14/12 f0=3 时于 6 秒后重推同一尾 pending 鱼，
@@ -1203,7 +1289,7 @@ func (s *Server) repushPending14_14(uid int64) {
 	st.PushSent = true
 	st.persist.recoverPending = false
 	st.mu.Unlock()
-	sess.Push14_14(f, s.mountedHookGuid(s.dbCtx(), gear), gear)
+	s.pushBaitedFish(sess, f, gear)
 }
 
 // bumpFishingCounter 增加玩家钓鱼计数器（escapes 等），幂等累加。

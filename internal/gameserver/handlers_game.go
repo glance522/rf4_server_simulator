@@ -599,6 +599,10 @@ func hCastPrepare(ctx *Ctx) ([]byte, bool) {
 	depthCM := st.DepthCM
 	rigType := st.RigType
 	st.mu.Unlock()
+	if err := ctx.Sess.prepareBaitForCast(st, gear); err != nil {
+		ctx.Log.Warn("抛竿前补饵失败", "err", err)
+		return nil, false
+	}
 	// 收敛钓组数据：补齐 f5、rig 行、组件和尖梢。
 	// 尖梢有更新时推送 4/22 全量竿树，因为客户端抛竿前会校验实例 f8。
 	if srv.ensureRig(ctx.Sess.pushCtx(), ctx.Sess.Userid, gear) {
@@ -641,6 +645,10 @@ func hCast(ctx *Ctx) ([]byte, bool) {
 	st.mu.Lock()
 	st.GearGuid = gear
 	st.mu.Unlock()
+	if err := ctx.Sess.prepareBaitForCast(st, gear); err != nil {
+		ctx.Log.Warn("抛竿前补饵失败", "err", err)
+		return nil, false
+	}
 	srv.ensureRig(ctx.Sess.pushCtx(), ctx.Sess.Userid, gear)
 	// 记录钓组类型并读取当前钩上饵；路亚使用独立的咬钩节奏。
 	rigType := int64(0)
@@ -817,6 +825,15 @@ func hFishingStep(ctx *Ctx) ([]byte, bool) {
 				}
 			}
 			st.mu.Unlock()
+			if enterWater {
+				if err := ctx.Sess.Srv.consumeCastBait(ctx.Sess, st); err != nil {
+					ctx.Log.Warn("入水窝料扣减失败", "err", err)
+					st.mu.Lock()
+					st.InWater = false
+					st.mu.Unlock()
+					return nil, true
+				}
+			}
 			if needBite {
 				ctx.Log.Info("钓组在水中，补排咬钩", "f5", fmt.Sprintf("0x%X", anim))
 				ctx.Sess.Srv.scheduleBiteForHooked(ctx.Sess, st)

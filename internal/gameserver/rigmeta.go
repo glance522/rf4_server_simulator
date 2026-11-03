@@ -282,6 +282,39 @@ func (s *Server) currentBait(ctx context.Context, rodGUID string) string {
 	return ""
 }
 
+// currentBaits 按槽序读取全部钩上饵；没有天然饵时再读取拟饵。
+func (s *Server) currentBaits(ctx context.Context, rodGUID string) []string {
+	comps := s.storedRigComponents(ctx, rodGUID)
+	for _, category := range []int64{27, 17} {
+		var ids []string
+		for _, key := range rigCompKeysOfCategory(comps, category) {
+			row, err := s.DB.GetItemByGUID(ctx, comps[key].GUID)
+			if err != nil || row == nil {
+				continue
+			}
+			if s.itemBrokenForMount(ctx, row) {
+				continue
+			}
+			if category == 27 && baitQuantity(row) <= 0 {
+				continue
+			}
+			id := row.ItemID
+			if id == "" {
+				if def, err := s.DB.GetItemDef(ctx, row.NumericID); err == nil && def != nil {
+					id = def.ItemID
+				}
+			}
+			if id != "" {
+				ids = append(ids, id)
+			}
+		}
+		if len(ids) > 0 {
+			return ids
+		}
+	}
+	return []string{}
+}
+
 // rigTypeOfItem 返回竿实例的钓组类型；缺失时按竿型派生。
 func (s *Server) rigTypeOfItem(ctx context.Context, row *store.Item) int64 {
 	fields, err := FieldsFromJSON(row.FieldsJSON)
