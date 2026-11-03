@@ -25,6 +25,8 @@ button,input,select,textarea{font:inherit;color:var(--text)}button{cursor:pointe
 .main,.card,.view,.sidebar,.nav{min-width:0}.nav{max-width:100%}.player-hero{flex-wrap:wrap}.player-hero>div,.player-row>div{min-width:0;max-width:100%}.player-hero h2,.player-row .n{overflow-wrap:anywhere}
 
 @media(max-width:720px){.shell{grid-template-columns:minmax(0,1fr)}.field.span2{grid-column:auto}.toolbar .grow{min-width:100px}.player-hero .actions,.tabs{flex-wrap:wrap}.tabs button{flex:0 0 auto;white-space:nowrap}.nav button{flex:0 0 auto}}
+
+#view-stores .section-head{flex-wrap:wrap}#storeSummary{max-width:100%;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -262,7 +264,7 @@ async function loadStoreItems(){
   const id=$('#storeSelect').value;if(!id)return;
   const q=$('#storeSearch').value.trim();STORE_ITEMS=await api('/api/stores/items?store_id='+encodeURIComponent(id)+'&q='+encodeURIComponent(q)+'&limit=1000');
   const over=STORE_ITEMS.filter(x=>x.has_override).length,stock=STORE_ITEMS.reduce((n,x)=>n+Number(x.stock||0),0);
-  $('#storeSummary').textContent=`${id} · 当前返回 ${STORE_ITEMS.length} 件 · 总库存 ${fmt(stock)} · 已覆盖 ${over} 件`;
+  $('#storeSummary').textContent=`${id} · 当前返回 ${STORE_ITEMS.length} 件 · 总库存 ${fmt(stock)} · 已覆盖 ${over} 件 · 自动补货：库存为 0 时补至 1000`;
   renderStoreTable();
 }
 function renderStoreTable(){

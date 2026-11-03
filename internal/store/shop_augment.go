@@ -25,77 +25,113 @@ type shopItemMeta struct {
 	Name     string
 }
 
-var (
-	shopSuppOnce     sync.Once
-	shopSuppErr      error
-	shopItemMetas    map[string]shopItemMeta
-	shopItemPrices   map[string]*ShopPrice
-	shopMedianByKind map[string]int64
-	shopMedianByCat  map[int64]int64
-	shopSeriesMax    map[string]int64
-)
+type shopSupplement struct {
+	mu           sync.Mutex
+	ready        bool
+	err          error
+	metas        map[string]shopItemMeta
+	prices       map[string]*ShopPrice
+	medianByKind map[string]int64
+	medianByCat  map[int64]int64
+	seriesMax    map[string]int64
+}
 
 func (d *DB) loadShopSupplement(ctx context.Context) error {
-	shopSuppOnce.Do(func() {
-		shopItemMetas = make(map[string]shopItemMeta, 4096)
-		shopItemPrices = make(map[string]*ShopPrice, 4096)
+	d.shopSupplement.mu.Lock()
+	defer d.shopSupplement.mu.Unlock()
+	if d.shopSupplement.ready {
+		return nil
+	}
+	d.shopSupplement.err = nil
+	func() {
+		d.shopSupplement.metas = make(map[string]shopItemMeta, 4096)
+		d.shopSupplement.prices = make(map[string]*ShopPrice, 4096)
 
 		rows, err := d.SQL.QueryContext(ctx, `
 			SELECT d.item_id, d.category, COALESCE(d.brand,''), COALESCE(c.kind,''), COALESCE(c.name,'')
 			FROM item_def d
 			LEFT JOIN item_catalog c ON c.item_id = d.item_id`)
 		if err != nil {
-			shopSuppErr = err
+			d.shopSupplement.err = err
 			return
 		}
 		for rows.Next() {
 			var id, brand, kind, name string
 			var cat int64
 			if err := rows.Scan(&id, &cat, &brand, &kind, &name); err != nil {
-				continue
+				rows.Close()
+				d.shopSupplement.err = err
+				return
 			}
-			shopItemMetas[id] = shopItemMeta{Category: cat, Kind: kind, Brand: brand, Name: name}
+			d.shopSupplement.metas[id] = shopItemMeta{Category: cat, Kind: kind, Brand: brand, Name: name}
 		}
+		rowErr := rows.Err()
 		rows.Close()
+		if rowErr != nil {
+			d.shopSupplement.err = rowErr
+			return
+		}
 
 		prows, perr := d.SQL.QueryContext(ctx,
 			`SELECT item_id, silver, gold, stock FROM item_price`)
+		if perr != nil {
+			d.shopSupplement.err = perr
+			return
+		}
 		if perr == nil {
 			for prows.Next() {
 				p := &ShopPrice{}
 				if err := prows.Scan(&p.ItemID, &p.Silver, &p.Gold, &p.Stock); err != nil {
-					continue
+					prows.Close()
+					d.shopSupplement.err = err
+					return
 				}
-				shopItemPrices[p.ItemID] = p
+				d.shopSupplement.prices[p.ItemID] = p
 			}
+			priceErr := prows.Err()
 			prows.Close()
+			if priceErr != nil {
+				d.shopSupplement.err = priceErr
+				return
+			}
 		}
 
 		// shop_item 是真实货架价，覆盖 item_price 里没有的整件商品（竿/轮等）。
 		srows, serr := d.SQL.QueryContext(ctx,
 			`SELECT item_id, silver, gold, stock FROM shop_item`)
+		if serr != nil {
+			d.shopSupplement.err = serr
+			return
+		}
 		if serr == nil {
 			for srows.Next() {
 				p := &ShopPrice{}
 				if err := srows.Scan(&p.ItemID, &p.Silver, &p.Gold, &p.Stock); err != nil {
-					continue
+					srows.Close()
+					d.shopSupplement.err = err
+					return
 				}
-				cur, ok := shopItemPrices[p.ItemID]
+				cur, ok := d.shopSupplement.prices[p.ItemID]
 				if !ok || (cur.Silver <= 0 && p.Silver > 0) {
-					shopItemPrices[p.ItemID] = p
+					d.shopSupplement.prices[p.ItemID] = p
 				}
 			}
+			shelfErr := srows.Err()
 			srows.Close()
+			if shelfErr != nil {
+				d.shopSupplement.err = shelfErr
+				return
+			}
 		}
 
 		// 中位价：先按 item_catalog.kind，再按 item_def.category 兜底。
 		byKind := map[string][]int64{}
 		byCat := map[int64][]int64{}
-		for id, p := range shopItemPrices {
+		for id, p := range d.shopSupplement.prices {
 			if p.Silver <= 0 {
 				continue
 			}
-			m, ok := shopItemMetas[id]
+			m, ok := d.shopSupplement.metas[id]
 			if !ok {
 				continue
 			}
@@ -104,13 +140,13 @@ func (d *DB) loadShopSupplement(ctx context.Context) error {
 			}
 			byCat[m.Category] = append(byCat[m.Category], p.Silver)
 		}
-		shopMedianByKind = medianMap(byKind)
-		shopMedianByCat = medianMapInt64(byCat)
+		d.shopSupplement.medianByKind = medianMap(byKind)
+		d.shopSupplement.medianByCat = medianMapInt64(byCat)
 
 		// 系列最高价：同 kind + 同系列首词 + 同尺寸数字。
 		// 估价时取“同类同级里最贵的那个”，保证只高不低。
-		shopSeriesMax = make(map[string]int64, len(shopItemPrices))
-		for id, p := range shopItemPrices {
+		d.shopSupplement.seriesMax = make(map[string]int64, len(d.shopSupplement.prices))
+		for id, p := range d.shopSupplement.prices {
 			eff := p.Silver
 			if eff <= 0 && p.Gold > 0 {
 				eff = p.Gold * 100
@@ -118,7 +154,7 @@ func (d *DB) loadShopSupplement(ctx context.Context) error {
 			if eff <= 0 {
 				continue
 			}
-			m, ok := shopItemMetas[id]
+			m, ok := d.shopSupplement.metas[id]
 			if !ok {
 				continue
 			}
@@ -126,12 +162,13 @@ func (d *DB) loadShopSupplement(ctx context.Context) error {
 			if key == "" {
 				continue
 			}
-			if eff > shopSeriesMax[key] {
-				shopSeriesMax[key] = eff
+			if eff > d.shopSupplement.seriesMax[key] {
+				d.shopSupplement.seriesMax[key] = eff
 			}
 		}
-	})
-	return shopSuppErr
+	}()
+	d.shopSupplement.ready = d.shopSupplement.err == nil
+	return d.shopSupplement.err
 }
 
 func medianMap(in map[string][]int64) map[string]int64 {
@@ -187,7 +224,7 @@ func (d *DB) augmentShopShelf(ctx context.Context, def shopStoreDefinition, shel
 			continue
 		}
 		have[p.ItemID] = true
-		if m, ok := shopItemMetas[p.ItemID]; ok && !partCategories[m.Category] {
+		if m, ok := d.shopSupplement.metas[p.ItemID]; ok && !partCategories[m.Category] {
 			cats[m.Category] = true
 		}
 	}
@@ -195,14 +232,14 @@ func (d *DB) augmentShopShelf(ctx context.Context, def shopStoreDefinition, shel
 		return shelf, 0, nil
 	}
 	add := make([]*ShopPrice, 0, 1024)
-	for id, m := range shopItemMetas {
+	for id, m := range d.shopSupplement.metas {
 		if have[id] || !cats[m.Category] || partCategories[m.Category] {
 			continue
 		}
 		if len(def.Brands) > 0 && !brandMatches(m.Brand, def.Brands) {
 			continue
 		}
-		if p, ok := shopItemPrices[id]; ok && (p.Silver > 0 || p.Gold > 0) {
+		if p, ok := d.shopSupplement.prices[id]; ok && (p.Silver > 0 || p.Gold > 0) {
 			cp := *p
 			if cp.Stock <= 0 {
 				cp.Stock = 1000
@@ -211,12 +248,12 @@ func (d *DB) augmentShopShelf(ctx context.Context, def shopStoreDefinition, shel
 			continue
 		}
 		// 优先用“同类同级最贵”的价格，其次同类型中位价。
-		silver := shopSeriesMax[shopSeriesKey(m.Kind, m.Name)]
+		silver := d.shopSupplement.seriesMax[shopSeriesKey(m.Kind, m.Name)]
 		if silver <= 0 {
-			silver = shopMedianByKind[m.Kind]
+			silver = d.shopSupplement.medianByKind[m.Kind]
 		}
 		if silver <= 0 {
-			silver = shopMedianByCat[m.Category]
+			silver = d.shopSupplement.medianByCat[m.Category]
 		}
 		if silver <= 0 {
 			silver = 1000
@@ -266,6 +303,7 @@ func isAllDigits(s string) bool {
 	}
 	return true
 }
+
 // stableHash 是 item_id 的稳定散列，用于价格微浮动。
 func stableHash(s string) uint32 {
 	var h uint32 = 2166136261
