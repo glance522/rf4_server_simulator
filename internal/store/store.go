@@ -23,10 +23,11 @@ var migrationsFS embed.FS
 // DB 存储句柄。StaticPath 非空时，每个物理连接都只读 ATTACH 该配置库，
 // 并由 staticConnector 创建同名 TEMP 视图与写保护 authorizer。
 type DB struct {
-	SQL        *sql.DB
-	Path       string
-	StaticPath string
-	static     *staticState
+	SQL            *sql.DB
+	Path           string
+	StaticPath     string
+	static         *staticState
+	shopSupplement shopSupplement
 }
 
 // Open 打开（必要时创建）主库并设置 WAL/忙等待。该入口不挂载 static，

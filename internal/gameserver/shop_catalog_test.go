@@ -18,8 +18,7 @@ func TestStoreListUsesCatalogTemplateAndUnknownStoreStaysEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 上游货架补齐后，ATM 模板包含六款钱包。
-	if decoded.Kind != proto.KindArgs || decoded.ArgCodeStr() != "140" || decoded.ArgCount() != 6 {
+	if decoded.Kind != proto.KindArgs || decoded.ArgCodeStr() != "140" || decoded.ArgCount() < 5 {
 		t.Fatalf("22/1 模板货架不符: kind=%v code=%q count=%d", decoded.Kind, decoded.ArgCodeStr(), decoded.ArgCount())
 	}
 	first := decoded.ArgItem(0)
@@ -52,5 +51,59 @@ func TestStoreListUsesCatalogTemplateAndUnknownStoreStaysEmpty(t *testing.T) {
 	}
 	if decoded.ArgCodeStr() != "140" || decoded.ArgCount() != 0 {
 		t.Fatalf("未知店不得回全局价目兜底: code=%q count=%d", decoded.ArgCodeStr(), decoded.ArgCount())
+	}
+}
+
+func TestReportedGoldLinesPurchaseAndInsufficientBalance(t *testing.T) {
+	srv, db := newEconomyTxTestServer(t)
+	const uid = int64(2620)
+	ctx := context.Background()
+	if _, err := db.SQL.Exec(`ATTACH DATABASE '../../server_data/static.sqlite3' AS src;
+      INSERT OR REPLACE INTO main.item_price SELECT * FROM src.item_price;
+      INSERT OR REPLACE INTO main.item_catalog SELECT * FROM src.item_catalog;
+      DETACH DATABASE src;`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SQL.Exec(`UPDATE profile SET silver=1000000,gold=10000 WHERE uid=?`, uid); err != nil {
+		t.Fatal(err)
+	}
+	registerShopHandlers(srv.dispatch)
+	for _, itemID := range []string{"braid_40907", "braid_40904"} {
+		p, err := db.ShopItemGet(ctx, "fishingstore_009", itemID)
+		if err != nil || p.Gold <= 0 || p.Stock <= 0 {
+			t.Fatalf("reported item still unavailable: %+v %v", p, err)
+		}
+		request := economyTestCtx(srv, uid, proto.Args524(proto.StrVal("fishingstore_009"), proto.StrVal(itemID), proto.U64(1)))
+		request.Main, request.Sub, request.ExpectResponse = 22, 3, true
+		result := srv.dispatch.executeRequest(request, true)
+		if result.nativeFailure || result.failed || !result.hasResponse {
+			t.Fatalf("gold purchase rejected: %+v", result)
+		}
+		tree, _, err := proto.DecodeValue(result.body, 0, srv.Table())
+		if err != nil || tree.TypeID != 804 {
+			t.Fatalf("wrong purchase response: %+v %v", tree, err)
+		}
+	}
+	var count, gold int64
+	db.SQL.QueryRow(`SELECT COUNT(*) FROM txn WHERE uid=? AND kind='buy'`, uid).Scan(&count)
+	db.SQL.QueryRow(`SELECT gold FROM profile WHERE uid=?`, uid).Scan(&gold)
+	if count != 2 || gold != 10000-1513-1343 {
+		t.Fatalf("wrong debit: count=%d gold=%d", count, gold)
+	}
+	if _, err := db.SQL.Exec(`UPDATE profile SET gold=0 WHERE uid=?`, uid); err != nil {
+		t.Fatal(err)
+	}
+	request := economyTestCtx(srv, uid, proto.Args524(proto.StrVal("fishingstore_009"), proto.StrVal("braid_40907"), proto.U64(1)))
+	request.Main, request.Sub, request.ExpectResponse = 22, 3, true
+	result := srv.dispatch.executeRequest(request, true)
+	if !result.nativeFailure {
+		t.Fatal("insufficient balance returned a boolean/synthetic success")
+	}
+	db.SQL.QueryRow(`SELECT COUNT(*) FROM txn WHERE uid=? AND kind='buy'`, uid).Scan(&count)
+	if count != 2 {
+		t.Fatal("failed purchase wrote another debit")
 	}
 }

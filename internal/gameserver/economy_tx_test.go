@@ -133,13 +133,19 @@ func TestStoreCurrencyAndWalletAtomic(t *testing.T) {
 
 	wrongGold := economyTestCtx(srv, uid, proto.Args524(
 		proto.StrVal("store"), proto.StrVal("econ_silver_item"), proto.U64(0)))
-	if body, _ := hStoreBuy(true)(wrongGold); len(body) == 0 || body[0] != 0x0F {
-		t.Fatalf("银币-only 商品不能用 0 金币购买: %x", body)
+	wrongGold.ExpectResponse = true
+	wrongGold.replyCapture = &ctxReplyCapture{}
+	hStoreBuy(true)(wrongGold)
+	if _, _, _, failure := wrongGold.replyCapture.snapshot(); !failure {
+		t.Fatal("银币-only 商品必须通过原生错误拒绝金币购买")
 	}
 	wrongSilver := economyTestCtx(srv, uid, proto.Args524(
 		proto.StrVal("store"), proto.StrVal("econ_gold_item"), proto.U64(0)))
-	if body, _ := hStoreBuy(false)(wrongSilver); len(body) == 0 || body[0] != 0x0F {
-		t.Fatalf("金币-only 商品不能用 0 银币购买: %x", body)
+	wrongSilver.ExpectResponse = true
+	wrongSilver.replyCapture = &ctxReplyCapture{}
+	hStoreBuy(false)(wrongSilver)
+	if _, _, _, failure := wrongSilver.replyCapture.snapshot(); !failure {
+		t.Fatal("金币-only 商品必须通过原生错误拒绝银币购买")
 	}
 	okSilver := economyTestCtx(srv, uid, proto.Args524(
 		proto.StrVal("store"), proto.StrVal("econ_silver_item"), proto.U64(0)))
