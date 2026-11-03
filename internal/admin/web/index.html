@@ -29,6 +29,7 @@ button,input,select,textarea{font:inherit;color:var(--text)}button{cursor:pointe
 #fishRulesCard .section-head{flex-wrap:wrap}#fishRulesCard p,#fishRulesCard small{overflow-wrap:anywhere}#fishRulesCard p{margin-bottom:0}
 
 .tunable-group+.tunable-group{margin-top:16px}.tunable-group h3{font-size:14px;margin:0 0 10px}.tunable-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px 16px}.tunable-field{min-width:0}.tunable-field label{display:block;color:var(--muted);margin-bottom:6px;overflow-wrap:anywhere}.tunable-field>div{display:flex;gap:8px;align-items:center}.tunable-field input{min-width:0;flex:1;width:0;padding:7px 9px}.tunable-field button{flex:none}.section-head{flex-wrap:wrap}
+#storeSummary{max-width:100%;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -268,7 +269,7 @@ async function loadStoreItems(){
   const id=$('#storeSelect').value;if(!id)return;
   const q=$('#storeSearch').value.trim();STORE_ITEMS=await api('/api/stores/items?store_id='+encodeURIComponent(id)+'&q='+encodeURIComponent(q)+'&limit=1000');
   const over=STORE_ITEMS.filter(x=>x.has_override).length,stock=STORE_ITEMS.reduce((n,x)=>n+Number(x.stock||0),0);
-  $('#storeSummary').textContent=`${id} · 当前返回 ${STORE_ITEMS.length} 件 · 总库存 ${fmt(stock)} · 已覆盖 ${over} 件`;
+  $('#storeSummary').textContent=`${id} · 当前返回 ${STORE_ITEMS.length} 件 · 总库存 ${fmt(stock)} · 已覆盖 ${over} 件 · 自动补货：库存为 0 时补至 1000`;
   renderStoreTable();
 }
 function renderStoreTable(){
