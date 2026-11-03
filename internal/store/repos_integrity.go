@@ -21,7 +21,7 @@ var PlayerTables = []string{
 	"rod_pod_setting", "rod_pod_alarm", "rod_setting", "txn", "mail", "keepnet_items",
 	"skill", "skill_node", "player_counters", "player_achievements", "device",
 	"catch_log", "competition", "competition_member", "competition_result", "named_fish", "place_access",
-	"fishing_state", "item_damage_log", "membership_order", "reel_performance",
+	"fishing_state", "item_damage_log", "membership_order", "reel_performance", "cafe_order", "cafe_order_completion",
 	"player_condition",
 }
 

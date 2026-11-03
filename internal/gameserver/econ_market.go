@@ -380,12 +380,12 @@ func hMarketSell(ctx *Ctx) ([]byte, bool) {
 			return []byte{0x0F}, true
 		}
 		for _, g := range removed {
-			res, derr := tx.ExecContext(cctx, `DELETE FROM keepnet_items WHERE uid=? AND echo_guid=?`, uid, g)
+			deleted, derr := srv.DB.DeleteKeepnetTx(cctx, tx, uid, g)
 			if derr != nil {
 				ctx.Log.Warn("20/2 移除护网失败", "guid", g, "err", derr)
 				return []byte{0x0F}, true
 			}
-			if n, _ := res.RowsAffected(); n != 1 {
+			if !deleted {
 				return []byte{0x0F}, true
 			}
 		}
@@ -429,92 +429,15 @@ func hMarketSell(ctx *Ctx) ([]byte, bool) {
 // 20/3 鱼市分组列表
 // ---------------------------------------------------------------------------
 
-// hMarketLots 20/3：护网按 (鱼种, grade, 地图) 聚合，args("110")[301...]。
-// f6 是单鱼重量千克，f7 是条数，f8 是分组总报价（银币分）。
-func hMarketLots(ctx *Ctx) ([]byte, bool) {
-	srv := ctx.Sess.Srv
-	if !srv.requireDB(ctx) {
-		return nil, false
-	}
-	uid := ctx.Sess.Userid
-	cctx := ctx.Sess.pushCtx()
-	now := float64(time.Now().Unix())
-
-	list, err := srv.DB.KeepnetList(cctx, uid)
-	if err != nil {
-		list = nil
-	}
-	type lotAgg struct {
-		guid    string
-		species string
-		grade   int64
-		n       int
-		grams   int64
-		cents   int64
-	}
-	type lotKey struct {
-		species string
-		grade   int64
-		level   string
-	}
-	agg := map[lotKey]*lotAgg{}
-	var order []lotKey
-	locked := srv.openMarketOfferFishSet(cctx, uid)
-	for _, e := range list {
-		if locked[e.EchoGUID] {
-			continue
-		}
-		level := srv.levelKeyOfLoc(cctx, uid, e.KeepLoc)
-		grade := e.Cat
-		if grade < 1 {
-			grade = 1
-		}
-		key := lotKey{species: e.Species, grade: grade, level: level}
-		lot, ok := agg[key]
-		if !ok {
-			lot = &lotAgg{guid: e.EchoGUID, species: e.Species, grade: grade}
-			agg[key] = lot
-			order = append(order, key)
-		}
-		lot.n++
-		lot.grams += e.WeightG
-		lot.cents += marketPriceCentsForMap(e, now, level)
-	}
-	out := proto.Args(proto.S("110"))
-	nowFT := uint64(proto.WindowsFiletimeNow())
-	for _, key := range order {
-		lot := agg[key]
-		n := lot.n
-		if n < 1 {
-			n = 1
-		}
-		avgKg := math.Round(float64(lot.grams)/1000.0/float64(n)*10000) / 10000
-		out.Items = append(out.Items, wiregen.MustMakeObj("jbfajcjlfek", map[int]*proto.Value{
-			0: proto.Guid(lot.guid),
-			1: proto.StrVal(key.level),
-			2: proto.U64(nowFT),
-			3: proto.U32(0),
-			4: proto.StrVal(lot.species),
-			5: proto.U32(uint32(lot.grade)),
-			6: proto.U32(proto.F32Bits(float32(avgKg))),
-			7: proto.U32(uint32(n)),
-			8: proto.U64(uint64(lot.cents)),
-		}))
-	}
-	ctx.Log.Info("20/3 鱼市批次", "组数", len(order), "护网", len(list))
-	body, err := proto.EncodeValue(out, ctx.Sess.Table())
-	if err != nil {
-		return nil, false
-	}
-	return body, true
-}
+// hMarketLots 20/3 返回独立的咖啡厅收购需求。
+func hMarketLots(ctx *Ctx) ([]byte, bool) { return hCafeLots(ctx) }
 
 // ---------------------------------------------------------------------------
 // 20/4 挂单出售
 // ---------------------------------------------------------------------------
 
 // openMarketOfferFishSet 返回当前玩家处于 open 挂单中的鱼 GUID 集合。
-// 20/1/20/3 必须把已锁定鱼视为不可成交，避免 UI 再次售卖同一条鱼。
+// 普通鱼市和咖啡厅都必须拒绝出售已锁定的鱼。
 func (s *Server) openMarketOfferFishSet(ctx context.Context, uid int64) map[string]bool {
 	out := map[string]bool{}
 	if s.DB == nil {
@@ -533,29 +456,6 @@ func (s *Server) openMarketOfferFishSet(ctx context.Context, uid int64) map[stri
 	return out
 }
 
-// marketOfferRequestFishGUIDs 严格读取 20/4 的第三个参数 Guid[]。
-// 20/4 wire 参数为 [scene string, market_offer_guid, fish_guid[]]，第二个 GUID
-// 是 20/3 返回的鱼市报价/收购单 ID，绝不能当鱼 GUID 扫描。
-func marketOfferRequestFishGUIDs(tree *proto.Value) []string {
-	if tree == nil {
-		return nil
-	}
-	if tree.Kind == proto.KindGuidArr {
-		return uniqueStrings(deepGUIDs(tree))
-	}
-	if tree.Kind != proto.KindArgs {
-		return nil
-	}
-	if fishArg := tree.ArgItem(2); fishArg != nil {
-		return uniqueStrings(deepGUIDs(fishArg))
-	}
-	// 同时接受仅携带 Guid[] 的单参数请求；标准请求固定为三参数。
-	if tree.ArgCount() == 1 {
-		return uniqueStrings(deepGUIDs(tree.ArgItem(0)))
-	}
-	return nil
-}
-
 func encodeMarketSellOfferResult(ctx *Ctx, priceCents int64, status uint32) ([]byte, bool) {
 	obj := wiregen.MustMakeObj("imhmlbejglk", map[int]*proto.Value{
 		0: proto.U64(uint64(priceCents)),
@@ -568,66 +468,8 @@ func encodeMarketSellOfferResult(ctx *Ctx, priceCents int64, status uint32) ([]b
 	return body, true
 }
 
-// hMarketSellOffer 20/4：把选定鱼以服务端报价原子挂入订单簿，回 300
-// imhmlbejglk（f0=本次挂单报价合计 u64、f1=状态枚举，0=成功）。
-// 创建阶段不改余额、不写收入流水；重复请求返回既有 open 挂单。
-func hMarketSellOffer(ctx *Ctx) ([]byte, bool) {
-	srv := ctx.Sess.Srv
-	if !srv.requireDB(ctx) {
-		return nil, false
-	}
-	guids := marketOfferRequestFishGUIDs(ctx.Tree)
-	if len(guids) == 0 {
-		return encodeMarketSellOfferResult(ctx, 0, 1)
-	}
-	uid := ctx.Sess.Userid
-	cctx := ctx.Sess.pushCtx()
-	now := float64(time.Now().Unix())
-	list, err := srv.DB.KeepnetList(cctx, uid)
-	if err != nil {
-		ctx.Log.Warn("20/4 读取护网失败", "err", err)
-		return encodeMarketSellOfferResult(ctx, 0, 1)
-	}
-	byGUID := make(map[string]*store.KeepnetEntry, len(list))
-	for _, e := range list {
-		byGUID[e.EchoGUID] = e
-	}
-	requests := make([]store.MarketOfferCreateRequest, 0, len(guids))
-	for _, g := range guids {
-		e := byGUID[g]
-		if e == nil {
-			ctx.Log.Warn("20/4 鱼不在护网，拒绝整批挂单", "guid", shortGUID(g))
-			return encodeMarketSellOfferResult(ctx, 0, 1)
-		}
-		mapKey := srv.levelKeyOfLoc(cctx, uid, e.KeepLoc)
-		requests = append(requests, store.MarketOfferCreateRequest{
-			FishGUID: g, PriceCents: marketPriceCentsForMap(e, now, mapKey),
-		})
-	}
-	marketGUID := ""
-	if ctx.Tree != nil && ctx.Tree.Kind == proto.KindArgs {
-		marketGUID = ctx.Tree.ArgItem(1).GuidHex()
-	}
-	created, err := srv.DB.CreateMarketOffers(cctx, uid, marketGUID, requests)
-	if err != nil {
-		ctx.Log.Warn("20/4 创建挂单失败", "err", err)
-		return encodeMarketSellOfferResult(ctx, 0, 1)
-	}
-	total := int64(0)
-	newCount := 0
-	for _, result := range created {
-		if result.Offer == nil {
-			continue
-		}
-		total += result.Offer.PriceCents
-		if result.Created {
-			newCount++
-		}
-	}
-	ctx.Log.Info("20/4 挂单", "鱼数", len(created), "新建", newCount, "价格", total,
-		"鱼市单", shortGUID(marketGUID))
-	return encodeMarketSellOfferResult(ctx, total, 0)
-}
+// hMarketSellOffer 20/4 交付咖啡厅订单，立即扣鱼并支付银币。
+func hMarketSellOffer(ctx *Ctx) ([]byte, bool) { return hCafeSubmit(ctx) }
 
 // ---------------------------------------------------------------------------
 // 工坊 21/x

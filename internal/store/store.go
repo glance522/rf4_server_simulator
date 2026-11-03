@@ -46,6 +46,10 @@ func (d *DB) Migrate() error {
 	if err := d.ensureLegacyPlayerColumns(); err != nil {
 		return fmt.Errorf("补全玩家表列: %w", err)
 	}
+	// 仅重编号旧咖啡厅记录，不改动同编号的主线渔轮迁移。
+	if _, err := d.SQL.Exec(`UPDATE schema_migrations SET version=27,name='migrations/00027_cafe_pricing_version.sql' WHERE (version=23 AND name='migrations/00023_cafe_pricing_version.sql') OR (version=25 AND name='migrations/00025_cafe_pricing_version.sql')`); err != nil {
+		return fmt.Errorf("兼容咖啡厅旧迁移编号: %w", err)
+	}
 	entries, err := fs.Glob(migrationsFS, "migrations/*.sql")
 	if err != nil {
 		return err
