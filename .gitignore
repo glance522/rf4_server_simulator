@@ -33,3 +33,12 @@ tools/*
 !tools/*.ps1
 !tools/*.py
 !tools/genwire/
+
+# 本地游戏、隔离设置与私人存档
+/Game/
+/profile/
+/local-service/data/
+__pycache__/
+*.pyc
+
+.vs/

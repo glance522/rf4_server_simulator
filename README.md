@@ -223,3 +223,14 @@ docs/                               部署手册 / 回归清单
 ## 许可
 
 项目采用 **MIT 协议**（见 [LICENSE](LICENSE)）。本 README 中的项目定位与使用边界用于说明维护者立场，不改变许可证本身授予的权利与义务。
+## 可选本地离线工具
+
+`local-service` 提供本机登录、记住密码、个人中心、游戏金币会员与 Go 游戏逻辑的桥接，需要 Python 3.12 或更新版本。游戏客户端、独立用户设置和角色快照须自行提供，不随源码分发。
+
+先构建 `bin/gameserver.exe`、`bin/launcher.exe`、`bin/import-character.exe`、`bin/local-membership.exe`，再构建 `cmd/local-launcher` 或运行 `local-service/启动本地服务.cmd`。Go 工具使用 `go build -o bin/<名称>.exe ./cmd/<名称>`；本地启动器输出到根目录 `启动游戏.exe`。
+
+管理后台由 launcher 在 `/admin/` 挂载，本地服务转发到该入口；gameserver 不监听管理端口。关闭本地服务会停止它拥有的游戏和管理进程。普通控制中心继续使用 main 的托盘、运行控制与启动游戏功能。
+
+本地数据位于 `local-service/data/`，游戏副本位于 `Game/`，均不入库。默认演示账号 `123123`，本地管理员 `admin` 的初始密码 `123123`，启动前可用 `RF4_LOCAL_ADMIN_PASSWORD` 覆盖。角色导入幂等，重复启动保留已有进度。调试预设开启后采用 3–5 秒鱼讯、4 倍鱼体重；关闭恢复先前参数，仍遵守落水、就位与装备限制。
+
+测试：`python -B -m unittest discover -s local-service/tests -v`；实际管理桥接测试可通过 `RF4_TEST_LAUNCHER` 和 `RF4_TEST_STATIC_DATABASE` 指定重建后的 launcher 与只读静态库。真实角色和客户端游戏回归另行验收。会员钓获加成与断线恢复依赖对应游戏服务功能 PR。

@@ -74,6 +74,7 @@ func (l adminLogger) Error(msg string, args ...any) { l.l.Error(logMessage(msg, 
 func main() {
 	configPath := flag.String("config", "config.yaml", "配置文件路径")
 	panelAddr := flag.String("panel-addr", "127.0.0.1:9500", "控制面板监听地址（仅本机）")
+	managedAdmin := flag.Bool("managed-admin", false, "由本地服务管理后台，父进程关闭输入时退出")
 	adminUser := flag.String("admin-user", "admin", "初始管理员用户名（表空时生效）")
 	adminPass := flag.String("admin-pass", "admin123", "初始管理员密码（表空时生效）")
 	staticDB := flag.String("static-db", "", "静态配置库路径（默认取 sqlite.static_path）")
@@ -103,6 +104,13 @@ func main() {
 	appCtx, appCancel := context.WithCancel(context.Background())
 	app := &app{cfg: cfg, cfgPath: *configPath, log: panelLogger{}, ctx: appCtx, cancel: appCancel}
 	defer app.closeAdmin()
+	if *managedAdmin {
+		if err := app.serveManagedAdmin(os.Stdin, *panelAddr); err != nil {
+			app.log.Error("本地管理入口启动失败: " + err.Error())
+			os.Exit(1)
+		}
+		return
+	}
 
 	// ---- Web 控制面板（先于首跑 seed 起来：GUI 无控制台，seed 可能耗时
 	// 一分钟，浏览器面板是唯一可视化入口，须立即出现）----

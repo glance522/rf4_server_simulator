@@ -160,6 +160,9 @@ func (s *Server) biteDelay(st *FishState, bonuses ...fishingSkillBonus) float64 
 		bonus = bonuses[0]
 	}
 	fixed := s.tunableF("bite_delay_fixed", 0)
+	if s.tunableF("debug_mode", 0) == 1 {
+		return 3 + rand.Float64()*2
+	}
 	scale := s.tunableF("bite_delay_scale", 1.0)
 	maxDelay := s.tunableF("bite_delay_max", 20.0)
 	lureMax := s.tunableF("bite_delay_lure_max", 6.0)
