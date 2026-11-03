@@ -22,6 +22,7 @@ import (
 
 	"rf4server/internal/config"
 	"rf4server/internal/metrics"
+	"rf4server/internal/portal"
 	"rf4server/internal/proto"
 )
 
@@ -59,6 +60,9 @@ func NewLoginServer(cfg config.Gateway, store Store, log *slog.Logger, obs *metr
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleLogin)
+	if storage, ok := store.(*SQLiteStore); ok {
+		mux.Handle("/portal/", portal.New(storage.DB, s.useridForRemote))
+	}
 	s.srv = &http.Server{
 		Addr:              cfg.LoginAddr,
 		Handler:           mux,
