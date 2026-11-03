@@ -1,7 +1,6 @@
 package gameserver
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -15,21 +14,6 @@ import (
 
 func completedCatchPending(st *FishState) bool {
 	return st.Pending != nil && st.Hooked && !st.CastActive && !st.Resolved
-}
-
-func (s *Server) keepnetCapacity(ctx context.Context, uid int64) (int64, error) {
-	normal, premium := s.importedContainerCapacity(ctx, uid, containerKeepnet, 100, 150)
-	p, err := s.DB.GetProfile(ctx, uid)
-	if errors.Is(err, sql.ErrNoRows) {
-		return normal, nil
-	}
-	if err != nil {
-		return 0, err
-	}
-	if store.MembershipAt(p.Membership, p.MembershipExp, time.Now().Unix()).Active {
-		return premium, nil
-	}
-	return normal, nil
 }
 
 // 登录只恢复已收鱼的决定；在线原有的入护/放生选择不受影响。

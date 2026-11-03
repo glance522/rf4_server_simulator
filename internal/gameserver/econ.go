@@ -281,16 +281,14 @@ func (s *Server) fishingKeep(ctx *Ctx) ([]byte, bool) {
 
 	st.mu.Lock()
 	pending := st.Pending
-	var echo string
 	if pending != nil {
 		if want != "" && !strings.EqualFold(want, pending.FishGUID) {
 			st.mu.Unlock()
 			ctx.ReplyFailure("System.ArgumentException", "入护的鱼与本次钓获不一致")
 			return nil, true
 		}
-		echo = pending.FishGUID
+		echo := pending.FishGUID
 		kept := *pending
-		kept.FishGUID = echo
 		if kept.LocLevel == "" {
 			kept.LocLevel = s.currentLevel(uid)
 		}

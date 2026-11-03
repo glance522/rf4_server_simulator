@@ -2,7 +2,6 @@ package gameserver
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"rf4server/internal/proto"
@@ -40,22 +39,4 @@ func inventoryContainerMatches(name string, allowed []string) bool {
 		}
 	}
 	return false
-}
-
-// Only capacity is imported; occupied counts always come from current rows.
-func (s *Server) importedContainerCapacity(ctx context.Context, uid int64, kind uint64, normal, member int64) (int64, int64) {
-	raw, found, err := s.DB.KVGet(ctx, fmt.Sprintf("native-import:%d:inventory", uid))
-	if err != nil || !found {
-		return normal, member
-	}
-	var snapshot struct {
-		Counts map[string]struct{ A, B int64 } `json:"countsByKind"`
-	}
-	if json.Unmarshal([]byte(raw), &snapshot) != nil {
-		return normal, member
-	}
-	if counts, ok := snapshot.Counts[fmt.Sprint(kind)]; ok && counts.A >= 0 && counts.A <= 2147483647 && counts.B >= 0 && counts.B <= 2147483647 {
-		return counts.A, counts.B
-	}
-	return normal, member
 }
