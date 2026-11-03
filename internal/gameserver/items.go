@@ -653,6 +653,9 @@ func (s *Server) buildFactoryChild(ctx context.Context, rod *store.Item, sysID s
 	// 并将部件物理强度按 0 处理。
 	setFloat(csWorkmanship, rod.Workmanship)
 	setFloat(csDurability, rod.Durability)
+	if strength, ok := strengthBitsFor(def, rod.Durability); ok {
+		setFloat(csStrength, strength)
+	}
 	setState(base)
 	// parent 指向竿
 	if idx := fieldIdxByCS(cls.Class, csParent); idx >= 0 {
