@@ -190,9 +190,8 @@ func TestSettleMembershipDoesNotChangeXP(t *testing.T) {
 	}
 }
 
-// TestGradeLinesFromSpeciesWeight 验证档位由 species_weight 的三条重量线决定：
-// trophy_g 是达标线，trophy_line_g 是奖杯线，super_trophy_line_g 是蓝冠线。
-func TestGradeLinesFromSpeciesWeight(t *testing.T) {
+// 结算尺优先沿用内置值；其他鱼种使用尺上的补全分界。
+func TestGradeLinesFollowSettlementRuler(t *testing.T) {
 	srv, db := newProgressSrv(t)
 	ctx := srv.dbCtx()
 
@@ -214,8 +213,8 @@ func TestGradeLinesFromSpeciesWeight(t *testing.T) {
 		want int64
 		note string
 	}{
-		{"perch_test", 339, 1, "w < 达标线(trophy_g)"},
-		{"perch_test", 340, 2, "w >= 达标线"},
+		{"perch_test", 259, 1, "w < 结算尺达标线"},
+		{"perch_test", 260, 2, "w >= 结算尺达标线"},
 		{"perch_test", 1499, 2, "达标 ≤ w < 奖杯线(trophy_line_g)"},
 		{"perch_test", 1500, 3, "w >= 奖杯线"},
 		{"perch_test", 2999, 3, "奖杯 ≤ w < 蓝冠线(super_trophy_line_g)"},
@@ -232,18 +231,18 @@ func TestGradeLinesFromSpeciesWeight(t *testing.T) {
 		t.Fatalf("gradeFromLines 边界=%d, want 3", got)
 	}
 
-	// 内置池回退路径同样接表：表有行按三线，无行回退池内 valuable 单线
+	// 内置池与静态库都按结算尺，缺表时也沿用尺上的补全分界。
 	srv.stateFor(1000001).GearGuid = ""
 	e := fishPoolEntry{species: "perch_test", minG: 50, maxG: 9000, valuableLineG: 340}
 	if got := srv.poolGrade(e, 2000); got != 3 {
 		t.Fatalf("poolGrade(表行)=%d, want 3", got)
 	}
 	e2 := fishPoolEntry{species: "not_in_table", valuableLineG: 400}
-	if got := srv.poolGrade(e2, 400); got != 2 {
-		t.Fatalf("poolGrade(无表行,=valuable)=%d, want 2", got)
+	if got := srv.poolGrade(e2, 277); got != 2 {
+		t.Fatalf("poolGrade(无表行,=结算尺达标线)=%d, want 2", got)
 	}
-	if got := srv.poolGrade(e2, 399); got != 1 {
-		t.Fatalf("poolGrade(无表行,<valuable)=%d, want 1", got)
+	if got := srv.poolGrade(e2, 276); got != 1 {
+		t.Fatalf("poolGrade(无表行,<结算尺达标线)=%d, want 1", got)
 	}
 
 	// 25 条目/14/14 的档位必须与三线判定一致（grade 即档位线落点）

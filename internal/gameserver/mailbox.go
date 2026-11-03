@@ -659,7 +659,7 @@ type AdminCommand struct {
 	KeepnetGUIDs []string            `json:"keepnet_guids,omitempty"`
 	Species      string              `json:"species,omitempty"`  // arm_fish：鱼种（空=默认池随机）
 	WeightG      int64               `json:"weight_g,omitempty"` // arm_fish：克重（空=默认池范围内）
-	Grade        int64               `json:"grade,omitempty"`    // arm_fish：档位 1..4（空=重量定档）
+	Grade        int64               `json:"grade,omitempty"`    // 兼容旧指令；实际档位按结算尺和重量计算。
 }
 
 // StartAdminSubscriber 轮询共享 SQLite 队列，每 2 秒处理一批管理指令。
@@ -746,6 +746,7 @@ func (s *Server) execAdminCmd(cmd *AdminCommand) {
 		}
 		entry := *cmd.Keepnet
 		entry.UID = cmd.UID
+		entry.Cat = s.rollGradeDB(ctx, entry.Species, entry.WeightG)
 		if entry.EchoGUID == "" {
 			entry.EchoGUID = newFishGUID()
 		}
@@ -784,16 +785,11 @@ func (s *Server) execAdminCmd(cmd *AdminCommand) {
 			if f.WeightG == 0 {
 				f.WeightG = r.WeightG
 			}
-			if f.Grade == 0 {
-				f.Grade = r.Grade
-			}
 		}
 		if f.WeightG == 0 {
 			f.WeightG = 500
 		}
-		if f.Grade == 0 {
-			f.Grade = 2
-		}
+		f.Grade = s.rollGradeDB(ctx, f.Species, f.WeightG)
 		if f.LengthM == 0 {
 			lp := lengthSeed[f.Species]
 			if lp[0] == 0 {

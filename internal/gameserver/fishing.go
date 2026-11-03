@@ -503,6 +503,9 @@ func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bo
 		modeMult = 1.0 + 0.12*float64(t)*prefShift
 	}
 	w := s.sampleWeightDB(cctx, key, modeMult)
+	w = int64(applyTrophyLuck(float64(w), bonus.TrophyLuck, func() float64 {
+		return float64(s.sampleWeightDB(cctx, key, modeMult))
+	}))
 	// fish_weight_scale：整体缩放鱼的实际体重（在判档与装备上限之前）。
 	if k := s.tunableF("fish_weight_scale", 1.0); k > 0 && k != 1.0 {
 		w = int64(math.Round(float64(w) * k))
@@ -515,7 +518,6 @@ func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bo
 		w = capWeightGrams(w, int64(gearCapKg*1000))
 	}
 	grade := s.rollGradeDB(cctx, key, w)
-	grade = applyTrophyLuck(grade, bonus.TrophyLuck)
 	lk, lp := s.DB.SpeciesLengthKP(cctx, key)
 	length := lk * math.Pow(float64(w), lp)
 	length = math.Round(length*100000) / 100000
@@ -609,12 +611,10 @@ func (s *Server) sampleWeightDB(ctx context.Context, key string, modeMult float6
 	return int64(math.Max(1, math.Round(math.Min(math.Max(M, lo), hi))))
 }
 
-// rollGradeDB 根据重量和 species_weight 的三个阈值确定鱼档位。
-// trophy_g 是达标线，trophy_line_g 是奖杯线，super_trophy_line_g 是蓝冠线；
-// 缺少某个阈值时只使用已有的分界。
+// rollGradeDB 按结算尺的达标、奖杯和蓝冠分界，用实际克重定档。
 func (s *Server) rollGradeDB(ctx context.Context, key string, weightG int64) int64 {
-	val, tro, sup := s.DB.GradeLines(ctx, key)
-	return gradeFromLines(val, tro, sup, weightG)
+	lines := s.settleStatics(ctx, key)
+	return gradeFromLines(&lines[0], &lines[1], &lines[2], weightG)
 }
 
 // gradeFromLines 根据重量和档位线判定档位。
@@ -683,6 +683,9 @@ func (s *Server) rollFishPoolsWithRules(loc string, gearCapKg float64, bonus fis
 	// 三角分布（偏向 min + 30% 区间）
 	mode := float64(e.minG) + float64(e.maxG-e.minG)*0.3
 	w := triangular(float64(e.minG), float64(e.maxG), mode)
+	w = applyTrophyLuck(w, bonus.TrophyLuck, func() float64 {
+		return triangular(float64(e.minG), float64(e.maxG), mode)
+	})
 	if k := s.tunableF("fish_weight_scale", 1.0); k > 0 && k != 1.0 {
 		w *= k
 	}
@@ -696,8 +699,7 @@ func (s *Server) rollFishPoolsWithRules(loc string, gearCapKg float64, bonus fis
 	if weightG < 1 {
 		weightG = 1
 	}
-	// 有 species_weight 档位线时按重量判档；缺表时使用内置 valuable 线。
-	grade := applyTrophyLuck(s.poolGrade(e, weightG), bonus.TrophyLuck)
+	grade := s.poolGrade(e, weightG)
 	// 体长
 	lp, ok := lengthSeed[e.species]
 	if !ok || lp[0] == 0 {
@@ -722,15 +724,12 @@ func poolWeightCapG(gearCapKg, fightTolerance float64) float64 {
 	return float64(maxMockWeight) * (1.0 + math.Max(0, fightTolerance))
 }
 
-// applyTrophyLuck 按技能概率将鱼提升一档，最高为 4 档；无加成时保持原档位。
-func applyTrophyLuck(grade int64, luck float64) int64 {
-	if luck <= 0 || grade >= 4 {
-		return grade
+// applyTrophyLuck 命中时多抽一次体重取较重者，之后仍需缩放、限重和定档。
+func applyTrophyLuck(weight, luck float64, sample func() float64) float64 {
+	if luck > 0 && rand.Float64() < luck {
+		return math.Max(weight, sample())
 	}
-	if rand.Float64() < luck {
-		return grade + 1
-	}
-	return grade
+	return weight
 }
 
 func triangular(min, max, mode float64) float64 {
@@ -741,18 +740,9 @@ func triangular(min, max, mode float64) float64 {
 	return max - math.Sqrt((1-r)*(max-min)*(max-mode))
 }
 
-// poolGrade 优先使用 species_weight 档位线；缺表时使用内置池的 valuable 线。
+// poolGrade 与静态鱼库共用结算尺分界。
 func (s *Server) poolGrade(e fishPoolEntry, weightG int64) int64 {
-	if s.DB != nil {
-		val, tro, sup := s.DB.GradeLines(s.dbCtx(), e.species)
-		if val != nil || tro != nil || sup != nil {
-			return gradeFromLines(val, tro, sup, weightG)
-		}
-	}
-	if weightG >= e.valuableLineG {
-		return 2
-	}
-	return 1
+	return s.rollGradeDB(s.dbCtx(), e.species, weightG)
 }
 
 // newFishGUID 随机 16B hex，第 13 个 nibble 固定 '9'。

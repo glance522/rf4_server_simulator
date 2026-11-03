@@ -16,7 +16,7 @@ import (
 //   - xp 使用累计值，等级由 levelForXp 重算；写点时保证等级不下降，
 //     并把 xp 回填到当前等级门槛。
 //   - 会员身份只影响档案展示，不额外增加钓获经验。
-//   - 鱼档位由 species_weight 的达标、奖杯和蓝冠三条重量线决定。
+//   - 鱼档位由结算尺的达标、奖杯和蓝冠三条重量线决定。
 
 // settleXpResult 保存一次钓获结算的经验分解和结算状态。
 type settleXpResult struct {

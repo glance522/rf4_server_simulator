@@ -15,7 +15,7 @@ import (
 // fishingSkillBonus 保存钓鱼判定使用的三类技能增益。
 type fishingSkillBonus struct {
 	BiteSpeed      float64 // 咬钩等待倍率，<1 更快
-	TrophyLuck     float64 // 单次升档概率
+	TrophyLuck     float64 // 额外抽一次体重取较重者的概率
 	FightTolerance float64 // 默认鱼池体重上限的放宽比例
 }
 
