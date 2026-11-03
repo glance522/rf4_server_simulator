@@ -33,6 +33,15 @@ done
 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "${LDFLAGS} -H=windowsgui" \
   -o "${STAGE}/bin/launcher.exe" ./cmd/launcher
 
+if [[ "${WITH_OFFLINE_TOOLS:-0}" == "1" ]]; then
+  for command in import-character local-membership; do
+    GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "${LDFLAGS}" \
+      -o "${STAGE}/bin/${command}.exe" "./cmd/${command}"
+  done
+  GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "${LDFLAGS} -H=windowsgui" \
+    -o "${STAGE}/启动游戏.exe" ./cmd/local-launcher
+fi
+
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -sha256 -nodes \
   -keyout "${STAGE}/certs/server.key" -out "${STAGE}/certs/server.crt" \
   -days 3650 -subj "/CN=api.rf4game.ru" \
@@ -45,8 +54,7 @@ sed \
   -e 's/replace-with-strong-password/admin123/g' \
   config.example.yaml > "${STAGE}/config.yaml"
 
-cp README.md LICENSE config.example.yaml "${STAGE}/"
-cp -R docs server_data "${STAGE}/"
+python3 tools/stage_preview.py "${STAGE}"
 
 cat > "${STAGE}/快速开始.txt" <<EOF
 rf4_server_simulator ${VERSION} 快速开始

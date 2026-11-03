@@ -8,7 +8,7 @@
 # Important: keep -s -w. An unstripped 26MB build was blocked by Windows
 # Smart App Control ("An Application Control policy has blocked this file");
 # the stripped build runs normally.
-param([string]$Target = 'gameserver')
+param([string]$Target = 'gameserver', [switch]$OfflineTools)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -26,15 +26,19 @@ if (-not $go) { throw 'go not found (install Go or add it to PATH)' }
 
 $version = Get-Date -Format 'yyyyMMddHHmmss'
 $ld = "-s -w -X 'rf4server/internal/buildinfo.Version=$version'"
-$targets = if ($Target -eq 'all') { @('gateway', 'gameserver', 'seed') } else { @($Target) }
+$targets = if ($Target -eq 'all') { @('gateway', 'gameserver', 'seed', 'launcher') } else { @($Target) }
 
 if ($Target -eq 'all' -and (Test-Path 'bin/admin.exe')) {
     Remove-Item -LiteralPath 'bin/admin.exe' -Force
 }
 
+if ($OfflineTools -and $Target -eq 'all') { $targets += @('import-character', 'local-membership', 'local-launcher') }
 foreach ($t in $targets) {
     $out = "bin/$t.exe"
-    & $go build -trimpath -ldflags $ld -o $out "./cmd/$t"
+    $flags = $ld
+    if ($t -in @('launcher', 'local-launcher')) { $flags += ' -H=windowsgui' }
+    if ($t -eq 'local-launcher') { $out = '启动游戏.exe' }
+    & $go build -trimpath -ldflags $flags -o $out "./cmd/$t"
     if ($LASTEXITCODE -ne 0) { throw "build $t failed" }
     Write-Host ("built {0}  ({1:N1} MB)" -f $out, ((Get-Item $out).Length / 1MB)) -ForegroundColor Green
 }

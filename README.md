@@ -223,3 +223,8 @@ docs/                               部署手册 / 回归清单
 ## 许可
 
 项目采用 **MIT 协议**（见 [LICENSE](LICENSE)）。本 README 中的项目定位与使用边界用于说明维护者立场，不改变许可证本身授予的权利与义务。
+## 离线构建与发布
+
+先合入可选离线工具，再用 `./build.ps1 -OfflineTools`、`make OFFLINE_TOOLS=1` 或 `./tools/build.ps1 all -OfflineTools` 构建离线入口及辅助工具。预发布继续由 main 推送或手工触发，包含离线工具；不生成独立 admin.exe。
+
+发布资源仅从 Git 已跟踪文件中按白名单复制，唯一数据库例外是启动必需的 `server_data/static.sqlite3` 静态配置库。游戏客户端、玩家数据库、角色快照、日志和缓存不入包。可运行 `python -B -m unittest discover -s tools -p test_stage_preview.py` 验证排除规则。
