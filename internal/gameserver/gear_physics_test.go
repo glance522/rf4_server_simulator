@@ -340,3 +340,22 @@ func TestDBRollHonorsDynamicGearCap(t *testing.T) {
 		}
 	}
 }
+
+func TestDragSlipIsNotStructuralBreak(t *testing.T) {
+	spec := gearPhysicsSpec{RodPowerKg: 25, LineStrengthKg: 15, LeaderStrengthKg: 12, ReelDragKg: 1}
+	if limit := gearBreakLimitKg(spec); limit != 12 {
+		t.Fatalf("drag selected as structural limit: %g", limit)
+	}
+	if part := gearWeakestPart(spec); part != "leader" {
+		t.Fatalf("wrong break part: %s", part)
+	}
+	if ok, part := canLandGear(spec, 10, .35); !ok || part != "" {
+		t.Fatalf("slipping drag broke tackle: %v %s", ok, part)
+	}
+	if ok, part := canLandGear(spec, 40, .35); ok || part != "leader" {
+		t.Fatalf("real overload not detected: %v %s", ok, part)
+	}
+	if got := gearBreakLimitKg(gearPhysicsSpec{ReelDragKg: 35}); got != 0 {
+		t.Fatalf("unknown structure fabricated from drag: %g", got)
+	}
+}

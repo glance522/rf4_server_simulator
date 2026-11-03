@@ -1,0 +1,531 @@
+/* Account-page reference styles. Browser-only interactions are in portal.js. */
+#tabular_body {flex-grow:1;flex-shrink:0;flex-basis:auto;display:flex;flex-direction:row}
+#tabular_body .table_content {flex:1;min-height:978px;max-width:885px;position:relative;margin-bottom:0;background-color:transparent;padding:0;display:flex;flex-direction:column}
+#tabular_body .table_content img {max-width:825px;height:auto}
+#tabular_body .table_content > div {flex-grow:1;flex-shrink:0;flex-basis:auto}
+#tabular_body .table_content > .post_content {background-color:rgba(255,255,255,0.9);padding:30px}
+#tabular_body .sideheder {font-size:30px;font-family:"Roboto Condensed";color:#fff;line-height:1.2;margin:0;text-transform:none}
+#tabular_body .sidebar,#tabular_body .sidemenu {margin-left:17px;margin-bottom:17px}
+#tabular_body .sidebar > div {margin-bottom:17px}
+#tabular_body .block {width:224px;padding:27px 17px 30px 27px}
+#tabular_body .sidebar:last-child,#tabular_body .sidebar > div:last-child {margin-bottom:0}
+#tabular_body .sidemenu {min-height:228px;width:224px;text-align:left;background:#c7b299 none no-repeat left top;padding:27px 17px 30px 27px}
+#tabular_body .sidemenu > ul {padding-top:15px;padding-bottom:15px}
+#tabular_body .sidemenu > ul > li a {font-size:16px;font-family:"Roboto";color:#fff;font-weight:700;line-height:1.5}
+#tabular_body .sidemenu > ul > li a.active {color:#2d3948}
+#tabular_body .sidemenu > ul > li a:hover {text-decoration:none;color:#ff5909}
+#tabular_body .sidemenu > ul > li > a:before {content:'\00A0\00A0\00A0';background:transparent none no-repeat left center}
+#tabular_body .sidemenu > ul > li > a:hover::before,#tabular_body .sidemenu > ul > li > a.active:hover::before {background:transparent none no-repeat left center}
+#tabular_body .sidemenu > ul > li > a.active:before {background:transparent none no-repeat left center}
+#tabular_body .sidemenu > ul > li > ul {font-size:14px;font-family:"Roboto";color:#594836;text-decoration:underline;line-height:1.5;padding-left:30px;list-style:disc}
+#tabular_body .sidemenu > ul > li > ul > li a,#tabular_body .sidemenu > ul > li > ul > li a:visited {color:#594836;text-decoration:underline}
+#tabular_body .sidemenu > ul > li > ul > li a.active {color:#2d3948}
+#tabular_body .sidemenu > ul > li > ul > li a:hover {color:#ff5909}
+#tabular_body .nav_bar_wrap + .stretcher {display:block;content:'';height:95px;width:100%}
+#tabular_body .nav_bar_wrap {position:absolute;bottom:0;left:0;width:100%;height:125px;vertical-align:middle}
+#tabular_body .nav_bar_wrap hr {margin-bottom:18px;margin-left:30px;margin-right:30px}
+#tabular_body .nav_bar {display:block;text-align:left;vertical-align:middle;padding-right:30px;padding-left:30px}
+#tabular_body .nav_bar .numbers_bar {padding-top:44px;vertical-align:middle;text-align:center;width:100%;height:81px;font-size:16px;font-family:"Roboto";color:#000;line-height:1.2}
+#tabular_body .nav_bar .numbers_bar > a {display:inline-block;height:26px;padding-top:11px;vertical-align:middle;font-size:16px;font-family:"Roboto";color:#000;line-height:1.2;margin-left:12px;margin-right:12px}
+#tabular_body .nav_bar .numbers_bar > a:hover {color:#ff5909;text-decoration:none}
+#tabular_body .nav_bar .numbers_bar > a.disable {color:#a9a9a9}
+#tabular_body .nav_bar .numbers_bar > a.disable:hover {color:#a9a9a9;text-decoration:none}
+#tabular_body .nav_bar .numbers_bar .start,#tabular_body .nav_bar .numbers_bar .prev,#tabular_body .nav_bar .numbers_bar .next,#tabular_body .nav_bar .numbers_bar .last {margin-left:5px;margin-right:5px;padding-top:0;height:37px}
+#tabular_body .nav_bar .numbers_bar .start:before {font-size:32px;content:'\00AB'}
+#tabular_body .nav_bar .numbers_bar .prev:before {font-size:32px;content:'\2039'}
+#tabular_body .nav_bar .numbers_bar .next:after {font-size:32px;content:'\203A'}
+#tabular_body .nav_bar .numbers_bar .last:after {font-size:32px;content:'\00BB'}
+
+
+div.row {display:flex;flex-direction:row;align-items:stretch;width:100%}
+span.col {display:inline-block;flex-grow:1;flex-shrink:0;flex-basis:auto}
+#tabular_body.account_table .sidemenu > ul > li > a {font-weight:400;line-height:1.875}
+.user_info {background-color:rgba(255,255,255,0.9);padding:30px 30px 70px}
+.user_info a:visited {color:#ff5909}
+.user_info .avatar {float:left;width:160px}
+.user_info .avatar .av_mask {width:160px;height:160px;border-radius:80px;text-align:center;vertical-align:center;-webkit-border-radius:80px;-moz-border-radius:80px;position:relative;background-image:none;background-size:contain;background-repeat:no-repeat}
+.user_info .avatar .av_mask div {width:100%;height:100%;background-position:center center}
+.changeav.fixed {width:43px;height:36px;position:absolute;bottom:0;left:0;opacity:0}
+.removeav.fixed {width:43px;height:36px;position:absolute;bottom:0;right:0;opacity:0;-webkit-transition:opacity .2s ease-in-out;-moz-transition:opacity .2s ease-in-out;-o-transition:opacity .2s ease-in-out;transition:opacity .2s ease-in-out}
+.user_info .avatar .av_mask:hover .changeav,.user_info .avatar .av_mask:hover .removeav {opacity:1;-webkit-transition:opacity .2s ease-in-out;-moz-transition:opacity .2s ease-in-out;-o-transition:opacity .2s ease-in-out;transition:opacity .2s ease-in-out}
+.changeav .text {background:transparent none center center no-repeat;padding:0!important;width:43px;height:36px}
+.removeav .text {background:transparent none center center no-repeat;padding:0!important;width:43px;height:36px}
+.user_info .info {float:right;width:635px;height:250px}
+.user_info .info h2 {font-size:30px!important;font-family:"Roboto Condensed"!important;color:#1a1a1a!important;margin:0!important}
+.user_info .info b {font-weight:900}
+.user_info .info table {white-space:nowrap;font-size:16px;font-family:"Roboto";line-height:1.7}
+.user_info .info hr {margin-top:12px;margin-bottom:12px;border:none;border-top:1px dotted #afae79;color:#000;background-color:transparent;height:1px}
+.user_info .profile_links {margin-top:30px;display:inline-block}
+.user_info .profile_links .row {justify-content:space-between}
+.user_info .fast_box {background-color:#e2d5c5;background-repeat:no-repeat;background-size:100% 100%;background-position:center center;cursor:pointer;width:359px;height:164px;text-align:left;padding:28px 20px}
+.user_info .fast_box h3 {padding:0!important;margin:0!important;font-size:28px!important;font-weight:400!important;font-family:"Roboto Condensed"!important;color:#544a58!important;line-height:1.2!important}
+.user_info .fast_box:hover {filter:brightness(110%);-webkit-filter:brightness(110%)}
+.user_info .fast_box * {cursor:pointer}
+.user_info .fast_box.top {margin-bottom:30px}
+.user_info .fast_box span {display:block;font-size:12px;font-family:"Roboto";color:#1c1c1e;line-height:1.2;width:198px;padding-top:20px}
+.user_info .fast_box.fast_buygold {background-image:none}
+.user_info .fast_box.fast_buypremium {background-image:none}
+.user_info .fast_box.fast_fill {background-image:none}
+.user_info .fast_box.fast_transactions {background-image:none}
+.user_info .fast_box.fast_changepwd {background-image:none}
+.user_info .fast_box.fast_forum_tournaments {background-image:none}
+.user_info .fast_box.fast_changename {background-image:none}
+.user_info .fast_box.fast_security {background-image:none}
+.user_info .fast_box.fast_teams {background-image:none}
+.subpricebox /* price class */ {display:none}
+.text .subprice.gold_price:after {content:'';padding-right:25px;background:transparent none no-repeat right center}
+.old_price .subprice.gold_price:after {content:'';padding-right:25px;background:transparent none no-repeat right center}
+#main .account_de_store_header {height:50px}
+#main .account_de_store_header h3 {font-size:18px;font-weight:400;height:18px;padding:16px 30px}
+.transactions {background-color:rgba(255,255,255,0.9);padding-bottom:75px;min-height:747px;position:relative}
+.transactions .table,.transactions .table td {background-color:transparent}
+.transactions table.table tr.first td.position {background:transparent;color:inherit}
+.security {background-color:rgba(255,255,255,0.9);padding-bottom:75px;min-height:747px;position:relative}
+.security .switcher_box {padding:30px 30px 0;font-size:18px;font-family:"Roboto";color:#1c1c1e;text-transform:uppercase;line-height:1.2;text-align:left}
+.security .switcher_box label {vertical-align:top;display:inline-block;height:19px;margin:4px}
+.security .table,.security .table tr.headers td {border-top:1px solid #bbbaaf}
+.security .table,.security .table tr.headers .spacing {border-top:1px solid transparent}
+.security .table,.security .table td {background-color:transparent}
+.security table.table tr.first td.position {background:transparent;color:inherit}
+.forum_tournaments_wrapper {display:flex;flex-direction:column}
+.forum_tournaments {background-color:rgba(255,255,255,0.9);padding-bottom:125px;position:relative;flex-grow:1;flex-shrink:1}
+.forum_tournaments .table td {background:transparent}
+.forum_tournaments .table td * {cursor:pointer}
+.forum_tournaments .table td .moment_date {padding-left:2px;padding-right:2px}
+.forum_tournaments .table tr.first td.position {background:transparent;color:inherit}
+.forum_tournaments .table tr td .winner,.forum_tournaments .table tr td .winner_medal,.forum_tournaments .table tr td .winner_default_result {background:transparent none 50% 10px no-repeat;color:#fff;height:100%;display:block;position:relative}
+.forum_tournaments .table tr td .winner_medal {display:flex;flex-direction:column;align-items:center}
+.forum_tournaments .table tr td .winner_default_result {background:none;color:inherit;margin-top:25px}
+.forum_tournaments .table tr td .winner div,.forum_tournaments .table tr td .winner_medal div,.forum_tournaments .table tr td .winner_default_result div {position:absolute;display:block;width:100%;height:16px;top:13px;text-align:center}
+.forum_tournaments .table tr td .winner_medal div {height:45px;text-align:right;color:#0c0c0c}
+.forum_tournaments .ft_type {display:inline-block;height:100%;min-width:58px;background-size:contain}
+.forum_tournaments .tournament_box .header .type.ft_type {padding-left:25px;background-position:left center}
+.forum_tournaments .tournament_box .header .type.ft_type.team,.forum_tournaments .tournament_box .header .type.ft_type.individual_session,.forum_tournaments .tournament_box .header .type.ft_type.team_session {padding-left:48px}
+.forum_tournaments .ft_type.individual {background:transparent none center center no-repeat}
+.forum_tournaments .ft_type.team {background:transparent none center center no-repeat}
+.forum_tournaments .ft_type.lock {background:transparent none 100% 90% no-repeat}
+.forum_tournaments .ft_type.captain {background:transparent none center center no-repeat}
+.forum_tournaments .ft_type.individual_session {background:transparent none center center no-repeat}
+.forum_tournaments .ft_type.team_session {background:transparent none center center no-repeat}
+.forum_tournaments .empty_tours {display:block;height:100%;width:100%;text-align:center;vertical-align:middle}
+.forum_tournaments .tournament_box {margin-bottom:30px;min-height:320px;position:relative;padding:15px 30px 85px}
+.forum_tournaments .tournament_box .header {position:relative;display:flex;flex-direction:row;align-items:center;justify-content:center;border-bottom:1px solid #aba69a;height:46px;text-align:center}
+.forum_tournaments .tournament_box .header > span {height:46px;text-align:center;vertical-align:middle;white-space:nowrap;justify-content:center;align-content:center}
+.forum_tournaments .tournament_box .header > span > span,.forum_tournaments .tournament_box .header > span > span > span {height:46px;vertical-align:middle;white-space:nowrap;flex-grow:1;display:flex;align-items:center;justify-content:left;font-size:14px}
+.forum_tournaments .tournament_box .header .type {font-family:"Roboto",sans-serif;color:#1a1a1a;line-height:1.375;flex-grow:3;display:flex;align-items:center;justify-content:left}
+.forum_tournaments .tournament_box .header .time {padding-left:10px;padding-right:10px;font-family:"Roboto",sans-serif;color:#1a1a1a;line-height:1.375;display:flex;align-items:center;justify-content:left}
+.forum_tournaments .tournament_box .header .time .calendar {display:inline-block;background:transparent none left center no-repeat;height:100%;padding-left:28px;min-width:20px}
+.forum_tournaments .tournament_box .header .duration,.forum_tournaments .tournament_box .header .session_duration {padding-left:10px;padding-right:10px;font-family:"Roboto",sans-serif;color:#1a1a1a;line-height:1.375;display:flex;align-items:center;justify-content:left}
+.forum_tournaments .tournament_box .header .session_duration .hour_glass {background:transparent none left center no-repeat;height:100%;padding-left:22px;min-width:12px;display:flex;align-items:center;justify-content:left}
+.forum_tournaments .tournament_box .header .duration .clock {background:transparent none left center no-repeat;height:100%;padding-left:28px;min-width:12px;display:flex;align-items:center;justify-content:left}
+.forum_tournaments .tournament_box .header .members {padding-left:10px;font-size:16px;font-family:"Roboto";color:#1a1a1a;line-height:1.375;text-align:right;display:flex;align-items:center;justify-content:left}
+.forum_tournaments .tournament_box .header .members .members_icon {background:transparent none left center no-repeat;height:100%;padding-left:28px;display:flex;align-items:center;justify-content:left}
+.forum_tournaments .tournament_box .header .state {position:absolute;background:#FFF;display:flex;flex-direction:row;align-items:center;top:0;left:100%;height:auto;margin:39px 0 0;transform:translate(-100%,0);font-size:14px;font-family:"Roboto";color:#020202;line-height:1.2;text-align:right;overflow:hidden}
+.forum_tournaments .tournament_box .header .state:before {content:'';background:transparent none center center no-repeat;width:9px;height:9px;transform:translate(0,-1px);display:inline-block;padding-left:5px;padding-right:5px}
+.forum_tournaments .tournament_box .header .state.green {color:#bdb504}
+.forum_tournaments .tournament_box .header .state.green:before {background:transparent none center center no-repeat}
+.forum_tournaments .tournament_box .header .state.red {color:#ff5909}
+.forum_tournaments .tournament_box .header .state.red:before {background:transparent none center center no-repeat}
+.forum_tournaments .tournament_box h2.name {display:inline-block;border-bottom:1px dashed #ff5909;color:#ff5909!important;font-size:24px!important;margin-top:15px!important;margin-bottom:9px!important}
+.forum_tournaments .tournament_box h2.name:hover {color:#ff6A1A!important}
+.forum_tournaments .tournament_box .box {padding-top:10px;padding-bottom:10px}
+.forum_tournaments .tournament_box .box,.forum_tournaments .tournament_box .box .text {font-size:16px;font-family:"Roboto";color:#343432;line-height:1.222;text-align:left}
+.forum_tournaments .tournament_box .description.box {padding-left:2px}
+.forum_tournaments .tournament_box h5.conditions {margin-top:5px!important;margin-bottom:0!important}
+.forum_tournaments .tournament_box .conditions.box {padding-left:2px}
+.forum_tournaments .tournament_box h5.rewards {margin-top:5px!important;margin-bottom:0!important}
+.forum_tournaments .tournament_box .rewards.box {padding-left:2px}
+.forum_tournaments .tournament_box .has_overflow.vertical.custom .overflow_text:before {background:linear-gradient(to bottom,rgba(255,255,255,0),#ebe5de 70%,#ebe5de)}
+.forum_tournaments .tournament_box .has_overflow.vertical.custom .overflow_howerbox {max-width:823px}
+.forum_tournaments .tournament_box .buttonsbox {padding-top:20px;min-height:50px;height:42px;width:825px;position:relative}
+.forum_tournaments .tournament_box .buttonsbox .user > b {font-size:16px;font-family:"Roboto";color:#000;line-height:36px}
+.forum_tournaments .tournament_box .buttonsbox .user .avatar {background-size:cover;background-position:center center;background-image:none;background-size:contain;background-repeat:no-repeat;vertical-align:middle;cursor:pointer;width:36px;height:36px;border-radius:18px;text-align:center;-webkit-border-radius:18px;-moz-border-radius:18px;float:left;margin-right:15px}
+.forum_tournaments .tournament_box .buttonsbox .button {float:right;margin-left:25px}
+.forum_tournaments .teammates {padding-top:30px;padding-bottom:30px}
+#main .forum_tournaments .teammates h3,#main .forum_tournaments .teammates h4 {padding-left:30px;padding-right:30px}
+#main .forum_tournaments .teammates h3 {margin-bottom:18px}
+#main .forum_tournaments .teammates h4 {margin-bottom:0}
+.forum_tournaments .teammates .buttonsbox {padding-left:30px;padding-right:30px}
+.forum_tournaments .teammates hr {margin-left:30px;margin-right:30px;margin-bottom:45px}
+.forum_tournaments .teammates tr.disabled {background-color:#E1E1E1;color:#828282}
+.forum_tournaments .teammates tr.checked {background-color:#D0CA4E}
+.forum_tournaments .teammates tr.highlight.checked:hover {background-color:#e7e281}
+.forum_tournaments .teammates .checkbox:checked + label:not(.error)::before {background-image:none}
+#squad_checked_label.error {color:#FF5509}
+.ft_details .item_icon {width:36px;height:36px;display:block;border-radius:18px;background-repeat:no-repeat;text-align:center;vertical-align:center;-webkit-border-radius:18px;-moz-border-radius:18px;vertical-align:middle}
+.ft_details .bait_icon {width:100%;height:36px;display:block;border-radius:18px;background-repeat:no-repeat;background-position:center,center;text-align:center;vertical-align:center;-webkit-border-radius:18px;-moz-border-radius:18px;vertical-align:middle}
+#main .forum_tournaments_wrapper.crumbs .subheader {word-break:keep-all;white-space:nowrap;overflow:hidden}
+#main .forum_tournaments_wrapper.crumbs .subheader h3 {position:initial;display:inline-block;padding-right:0}
+#main .forum_tournaments_wrapper.crumbs .subheader .actions {display:inline-block;position:absolute;left:14px;right:auto;top:auto;bottom:0;height:auto;width:auto;word-break:keep-all;white-space:nowrap}
+#main .forum_tournaments_wrapper.crumbs .subheader .actions a {font-size:12px}
+.teams {background-color:rgba(255,255,255,0.9);margin:0;padding-bottom:75px;min-height:747px;position:relative}
+.teams .without_team_block {padding:30px}
+.teams .without_team_block .team_reg_info {position:relative;top:0;left:0;margin:20px 0;overflow:hidden}
+.teams .team_header {padding:30px 30px 0}
+#main .teams .team_header h4.team_name {font-size:23px;font-family:"Roboto";color:#1a1a1a;text-transform:uppercase;line-height:.957;display:block;min-width:50%;margin-bottom:17px}
+#main .teams .team_header .team_status {font-size:14px;font-family:"Roboto";color:#1a1a1a;line-height:.957;display:block;float:right;padding-top:14px}
+#main .teams .team_header .team_status.closed {color:#ff5909}
+#main .teams .team_header .team_status.open {color:#bdb504}
+#main .teams .team_header .team_status:before {content:'';background:transparent none center center no-repeat;width:9px;height:9px;display:inline-block;padding-left:5px;padding-right:5px}
+#main .teams .team_header .team_info .flag {padding-left:20px!important;margin-left:1px!important;padding-top:1px}
+#main .teams .team_header .team_connect_access_denied {margin-top:15px;color:red;font-size:18px}
+#main .teams .team_header .team_status.closed:before {background:transparent none center center no-repeat}
+#main .teams .team_header .team_status.open:before {background:transparent none center center no-repeat}
+#main .teams .team_description {padding-left:0;padding-right:30px;margin-top:10px;margin-bottom:30px;line-height:1.4}
+#main .teams .team_description.editable {padding:0;border:1px solid #aba69a;cursor:text;margin:10px 20px 20px 0}
+#main .teams .team_description.editable span {padding:10px;display:block;margin-right:20px;cursor:text}
+#main .teams .team_description .description_text {font-family:"Roboto",sans-serif;font-size:inherit;width:556px;background:transparent;height:auto;margin:0;border:none;outline:none;resize:none;word-break:break-word;overflow-x:hidden;overflow-y:auto}
+#main .teams .switcher_box {padding-top:12px;padding-left:0;padding-right:30px}
+#main .teams .switcher_box label {vertical-align:top;display:inline-block;height:16px;margin-right:4px;margin-bottom:4px;margin-top:7px}
+#main .teams .teammates {margin-top:30px}
+#main .teams .search_results h4,#main .teams .teamrequests h4,#main .teams .teammates h4 {font-size:18px;font-family:"Roboto";color:#1a1a1a;line-height:.957;padding-left:30px;padding-right:30px;margin-bottom:0}
+.teams .table,.teams .table td {background-color:transparent}
+.teams table.table tr.first td.position {background:transparent no-repeat center center;color:inherit}
+.teams table.table tr.spacing:last-child td:before {content:'';display:block;height:100%;margin-left:30px;margin-right:30px;border-top:1px solid #bbbaaf;margin-top:9px}
+.teams .search_results td.name {color:#ff5909}
+.teams .search_results tr:hover td.name {text-decoration:underline}
+.teams .search_results tr.headers td.name {color:#1a1a1a}
+.teams .search_results tr.headers:hover td.name {text-decoration:none}
+.teams .team_controls {padding:30px 30px 10px}
+.teams .team_controls .team_header_button {margin-bottom:15px}
+.teams .team_controls #team_connect_timeout {display:none;margin-bottom:25px;color:red;font-size:18px}
+.teams form.search_team_form {display:block;margin-left:auto;margin-right:auto;width:600px;margin-bottom:30px;padding-top:30px;position:relative}
+.teams form.search_team_form input {display:block;width:500px;margin-left:auto;margin-right:auto;padding-right:40px}
+.teams form.search_team_form .search_button {height:32px;width:35px;background-image:none;background-repeat:no-repeat;background-position:center center;position:absolute;cursor:pointer;right:24px;top:42px}
+.teams .without_team_block {text-align:center}
+.teams .without_team_block span.button {margin:10px}
+.teams .without_team_block span.button .text {min-width:230px}
+#changepwd {background-color:rgba(255,255,255,0.9);padding:30px}
+.feedback {background-color:rgba(255,255,255,0.9);padding:0;margin:0;padding-bottom:75px}
+.feedback .post_box {padding-left:30px;padding-right:30px;padding-top:30px}
+.feedback .post_box .subtitle {font-size:24px!important;font-family:"Roboto"!important;line-height:1.2!important;margin:0!important}
+.feedback .post_box hr {border:none;border-top:1px dotted #000;color:#000;background-color:transparent;height:1px;margin:12px 0 0}
+.feedback .post_box .buttons_box {text-align:center;padding-top:30px;padding-bottom:7px;display:flex;flex-direction:row;justify-content:space-between;align-items:center;align-content:center}
+.feedback .post_box .buttons_box span {flex-grow:0;flex-shrink:0;flex-basis:auto;width:346px;height:41px}
+.feedback .tickets_table.table td {background-color:transparent}
+.feedback .tickets_table.table tr.headers td {border-bottom:none;background-color:#d9dde2;height:60px;vertical-align:middle}
+.feedback .notickets {font-size:24px!important;font-family:"Roboto"!important;color:#a6aaaf!important;line-height:1.2!important}
+
+
+#store_gold_tabs .account_header.subheader .actions {position:absolute;right:0;text-align:right;max-width:480px;margin-top:35px;margin-right:30px;font-size:18px;font-family:"Roboto";color:#1a1a1a;line-height:1.2}
+#store_gold_tabs .account_header.subheader .actions a {text-decoration:underline;padding:8px}
+#store_gold_tabs .account_header.subheader .actions a.active {text-decoration:none;background:#c7b299;color:#fff}
+.store_gold > .rows > .row {justify-content:left}
+.store_gold .store_item {max-width:442px}
+.store_gold .store_item * {cursor:pointer}
+.store_gold .store_item > .row.header {background-color:#9c3e3f;font-size:21px;font-family:"Roboto";color:#fff;line-height:1.2;text-align:center;vertical-align:center;height:70px}
+.store_gold .store_item:hover > .row.header {background-color:#ba5455}
+.store_gold .store_item.disable > .row.header {background-color:#aaa;color:#ddd}
+.store_gold .store_item.disable * {cursor:default}
+.store_gold .store_item.disable {position:relative}
+.store_gold .store_item.disable:after {content:'';display:block;position:absolute;top:0;bottom:10px;left:0;right:0;background-color:#aaa;opacity:.5}
+.store_gold .store_item > .rows {background-color:#424245;font-size:30px;font-family:"Roboto Condensed";color:#f5f5bf;line-height:1.2;text-align:left;height:135px;margin-bottom:10px}
+.store_gold .store_item > .rows > .row > .col {background-color:#424245;text-align:left;height:62px;background-repeat:no-repeat;background-position:left top;vertical-align:bottom;position:relative;padding:43px 30px 30px}
+.store_gold .store_item > .rows > .row > .col span.discount {position:absolute;top:0;right:0;height:73px;width:51px;padding-top:13px;padding-left:35px;text-align:center;font-size:24px;z-index:50;color:#eaf7bf}
+.store_gold .store_item > .rows > .row > .col span.discount_marker {content:'';height:0;width:0;position:absolute;top:0;right:0;z-index:20;border:43px solid transparent;border-top:43px solid #da0003;border-right:43px solid #da0003}
+.store_gold .store_item > .rows > .row > .col span.old_price {height:25px;color:#ffd766;font-size:20px;text-decoration:line-through;display:block;padding-top:20px}
+.store_gold .store_item > .rows > .row > .col span.old_price * {color:#ffd766;font-size:20px;text-decoration:line-through}
+.store_gold .store_item > .rows > .row > .col.rf4_gold_any {background-image:none}
+.store_gold .store_item > .rows > .row > .col.rf4_gold_5 {background-image:none}
+.store_gold .store_item > .rows > .row > .col.rf4_gold_10 {background-image:none}
+.store_gold .store_item > .rows > .row > .col.rf4_gold_20 {background-image:none}
+.store_gold .store_item > .rows > .row > .col.rf4_gold_50 {background-image:none}
+.store_gold .store_item > .rows > .row > .col.rf4_gold_100 {background-image:none}
+.store_gold .store_item > .rows > .row > .col.rf4_gold_200 {background-image:none}
+.store_gold .store_item > .rows > .row > .col.rf4_gold_500 {background-image:none}
+.store_gold .store_item:hover .rows .row {filter:brightness(110%);-webkit-filter:brightness(110%)}
+
+
+.store_premium > .rows > .row {justify-content:left}
+.store_premium .store_item {max-width:442px}
+.store_premium .store_item * {cursor:pointer}
+.store_premium .store_item > .row.header {cursor:inherit;color:#fff;height:70px;text-align:center;vertical-align:center;font-size:21px;font-family:"Roboto";line-height:1.2}
+.store_premium .store_item.disable * {cursor:default!important}
+.store_premium .store_item.disable {position:relative}
+.store_premium .store_item.disable:after {content:'';display:block;position:absolute;top:0;bottom:10px;left:0;right:0;background-color:#aaa;opacity:.5}
+.store_premium .store_item > .rows {cursor:inherit;height:201px;font-size:30px;font-family:"Roboto Condensed";line-height:1.2;text-align:left;vertical-align:bottom;position:relative;margin-bottom:10px}
+.store_premium .store_item > .rows > .row > .col {text-align:right;height:40px;background-repeat:no-repeat;background-position:center center;vertical-align:bottom;align-items:flex-end;padding:145px 30px 15px}
+.store_premium .store_item > .rows > .row > .col * {float:right}
+.store_premium .store_item > .rows > .row > .col span.discount {position:absolute;top:0;right:0;height:73px;width:51px;padding-top:13px;padding-left:35px;text-align:center;font-size:24px;z-index:50;color:#eaf7bf}
+.store_premium .store_item > .rows > .row > .col span.discount_marker {content:'';height:0;width:0;position:absolute;top:0;right:0;z-index:20;border:43px solid transparent;border-top:43px solid #da0003;border-right:43px solid #da0003}
+.store_premium .store_item > .rows > .row > .col span.old_price {height:32px;color:#ffd766;font-size:22px;text-decoration:line-through;position:absolute;right:45px;top:115px}
+.store_premium .store_item > .rows > .row > .col span.old_price * {color:#ffd766;font-size:22px;text-decoration:line-through}
+.store_premium .store_item > .rows > .row > .col.rf4_premium_3d {background:#573615 none no-repeat center center;background-size:100% 100%}
+.store_premium .store_item > .rows > .row > .col.rf4_premium_7d {background:#38283e none no-repeat center center;background-size:100% 100%}
+.store_premium .store_item > .rows > .row > .col.rf4_premium_30d {background:#7d7c39 none no-repeat center center;background-size:100% 100%}
+.store_premium .store_item > .rows > .row > .col.rf4_premium_90d {background:#405c6d none no-repeat center center;background-size:100% 100%}
+.store_premium .store_item > .rows > .row > .col.rf4_premium_180d {background:#38283e none no-repeat center center;background-size:100% 100%}
+.store_premium .store_item > .rows > .row > .col.rf4_premium_360d {background:#9c3e3f none no-repeat center center;background-size:100% 100%}
+.store_premium .store_item > .rows > .row > .col.rf4_premium_50y {background:#405c6d none no-repeat center center;background-size:100% 100%}
+.store_premium .store_item > .rows > .row > .col.rf4_premium_unlim {background:#405c6d none no-repeat center center;background-size:100% 100%}
+.store_premium .store_item .header .rf4_premium_3d {background:#925678}
+.store_premium .store_item .header .rf4_premium_7d {background:#bc8512}
+.store_premium .store_item .header .rf4_premium_30d {background:#7d7c39}
+.store_premium .store_item .header .rf4_premium_90d {background:#405c6d}
+.store_premium .store_item .header .rf4_premium_180d {background:#38283e}
+.store_premium .store_item .header .rf4_premium_360d {background:#9c3e3f}
+.store_premium .store_item .header .rf4_premium_50y {background:#5b86af}
+.store_premium .store_item .header .rf4_premium_unlim {background:#5b86af}
+.store_premium .store_item:hover .rows .row {filter:brightness(110%)}
+.store_premium .store_item:hover .header .rf4_premium_7d {background:#cd9623}
+.store_premium .store_item:hover .header .rf4_premium_30d {background:#8e8d4a}
+.store_premium .store_item:hover .header .rf4_premium_90d {background:#516d7e}
+.store_premium .store_item:hover .header .rf4_premium_180d {background:#49394f}
+.store_premium .store_item:hover .header .rf4_premium_360d {background:#ad4f4f}
+.store_premium .store_item:hover .header .rf4_premium_50y {background:#6c97bf}
+.store_premium .store_item:hover .header .rf4_premium_unlim {background:#6c97bf}
+#premium_tabs .rows span.button {position:absolute;right:15px;bottom:8px}
+#premium_tabs .premium_header {height:150px;padding:30px;background:#544a58}
+#premium_tabs .premium_header h2 {font-size:30px;font-family:"Roboto";color:#fdffff;font-weight:700;text-transform:uppercase;line-height:1}
+#premium_tabs .premium_header .price {font-size:30px;font-family:"Roboto";color:#ff5909;font-weight:700;line-height:1.5}
+#premium_tabs .premium_header span.button {margin-top:15px}
+#premium_tabs .premium_help {background-color:rgba(255,255,255,0.9);padding:30px;min-height:553px}
+#premium_tabs .premium_help ul {list-style-image:none;padding-left:17px}
+#store_premium_tabs .account_header.subheader .actions {position:absolute;right:0;text-align:right;max-width:480px;margin-top:35px;margin-right:30px;font-size:18px;font-family:"Roboto";color:#1a1a1a;line-height:1.2}
+#store_premium_tabs .account_header.subheader .actions a {text-decoration:underline;padding:8px}
+#store_premium_tabs .account_header.subheader .actions a.active {text-decoration:none;background:#c7b299;color:#fff}
+#store_premium_tabs .payments_header {background-image:none;background-color:#544a58}
+.premium_checkout_header {display:block;position:absolute;height:130px;width:183px;bottom:5px;left:95px;background:transparent none no-repeat center bottom}
+
+
+.store_payments .clickable {height:135px;cursor:pointer}
+.store_payments .clickable:hover {background-color:#fff}
+.store_payments .clickable.hovered {background-color:#fff!important}
+.store_payments span > a {display:block;width:100%;height:100%}
+.store_payments .yandex {background:none no-repeat center center}
+.store_payments .yookassa_v2 {background:none no-repeat center center}
+.store_payments .yookassa_v2_card {background:none no-repeat center center}
+.store_payments .yookassa_v2_sbp {background:none no-repeat center center}
+.store_payments .yookassa_v2_sberbank {background:none no-repeat center center}
+.store_payments .yookassa_v2_alfabank {background:none no-repeat center center}
+.store_payments .assist {background:none no-repeat center center}
+.store_payments .assist_card {background:none no-repeat center center}
+.store_payments .assist_apple {background:none no-repeat center center}
+.store_payments .assist_google {background:none no-repeat center center}
+.store_payments .assist_samsung {background:none no-repeat center center}
+.store_payments .paypal {background:none no-repeat center center}
+.store_payments .sber {background:none no-repeat center center}
+.store_payments .kuppy {background:none no-repeat center center}
+.store_payments .xsolla {background:none no-repeat center center}
+.store_payments .xsolla_cc {background:none no-repeat center center}
+.store_payments .xsolla_psc {background:none no-repeat center center}
+.store_payments .xsolla_apple {background:none no-repeat center center}
+.store_payments .xsolla_google {background:none no-repeat center center}
+.store_payments .xsolla_neteller {background:none no-repeat center center}
+.store_payments .xsolla_p24 {background:none no-repeat center center;background-size:50% 50%}
+.store_payments .xsolla_sofort {background:none no-repeat center center}
+.store_payments .xsolla_wechat {background:none no-repeat center center}
+.store_payments .xsolla_alipay {background:none no-repeat center center}
+.store_payments .xsolla_unionpay {background:none no-repeat center center}
+.store_payments .xsolla_bancontact {background:none no-repeat center center}
+.store_payments .xsolla_giropay {background:none no-repeat center center}
+.store_payments .xsolla_amazonpay {background:none no-repeat center center}
+.store_payments .xsolla_blik {background:none no-repeat center center}
+.store_payments .xsolla_skrill {background:none no-repeat center center}
+.store_payments .xsolla_neosurf {background:none no-repeat center center}
+.store_payments .xsolla_kakaopay {background:none no-repeat center center}
+.store_payments .xsolla_naverpay {background:none no-repeat center center}
+.store_payments .xsolla_toss {background:none no-repeat center center}
+.store_payments .xsolla_bitcash {background:none no-repeat center center}
+.store_payments .xsolla_konbini {background:none no-repeat center center}
+.store_payments .stripe {background:none no-repeat center center;background-size:40%}
+.store_payments .stripe_bank {background:none no-repeat center 5%,none no-repeat 35% 79%,none no-repeat 65% 80%;background-size:25%}
+.store_payments .stripe_alipay {background:none no-repeat center center}
+.store_payments .stripe_wechat {background:none no-repeat center center}
+.store_payments .kvit {background:none no-repeat center center}
+.store_payments .buy_with_pa {background:none no-repeat 40% center}
+.store_payments .buy_with_pa span {font-size:18px;font-family:"Roboto Condensed";color:#2d3948;text-transform:uppercase;line-height:1.2;text-align:right;padding-top:50px;padding-left:47%;width:120px;display:block;cursor:pointer}
+.store_payments .buy_for_gold {background:none no-repeat 40% center}
+.store_payments .buy_for_gold span {font-size:18px;font-family:"Roboto Condensed";color:#2d3948;text-transform:uppercase;line-height:1.2;text-align:right;padding-top:50px;padding-left:47%;width:120px;display:block;cursor:pointer}
+input.gift_query.disabled {background-color:#818181;font-size:18px;font-family:"Roboto";color:#fff;line-height:1.2}
+
+
+.payments {background:rgba(255,255,255,0.9);height:100%}
+.payments_header {background-color:#424245;height:135px;text-align:right!important;font-size:30px!important;font-family:'Roboto'!important;color:#f5f5bf;position:relative}
+.payments_warrning {padding-left:15px;padding-right:15px;border-left:#ff5909 solid 5px;margin:30px;margin-bottom:0;font-size:14px!important;font-family:"Roboto"!important;color:#1c1c1e!important;line-height:1.2!important;text-align:left!important}
+.payments_warrning ul {list-style-image:none;padding-top:10px;padding-bottom:10px;padding-left:17px}
+.payments_warrning ul > li {padding-bottom:5px;line-height:1.5}
+.payments_header > div {padding:30px!important}
+.payments_header > div.purchase {font-variant:small-caps;text-transform:uppercase;background-origin:padding-box;background-repeat:no-repeat;background-position:left center;background-color:#424245;background-size:contain;height:75px;position:relative}
+.payments_header > div.purchase span.discount {position:absolute;top:0;left:0;height:105px;width:85px;font-family:'Roboto Condensed';padding-top:15px;text-align:center;font-size:36px;z-index:50;color:#eaf7bf}
+.payments_header > div.purchase span.discount_marker {content:'';height:0;width:0;position:absolute;top:0;left:0;z-index:20;border:68px solid transparent;border-top:68px solid #da0003;border-left:68px solid #da0003}
+.payments_header > div.purchase > p span.old_price {height:32px;font-size:20px;font-family:"Roboto Condensed";color:#ffd766;padding-right:20px;text-decoration:line-through}
+.payments_header > div.purchase > p span.old_price * {font-size:20px;font-family:"Roboto Condensed";color:#ffd766;text-decoration:line-through}
+.payments_header > div.purchase span.discount_ends {height:32px;font-size:16px;font-family:"Roboto";color:#ff5909;font-variant:normal;text-transform:initial;position:absolute;top:65px;right:30px}
+.payments_header > div p {font-size:30px!important;font-family:'Roboto Condensed'!important;color:#ff5909;line-height:1!important;padding:30px 0 0!important}
+.payments_method {font-size:20px;color:#1c1c1e;font-family:"Roboto";height:12px;padding:30px;text-transform:uppercase;line-height:1.2;text-align:left}
+.payments_help {padding:39px 30px;height:110px;font-size:14px;font-family:"Roboto";color:#1c1c1e;line-height:1.2;text-align:left}
+.gift_box {padding:20px 10px 40px 250px;height:56px;display:flex;background-color:#fdc689}
+.gift_box .switcher_box {display:inline-block;vertical-align:middle;font-size:18px;font-weight:700;font-family:"Roboto";color:#1c1c1e;text-transform:uppercase;line-height:1.2;text-align:left;height:41px;padding-top:25px;padding-right:35px}
+.rf4_gold_any .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_addtopa .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_gold_5 .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_gold_10 .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_gold_20 .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_gold_50 .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_gold_100 .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_gold_200 .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_gold_500 .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_gold_1000 .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_premium_3d .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_premium_7d .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_premium_30d .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_premium_90d .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_premium_180d .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_premium_360d .gift_image {background-image:none;background-repeat:no-repeat}
+.rf4_premium_unlim .gift_image {background-image:none;background-repeat:no-repeat}
+.gift_box .switcher_box label {display:inline-block;vertical-align:middle;height:19px;margin:4px}
+.gift_box .switcher_box .slide-switch {display:inline-block;vertical-align:middle}
+.gift_box .gift_from {position:relative;display:inline-block;flex:1;vertical-align:middle;text-align:right}
+.gift_box .gift_from input {display:inline-block;vertical-align:middle;margin-right:20px;width:250px}
+.gift_box .gift_user {position:relative;display:inline-block;font-size:18px;font-family:"Roboto";color:#1c1c1e;text-transform:uppercase;padding-bottom:20px;overflow:hidden}
+.gift_box .gift_user .gift_user_avatar {position:relative;display:inline-block;background-size:cover;width:77px;height:77px;box-sizing:border-box;float:left;overflow:visible}
+.gift_box .gift_user .gift_user_avatar_image {position:relative;background-size:cover;display:block;width:77px;height:77px;border-radius:77px;box-sizing:border-box;overflow:hidden}
+.gift_box .gift_user .gift_user_avatar .gift_user_level {position:absolute;background:#878787;top:100%;left:50%;font-size:18px;transform:translate(-50%,-50%);border:1px solid #FFF;padding:3px 8px;border-radius:10px;color:#fff;overflow:hidden}
+.gift_box .gift_user .gift_user_data {position:relative;display:inline-block;box-sizing:border-box;float:left;padding-left:10px;text-align:left;overflow:hidden}
+.gift_box .gift_user .gift_user_data .gift_user_id,.gift_box .gift_user .gift_user_data .gift_user_name {position:relative;margin-bottom:5px;text-align:left;box-sizing:border-box;overflow:hidden}
+.gift_box .gift_user .gift_user_data .gift_user_id span {font-size:14px}
+.gift_box .gift_user .gift_user_data .gift_user_name {margin-bottom:7px;color:#ff5909}
+.gift_box .gift_from span {position:relative;display:inline-block;vertical-align:middle;overflow:hidden}
+.payments_header > div.purchase.rf4_gold_any span.discount {position:absolute;top:0;right:0;left:inherit;height:105px;width:85px;font-family:'Roboto Condensed';padding-top:20px;text-align:center;font-size:36px;z-index:50;color:#eaf7bf}
+.payments_header > div.purchase.rf4_gold_any span.discount_marker {content:'';height:0;width:0;position:absolute;top:0;right:0;left:inherit;z-index:20;border:68px solid transparent;border-top:68px solid #da0003;border-right:68px solid #da0003}
+.payments_header > div.purchase.rf4_gold_any > p span.old_price {padding-left:25px;height:32px;font-size:20px;font-family:"Roboto Condensed";color:#ffd766;text-decoration:line-through}
+.payments_header > div.purchase.rf4_gold_any > p span.old_price * {font-size:20px;font-family:"Roboto Condensed";color:#ffd766;text-decoration:line-through}
+.payments_header > div.purchase.rf4_gold_any span.discount_ends {height:32px;font-size:16px;font-family:"Roboto";color:#ff5909;font-variant:normal;text-transform:initial;position:absolute;top:115px;left:450px}
+.payments_header .rf4_gold_any {background-image:none;font-size:18px!important;height:105px!important;padding-bottom:0!important;text-align:left}
+.payments_header .rf4_addtopa {background-image:none;font-size:18px!important;height:105px!important;padding-bottom:0!important;text-align:left}
+.payments_header .rf4_gold_5 {background-image:none}
+.payments_header .rf4_gold_10 {background-image:none}
+.payments_header .rf4_gold_20 {background-image:none}
+.payments_header .rf4_gold_50 {background-image:none}
+.payments_header .rf4_gold_100 {background-image:none}
+.payments_header .rf4_gold_200 {background-image:none}
+.payments_header .rf4_gold_500 {background-image:none}
+.payments_header .rf4_gold_1000 {background-image:none}
+.payments_header .rf4_gold_any span.label {display:block;float:left;max-width:200px;line-height:1.5}
+.payments_header .rf4_gold_any p {display:block;padding-top:52px!important;padding-left:420px!important}
+.payments_header .rf4_gold_any .gold_input {float:right;margin-right:190px}
+.payments_header .rf4_addtopa span.label {display:block;float:left;max-width:180px;line-height:1.5}
+.payments_header .rf4_addtopa p {display:block;float:right;padding:0!important;padding-top:20px!important;margin-right:160px}
+.payments_header .rf4_addtopa .money_input {float:right;margin-right:5px}
+.operation_message {background-color:rgba(255,255,255,0.9)}
+.operation_message .message_content {padding:40px;font-size:18px;font-family:"Roboto";color:#1c1c1e;line-height:1.2;text-align:left}
+.operation_message .message_content h3 {font-size:18px;padding-bottom:10px;font-weight:700}
+.operation_message hr {border:#b9b4a6 dotted 1px;margin-top:30px;margin-bottom:30px}
+.operation_message .error_bear {width:220px;height:230px;float:left;background:transparent none no-repeat center center}
+.operation_message .success_bear {width:220px;height:230px;float:left;background:transparent none no-repeat center center}
+.operation_message span.button {margin-right:30px}
+
+
+.row {flex:1;display:flex;flex-direction:row;justify-content:center;align-items:center;align-content:center}
+.row.header {background-color:#f1f1f1}
+.col {flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;align-content:center}
+
+
+table.table {text-align:center;font-family:'Roboto';font-size:16px;color:#1a1a1a;line-height:1.375}
+table.table td {background-color:rgba(255,255,255,0.9)}
+table.table tr.spacing td {height:30px}
+table.table tr.headers td {font-family:'Roboto';font-size:16px;color:#1a1a1a;line-height:1.375;position:relative;height:20px;padding-bottom:17px;border-bottom:1px solid #bbbaaf;font-weight:700}
+table.table tr.headers .spacing {width:30px;border-bottom:1px solid transparent}
+table.table tr.headspacing td {height:8px}
+table.table tr.highlight td {height:48px;cursor:pointer;vertical-align:middle}
+table.table tr.your_highlight {background-color:rgba(255,89,9,0.15)}
+table.table tr.highlight:hover {background-color:#d5dae1}
+table.table tr.your_highlight:hover {background-color:rgba(255,89,9,0.3)}
+table.table tr.highlight:hover td {background-color:transparent!important}
+table.table td div.avatar_text,table.table td div.avatar_text_team {text-align:left;vertical-align:middle;cursor:pointer;padding-top:7px;margin-left:48px;display:block}
+table.table td.gamername div.avatar_text_solo {padding-top:0}
+table.table td div.avatar {vertical-align:middle;cursor:pointer;width:36px;height:36px;border-radius:18px;text-align:center;-webkit-border-radius:18px;-moz-border-radius:18px;background-size:cover;background-position:center center;background-image:none;background-size:contain;background-repeat:no-repeat}
+table.table td div.avatar div {width:100%;height:100%}
+table.table tr.first td.position {background:none no-repeat center center;background-color:rgba(255,255,255,0.9);color:#fff}
+table.table td div.rank_up:before {content:'';background:transparent none no-repeat center center;display:inline-block;width:30px;height:7px}
+table.table td div.rank_down:before {content:'';background:transparent none no-repeat center center;display:inline-block;height:7px;width:30px}
+table.table td div.positive {font-size:16px;font-family:"Roboto";color:#bdb504;line-height:1.375}
+table.table td div.negative {font-size:16px;font-family:"Roboto";color:#ff5909;line-height:1.375}
+
+
+td.overflow .has_overflow,td.overflow.has_overflow {overflow:hidden;text-overflow:clip}
+div.overflow {overflow:hidden;text-overflow:clip}
+p.overflow,span.overflow {display:block;overflow:hidden;text-overflow:clip}
+.overflow.nowrap {white-space:nowrap}
+#overflow_howerbox {cursor:inherit;white-space:normal;word-wrap:break-word;overflow:auto;text-overflow:inherit;max-width:400px;background:#d5dae1;box-shadow:0 0 10px rgba(0,0,0,0.5);position:absolute;display:none;padding:10px}
+.has_overflow {margin-right:5px}
+.has_overflow.vertical {margin-right:0}
+.has_overflow.custom .overflow_text {position:relative;overflow:hidden;width:inherit;min-width:inherit;max-width:inherit;height:inherit;min-height:inherit;max-height:inherit}
+.has_overflow.custom .overflow_text:before {content:"";position:absolute;left:90%;top:0;height:100%;width:10%;background-size:100% 100%;background:linear-gradient(to right,rgba(255,255,255,0),white 70%,white)}
+.has_overflow.custom.vertical .overflow_text:before {content:"";position:absolute;top:70%;left:0;width:100%;height:30%;background-size:100% 100%;background:linear-gradient(to bottom,rgba(255,255,255,0),white 70%,white)}
+
+
+.forum_tournaments_need_find_team {position:relative;top:0;left:0;width:100%;font-family:"Roboto",sans-serif;font-size:16px;font-style:italic;color:#ff000090;margin:10px 0;transition:all .3s ease;overflow:hidden}
+#tournament_teams_block {position:relative;top:0;left:0;width:100%;margin-top:20px;overflow:hidden}
+.forum_tour_profile_result {position:relative;font-family:'Roboto',sans-serif;font-size:16px;color:#1a1a1a;margin:30px 40px 0;overflow:hidden}
+.tournament_title {position:relative;top:0;left:0;width:100%;font-size:18px;font-family:"Roboto",sans-serif;color:#1a1a1a;line-height:.957;padding-bottom:10px;overflow:hidden}
+.team_tournament_team_name {position:relative;top:0;left:0;font-size:21px;font-family:"Roboto",sans-serif;color:#1a1a1a;font-weight:700;line-height:1.333;padding:30px 20px 0;overflow:hidden}
+#tournament_other_teams_container {position:relative;top:0;left:0;width:100%;overflow:hidden}
+.tournament_teams_list {position:relative;display:none;top:0;left:0;width:100%;overflow:hidden}
+#tournament_teams_list {display:block}
+#tournament_teams_show_other_teams,#tournament_teams_results_show_other_teams {position:relative;top:0;left:0;display:inline-block;text-align:left;font-family:'Roboto',sans-serif;font-size:16px;line-height:1.375;overflow:visible;color:#ff5909;border-bottom:1px dashed #ff5909;cursor:pointer;margin:0 0 20px;overflow:hidden}
+.tournament_team_row {position:relative;top:0;left:0;width:100%;border-top:1px solid #bbbaaf;overflow:hidden}
+.tournament_teams_list:first-child {border:none}
+.tournament_team_name {position:relative;top:0;left:0;display:inline-block;text-align:left;font-weight:700;font-family:'Roboto';font-size:16px;color:#1a1a1a;line-height:1;margin-top:10px;overflow:hidden}
+.tournament_team_users_list {position:relative;top:0;left:0;width:100%;padding-left:20px;margin:10px 0;overflow:hidden}
+.tournament_team_user_row {position:relative;display:flex;align-items:center;top:0;left:0;width:100%;height:48px;overflow:hidden}
+.tournament_team_user_row .avatar {vertical-align:middle;cursor:pointer;width:36px;height:36px;border-radius:18px;text-align:center;-webkit-border-radius:18px;-moz-border-radius:18px;background-size:cover;background-position:center center;background-image:none;background-size:contain;background-repeat:no-repeat}
+.tournament_team_name_block,.tournament_team_user_name_block {position:relative;display:flex;flex-direction:row;top:0;left:0;display:flex;align-items:center;height:48px;text-align:left;font-family:'Roboto';font-size:16px;color:#1a1a1a;line-height:1.375;margin-left:10px;overflow:visible}
+.tournament_team_name_block {padding-left:10px;height:36px}
+.tournament_team_user_name {position:relative;top:0;left:0;text-align:left;font-family:'Roboto';font-size:16px;color:#1a1a1a;line-height:1.375;overflow:visible}
+.tournament_team_name .flag,.avatar_text .flag,.avatar_text.flag,.tournament_team_name_block .flag,.tournament_team_user_name.flag {padding-left:0!important;padding-right:27px!important;background-position:calc(100% - 5px) center}
+.flag_empty {padding-right:5px!important}
+.tournament_team_user_name_is_my {color:#ff5909;border-bottom:1px dashed #ff5909}
+.tournament_team_name .avatar {position:relative;background-size:cover;display:block;width:36px;height:36px;border-radius:18px;overflow:hidden}
+.tournament_team_user_status {position:relative;background:none 50% 50% no-repeat;background-size:cover;width:20px;height:20px;margin-right:10px;overflow:hidden}
+.forum_tour_spoiler {position:relative;background-color:#e1e1e1;top:0;left:0;width:100%;border-radius:5px;box-sizing:border-box;margin:10px 0;padding:0;white-space:normal;transition:all .3s ease;cursor:pointer;overflow:hidden}
+.forum_tour_spoiler_title {position:relative;background-color:rgba(255,89,9,0.2);top:0;left:0;width:100%;font-family:'Roboto',sans-serif;font-size:16px;color:#1a1a1a;box-sizing:border-box;padding:10px;cursor:pointer;overflow:hidden}
+.forum_tour_spoiler_content {position:relative;background:transparent;top:0;left:0;width:100%;font-family:'Roboto',sans-serif;font-size:16px;box-sizing:border-box;padding:10px;overflow:hidden}
+.tour_updated,.tour_updated_hide {position:relative;background:#00932896;top:0;left:-30px;width:calc(100% + 60px);height:0;opacity:0;box-sizing:border-box;transition:all .5s ease;overflow:hidden}
+.tour_updated_container {position:relative;top:0;left:0;font-size:16px;font-weight:700;font-family:"Roboto",sans-serif;color:#343432;line-height:1.222;text-align:left;padding:20px 30px;box-sizing:border-box;overflow:hidden}
+.session_control {position:relative;top:0;left:-30px;width:calc(100% + 60px);height:auto;background:#ff590950;box-sizing:border-box;transition:all .5s ease;margin-top:10px;overflow:visible}
+.session_control.session_control_hide {height:0;min-height:0;opacity:0;margin:0;padding:0}
+.session_control_spacer {position:relative;top:0;left:0;padding:20px 30px;transition:all .5s ease;overflow:visible}
+.session_control_container {position:relative;top:0;left:0;display:none;flex-direction:row;flex-wrap:nowrap;align-items:stretch;opacity:1;transition:all .5s ease;overflow:hidden}
+.session_control_loader,.session_control_loader_hide {position:absolute;background:#f0c2ad;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;transition:all .3s ease;opacity:0;overflow:hidden}
+.session_control_loader {opacity:1}
+.session_control_content {position:relative;top:0;left:0;flex:auto;overflow:hidden}
+.session_control_content_title {position:relative;top:0;left:0;width:100%;font-size:18px;font-family:"Roboto",sans-serif;color:#1a1a1a;font-weight:700;line-height:1.333;box-sizing:border-box;cursor:pointer;overflow:hidden}
+.session_control_content_inner {position:relative;background:transparent;top:0;left:0;width:100%;font-size:16px;font-family:"Roboto",sans-serif;color:#343432;line-height:1.222;text-align:left;box-sizing:border-box;overflow:hidden}
+.session_control_content_inner div {position:relative;top:0;left:0;margin:0;padding:0;overflow:hidden}
+#session_control_text_timer {font-weight:700;transition:all 1s ease}
+.text_blink {animation:text_blink_animation 1s infinite;-webkit-animation:text_blink_animation 1s infinite}
+@keyframes text_blink_animation {0% {color:#343432}
+50% {color:red}
+100% {color:#343432}
+}
+@-webkit-keyframes text_blink_animation {to {visibility:hidden}
+}
+.session_control_buttons {position:relative;top:0;left:0;flex:auto}
+.session_control_buttons_absolute {position:absolute;display:none;top:100%;left:100%;transform:translate(calc(-100% - 20px),calc(-100% + 20px));transition:all 1s ease;opacity:0;flex:auto}
+#session_control_button {position:relative;top:50%;left:100%;transform:translate(-100%,0)}
+.ft_player_not_in_whitelist,.ft_squad_limit_allowed,.ft_profile_without_team,.ft_profile_team_access_level {position:relative;background:#ff590950 none 30px 50% no-repeat;display:flex;flex-direction:row;align-items:center;top:0;left:-30px;width:calc(100% + 60px);min-height:100px;padding:20px 30px 20px 90px;box-sizing:border-box;font-size:16px;font-family:"Roboto",sans-serif;font-weight:400;color:red;line-height:1.222;margin:20px 0 0;text-align:left;transition:all .3s ease;overflow:hidden}
+.ft_squad_limit_allowed,.ft_profile_team_access_level {background:#ff590950 none 30px 50% no-repeat;padding-left:120px}
+.ft_player_not_in_whitelist.ft_info_block_hide,.ft_squad_limit_allowed.ft_info_block_hide,.ft_profile_without_team.ft_info_block_hide,.ft_profile_team_access_level.ft_info_block_hide {min-height:0;height:0;opacity:0;margin:0;padding:0}
+.download_log {position:relative;display:inline-flex;flex-wrap:nowrap;flex-direction:row;align-items:center;column-gap:10px;overflow:hidden}
+.download_log * {cursor:pointer}
+.download_log_icon {position:relative;display:inline-block;background:transparent none 50% 50% no-repeat;background-size:cover;width:22px;height:22px;overflow:hidden}
+.button_team_log {position:relative;background:#ff5909;display:inline-flex;flex-wrap:nowrap;flex-direction:row;align-items:center;column-gap:10px;padding:5px 10px;border-radius:5px;font-family:"Roboto",sans-serif;font-size:16px;font-weight:400;color:#FFF;margin-left:20px;cursor:pointer;overflow:hidden}
+.button_team_log:hover {-webkit-filter:brightness(120%)!important;filter:brightness(120%)!important}
+.button_team_log .download_log_icon {width:16px;height:16px}
+.team_tournament_medals {position:relative;top:0;left:0;width:100%;height:100px;margin:20px 0 0;padding:0;overflow:hidden}
+#tabular_body .table_content .team_tournament_medals img {height:100%;margin-right:10px}
+
+
+.team_container {position:relative;width:160px;height:160px;padding:0 20px 0 0;float:left;overflow:hidden}
+.team_container a:visited {color:#ff5909}
+.team_container .avatar {float:left;width:160px}
+.team_container .avatar .av_mask {width:160px;height:160px;border-radius:80px;text-align:center;vertical-align:center;-webkit-border-radius:80px;-moz-border-radius:80px;position:relative;background-image:none;background-size:contain;background-repeat:no-repeat}
+.team_container .avatar .av_mask div {width:100%;height:100%;background-position:center center}
+.changeav.fixed {width:43px;height:36px;position:absolute;bottom:0;left:0;opacity:0}
+.removeav.fixed {width:43px;height:36px;position:absolute;bottom:0;right:0;opacity:0;-webkit-transition:opacity .2s ease-in-out;-moz-transition:opacity .2s ease-in-out;-o-transition:opacity .2s ease-in-out;transition:opacity .2s ease-in-out}
+.team_container .avatar .av_mask:hover .changeav,.team_container .avatar .av_mask:hover .removeav {opacity:1;-webkit-transition:opacity .2s ease-in-out;-moz-transition:opacity .2s ease-in-out;-o-transition:opacity .2s ease-in-out;transition:opacity .2s ease-in-out}
+.team_info_right {position:relative;overflow:hidden}
+.teams_tournament_fail_leave_from_team_warning {position:relative;top:0;left:0;width:100%;font-family:"Roboto",sans-serif;font-size:16px;font-style:italic;color:#ff000090;padding:0 40px;overflow:hidden}
+.team_info .change_info {font-size:16px;margin-left:7px;margin-right:7px;border-bottom:1px dashed #ff5909}

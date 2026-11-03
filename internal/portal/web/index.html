@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Russian Fishing 4 个人账户界面。">
+<meta name="referrer" content="no-referrer">
+<title>个人账户 - Russian Fishing 4</title>
+
+<link rel="stylesheet" href="/portal/framework.css">
+<link rel="stylesheet" href="/portal/portal.css">
+<link rel="stylesheet" href="/portal/reference-ui.css">
+
+
+
+<link rel="stylesheet" href="/portal/local.css"><script src="/portal/local.js" defer></script></head>
+<body class="portal-page account-page">
+
+        <div id="root" class="middle">
+            <div id="header">
+                                    <div id="head_banner"><a href="#local-member" aria-label="前往本地会员"></a><button id="close-banner" type="button" aria-label="关闭顶部横幅" class="banner-close">×</button></div>
+
+                                    <div id="head_bar">
+                    <div id="head_content">
+                        <div class="small_logo" title="主页"></div>
+                        <nav id="main_menu" aria-label="主导航"><a href="/portal/" aria-current="page">个人中心</a><a href="#local-member">高级会员</a></nav>
+
+                        <div id="lang_buttons">
+                            <span class="langswitcher" title="简体中文" aria-label="语言：简体中文">
+                                <span class="box">
+                                    <span class="lang_simple">CN</span>                                </span>
+                            </span>
+                        </div>
+
+                        <div id="login_buttons">
+
+    <div id="logined_area">
+        <span class="button login_logout salat logined" id="login_button">请进入个人中心</span>
+    </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+<main id="main"><h1>个人中心</h1>        <div id="tabular_body" class="account_table">
+            <div class="table_content">
+                            <div class="user_info">
+                                    <div class="avatar">
+                        <div class="av_mask" style="background-color: #c7b299; background-repeat: no-repeat; background-size: contain;">
+                            <span hidden id="changeavbutton" class="button page_number salat changeav fixed" role="button" tabindex="0" aria-label="更改头像"></span>
+
+                            <input id="avatar_file" type="file" name="avatar" style="display: none;" accept="image/png,image/jpeg,image/webp">
+                        </div>
+                    </div>
+                                    <div class="info">
+                                        <h2 id="account_name">请进入个人中心</h2>
+                    <hr>
+                    <table width="100%">
+                        <tbody><tr>
+                            <td width="170px" class="left">
+                                帐号:
+                            </td>
+                            <td class="right"><b>—</b></td>
+                        </tr>
+                        <tr>
+                            <td width="170px" class="left">
+                                级别:
+                            </td>
+                            <td class="right"><b>—</b></td>
+                        </tr>
+                        <tr>
+                            <td width="170px" class="left">
+                                电邮地址:
+                            </td>
+                            <td class="right"><b>未设置</b> <button id="bind-email" class="email-bind-link" type="button" hidden>绑定邮箱</button><span id="email-verified" class="email-verified" hidden>已验证</span></td>
+                        </tr>
+                        <tr>
+                            <td width="170px" class="left">
+                                区域:
+                            </td>
+                            <td class="right">
+                                <b class="flag cn region">中国</b>                            </td>
+                        </tr>
+                        <tr>
+                            <td width="170px" class="left">
+                                高级会员:
+                            </td>
+                            <td class="right">
+                                <b>没有</b>&nbsp;                            </td>
+                        </tr>
+                        <tr>
+                            <td width="170px" class="left">
+                                金币:
+                            </td>
+                            <td class="right">
+                                <b id="account_gold_score">0.00</b>&nbsp;
+                            </td>
+                        </tr>
+                                                <tr>
+                            <td width="170px" class="left">
+                                银币:
+                            </td>
+                            <td class="right">
+                                <b id="account_silver_score">—</b>
+                            </td>
+                        </tr>
+                    </tbody></table>
+                </div>
+                <section class="local-panel" id="local-member"><h2>高级会员</h2><p>使用当前角色的游戏金币购买；有效期间鱼获经验额外增加100%。</p><button class="button small salat" id="local-member-login" type="button">登录后购买会员</button><div id="local-plans" class="local-plans"></div><button class="button small salat" id="local-refresh">刷新账户</button><p id="local-member-message" role="status"></p></section>
+
+<p class="local-status" id="local-message" role="status"></p></div></div></div></main>
+        </div>
+
+
+
+<dialog id="local-auth" aria-labelledby="local-auth-title"><form id="local-login"><h2 id="local-auth-title">进入个人中心</h2><p>沿用游戏的设备识别方式，进入当前设备对应的角色。</p><p id="local-auth-message" role="status"></p><div class="local-actions"><button type="button" id="local-auth-close">关闭</button><button type="submit">登录</button></div></form></dialog></body>
+</html>

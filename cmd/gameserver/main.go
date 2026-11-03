@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -23,6 +24,7 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "配置文件路径")
+	parentStdin := flag.Bool("parent-stdin", false, "父进程关闭输入时退出")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
@@ -37,6 +39,12 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if *parentStdin {
+		go func() {
+			_, _ = io.Copy(io.Discard, os.Stdin)
+			stop()
+		}()
+	}
 
 	obs := metrics.NewServer(cfg.Game.ObsAddr, "gameserver")
 	obsErrCh := obs.Start()
@@ -80,6 +88,19 @@ func main() {
 		log.Info("渔线轮物理参数已同步", "reels", n)
 	}
 
+	localAdmin, adminErrCh, err := startLocalAdmin(ctx, db, log)
+	if err != nil {
+		log.Error("本地管理后台启动失败", "err", err)
+		os.Exit(1)
+	}
+	if localAdmin != nil {
+		defer func() {
+			stop, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = localAdmin.Shutdown(stop)
+		}()
+	}
+
 	ln, err := net.Listen("tcp", cfg.Game.Tunnel.Addr)
 	if err != nil {
 		log.Error("隧道监听失败", "addr", cfg.Game.Tunnel.Addr, "err", err)
@@ -100,6 +121,9 @@ func main() {
 				close(srvStop)
 				return
 			case <-t.C:
+				if localAdmin != nil {
+					localAdmin.SetSessionCount(srv.SessionCount())
+				}
 				_ = db.KVSet(ctx, "stats:sessions", fmt.Sprintf("%d", srv.SessionCount()))
 			}
 		}
@@ -112,6 +136,8 @@ func main() {
 	case <-ctx.Done():
 	case err := <-obsErrCh:
 		log.Error("观测端口异常退出", "err", err)
+	case err := <-adminErrCh:
+		log.Error("本地管理后台异常退出", "err", err)
 	case err := <-srvErrCh:
 		log.Error("隧道服务异常退出", "err", err)
 	}

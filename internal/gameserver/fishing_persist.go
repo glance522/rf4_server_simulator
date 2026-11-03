@@ -3,7 +3,6 @@ package gameserver
 import (
 	"encoding/json"
 	"sync"
-	"time"
 
 	"rf4server/internal/store"
 )
@@ -18,11 +17,12 @@ type fishStateMutex struct {
 
 type fishPersistMeta struct {
 	sync.Mutex
-	server         *Server
-	uid            int64
-	lastSnapshot   string
-	sessionID      uint64 // 仅进程内：检测重连/会话接管
-	recoverPending bool   // 仅进程内：重连后重推同一尾 pending，不重新 roll
+	server           *Server
+	uid              int64
+	lastSnapshot     string
+	sessionID        uint64 // 仅进程内：检测重连/会话接管
+	recoverPending   bool   // 仅进程内：重连后重推同一尾 pending，不重新 roll
+	recoverCompleted bool   // 仅登录恢复时自动入护，不改变在线收鱼选择
 }
 
 func (m *fishStateMutex) Unlock() {
@@ -203,7 +203,7 @@ func (s *Server) resumeFishingState(st *FishState) {
 			st.persist.recoverPending = true
 		}
 	}
-	if !st.CastActive || st.Resolved {
+	if !st.CastActive || st.Resolved || st.pushing != nil {
 		st.mu.Unlock()
 		return
 	}
@@ -212,8 +212,7 @@ func (s *Server) resumeFishingState(st *FishState) {
 			st.mu.Unlock()
 			return
 		}
-		uid := st.persist.uid
-		st.pendingTimer = time.AfterFunc(0, func() { s.repushPending14_14(uid) })
+		s.armPendingTimerLocked(st.persist.uid, st, 0)
 		st.mu.Unlock()
 		return
 	}
@@ -228,13 +227,6 @@ func (s *Server) resumeFishingState(st *FishState) {
 		// onBiteTimer 的落水保护仍会阻止过早判鱼。
 		due = st.CastTs
 	}
-	wait := time.Until(due)
-	if wait < 0 {
-		wait = 0
-	}
-	uid := st.persist.uid
-	st.BiteGen++
-	gen := st.BiteGen
-	st.biteTimer = time.AfterFunc(wait, func() { s.onBiteTimer(uid, gen) })
+	s.armBiteTimerLocked(st.persist.uid, st, due)
 	st.mu.Unlock()
 }

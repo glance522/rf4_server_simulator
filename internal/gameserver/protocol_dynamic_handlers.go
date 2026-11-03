@@ -98,7 +98,7 @@ func hDynamicRigSnapshot(ctx *Ctx) ([]byte, bool) {
 }
 
 // hDynamicRodBreak 17/9 rod/break：按断件 GUID 持久化断线/断竿并回 11028。
-// 请求参数顺序为 [竿 GUID, 断件 GUID, 物理模型]；没有断件时回退到当前竿。
+// 请求参数顺序为 [竿 GUID, 断件 GUID, 物理模型]。无效断件返回失败，不合成断竿成功。
 func hDynamicRodBreak(ctx *Ctx) ([]byte, bool) {
 	srv := ctx.Sess.Srv
 	var guids []string
@@ -136,7 +136,7 @@ func hDynamicRodBreak(ctx *Ctx) ([]byte, bool) {
 			st.CastActive = false
 			st.Hooked = false
 			st.Resolved = true
-			if !outcome.LineBroken && !outcome.ReelDamaged {
+			if outcome.BrokenCategory == gearCatRod {
 				st.GearGuid = ""
 			}
 			st.mu.Unlock()
@@ -145,7 +145,9 @@ func hDynamicRodBreak(ctx *Ctx) ([]byte, bool) {
 				srv.bumpFishingCounter(ctx.Sess.Userid, "escapes")
 			} else if outcome.LineBroken {
 				srv.bumpFishingCounter(ctx.Sess.Userid, "line_breaks")
-			} else {
+			} else if outcome.BrokenCategory == catHook {
+				srv.bumpFishingCounter(ctx.Sess.Userid, "hook_breaks")
+			} else if outcome.BrokenCategory == gearCatRod {
 				srv.bumpFishingCounter(ctx.Sess.Userid, "rod_breaks")
 			}
 			obj, berr := buildGearBreakResult(outcome)
@@ -161,29 +163,10 @@ func hDynamicRodBreak(ctx *Ctx) ([]byte, bool) {
 				"line_loss_m", outcome.LineLossM, "removed", len(outcome.RemovedGUIDs))
 			return body, true
 		}
-		ctx.Log.Warn("17/9 断件写库失败，回退兼容响应", "rod", shortGUID(rodGUID), "err", err)
+		ctx.Log.Warn("17/9 断件处理被拒", "rod", shortGUID(rodGUID), "err", err)
 	}
-
-	// 数据异常时保持旧协议兼容，避免客户端等待超时。
-	fallbackGUID := brokenGUID
-	if fallbackGUID == "" {
-		fallbackGUID = rodGUID
-	}
-	obj, err := wiregen.MakeObj("ikmdmfoojfg", map[int]*proto.Value{
-		0: proto.U32(0),
-		1: proto.Guid(fallbackGUID),
-		2: proto.Args(proto.S("61")),
-		3: proto.Null(),
-		4: proto.Null(),
-	})
-	if err != nil {
-		return nil, false
-	}
-	body, err := proto.EncodeValue(obj, ctx.Sess.Table())
-	if err != nil {
-		return nil, false
-	}
-	return body, true
+	ctx.ReplyFailure("System.InvalidOperationException", "断件状态未确认，未扣除耐久，请重新取竿后重试")
+	return nil, true
 }
 
 // hDynamicRewardEntry 处理 3/40，返回 2015 奖励条目并回显请求中的 guid。

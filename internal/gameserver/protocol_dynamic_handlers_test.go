@@ -74,30 +74,13 @@ func TestDynamicProtocolHandlersShapeAndEcho(t *testing.T) {
 		}
 	})
 
-	t.Run("17/9 echoes broken component guid", func(t *testing.T) {
-		rodGUID := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-		brokenGUID := "fedcba9876543210fedcba9876543210"
-		tree := rigRequestTree(t, proto.Guid(rodGUID), proto.Guid(brokenGUID), proto.U32(1), proto.Null())
-		body, ok := hDynamicRodBreak(dynamicTestCtx(srv, tree))
-		if !ok {
-			t.Fatal("17/9 未处理")
-		}
-		dec, _, err := proto.DecodeValue(body, 0, srv.Table())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if dec.Class != "ikmdmfoojfg" || dec.TypeID != 11028 {
-			t.Fatalf("17/9 响应类型=%s/%d", dec.Class, dec.TypeID)
-		}
-		if u64Of(dec.Fields[0].Num) != 0 {
-			t.Fatal("无库物品时兼容响应 f0 应为 false")
-		}
-		f1 := dec.Field(1)
-		if got := f1.GuidHex(); got != brokenGUID {
-			t.Fatalf("17/9 f1=%s, 期望回显 %s", got, brokenGUID)
-		}
-		if reason := srv.dispatch.checkRegisteredResponse(17, 9, body, srv.Table()); reason != "" {
-			t.Fatalf("17/9 合同守卫误拒: %s", reason)
+	t.Run("17/9 rejects unknown items", func(t *testing.T) {
+		tree := rigRequestTree(t, proto.Guid("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), proto.Guid("fedcba9876543210fedcba9876543210"), proto.U32(1), proto.Null())
+		ctx := dynamicTestCtx(srv, tree)
+		ctx.Main, ctx.Sub = 17, 9
+		result := srv.dispatch.executeRequest(ctx, true)
+		if !result.nativeFailure {
+			t.Fatal("17/9 must reject unknown items instead of echoing a successful break")
 		}
 	})
 

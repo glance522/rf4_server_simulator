@@ -248,6 +248,10 @@ func applyShopOverrides(base []*ShopPrice, overrides map[string]shopOverrideValu
 				v.Stock = override.Stock.Int64
 			}
 		}
+		// 本地商店持续供货，零库存自动补回基础批量。
+		if v.Stock <= 0 {
+			v.Stock = 1000
+		}
 		out = append(out, &v)
 	}
 	return out
@@ -264,6 +268,10 @@ func (d *DB) effectiveShopShelf(ctx context.Context, storeID string) (*shopShelf
 		return nil, err
 	}
 	base, source, def, known := resolveShopBase(storeID, catalog, recorded)
+	base, _, err = d.augmentShopShelf(ctx, def, base)
+	if err != nil {
+		return nil, err
+	}
 	overrides := map[string]shopOverrideValue{}
 	if len(base) > 0 {
 		overrides, err = d.loadShopOverrides(ctx, storeID)

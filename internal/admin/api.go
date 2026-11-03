@@ -237,6 +237,17 @@ func (s *Server) handleTunableSet(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 400, "吃饵规则开关只能为 0 或 1")
 		return
 	}
+	if req.Key == "debug_mode" || req.Key == "local_debug_state_v1" {
+		httpError(w, 409, "请使用调试预设开关")
+		return
+	}
+	if values, err := s.db.TunableList(r.Context()); err == nil && values["debug_mode"] == "1" {
+		switch req.Key {
+		case "bite_delay_fixed", "bite_delay_scale", "bite_delay_max", "bite_delay_lure_max", "fish_weight_scale":
+			httpError(w, 409, "当前参数由调试预设控制，请先关闭预设")
+			return
+		}
+	}
 	if err := s.db.TunableSet(r.Context(), req.Key, req.Value, adminOf(r)); err != nil {
 		httpError(w, 500, err.Error())
 		return
@@ -324,8 +335,9 @@ func (s *Server) handlePlayerDetail(w http.ResponseWriter, r *http.Request) {
 		"uid": p.UID, "name": p.Name, "level": p.Level, "xp": p.XP,
 		"silver": p.Silver, "gold": p.Gold, "bank": p.Bank,
 		"membership": p.Membership, "membership_exp": p.MembershipExp,
-		"membership_active": store.MembershipAt(p.Membership, p.MembershipExp, time.Now().Unix()).Active,
-		"stars":             p.Stars, "email": p.Email,
+		"membership_expires_at": p.MembershipExp,
+		"membership_active":     store.MembershipAt(p.Membership, p.MembershipExp, time.Now().Unix()).Active,
+		"stars":                 p.Stars, "email": p.Email,
 		"role": p.Role, "banned": p.Banned,
 		"item_count": len(items), "keepnet_count": len(keepnet), "mail_count": len(mails),
 		"items": items, "keepnet": keepnet, "mails": mailRows, "skills": skills,

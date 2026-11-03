@@ -26,12 +26,17 @@ mkdir -p "${STAGE}/bin" "${STAGE}/certs"
 
 echo "Building ${VERSION} from ${COMMIT_SHA}"
 LDFLAGS="-s -w -X 'rf4server/internal/buildinfo.Version=${VERSION}'"
-for command in gateway gameserver admin seed; do
+for command in gateway gameserver admin seed import-character local-membership; do
   GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "${LDFLAGS}" \
     -o "${STAGE}/bin/${command}.exe" "./cmd/${command}"
 done
 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "${LDFLAGS} -H=windowsgui" \
   -o "${STAGE}/bin/launcher.exe" ./cmd/launcher
+GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "${LDFLAGS} -H=windowsgui" \
+  -o "${STAGE}/启动游戏.exe" ./cmd/local-launcher
+find local-service -type f ! -path '*/data/*' ! -path '*/__pycache__/*' \
+  \( -name '*.py' -o -name '*.html' -o -name '*.css' -o -name '*.js' -o -name '*.cmd' -o -name '*.txt' \) \
+  -exec cp --parents '{}' "${STAGE}/" \;
 
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -sha256 -nodes \
   -keyout "${STAGE}/certs/server.key" -out "${STAGE}/certs/server.crt" \

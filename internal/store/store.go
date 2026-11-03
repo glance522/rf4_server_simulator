@@ -23,10 +23,11 @@ var migrationsFS embed.FS
 // DB 存储句柄。StaticPath 非空时，每个物理连接都只读 ATTACH 该配置库，
 // 并由 staticConnector 创建同名 TEMP 视图与写保护 authorizer。
 type DB struct {
-	SQL        *sql.DB
-	Path       string
-	StaticPath string
-	static     *staticState
+	SQL            *sql.DB
+	Path           string
+	StaticPath     string
+	static         *staticState
+	shopSupplement shopSupplement
 }
 
 // Open 打开（必要时创建）主库并设置 WAL/忙等待。该入口不挂载 static，
@@ -45,6 +46,15 @@ func (d *DB) Migrate() error {
 	// 修改现有表，因此先补齐这些列，避免仓储查询或写入失败。
 	if err := d.ensureLegacyPlayerColumns(); err != nil {
 		return fmt.Errorf("补全玩家表列: %w", err)
+	}
+	var legacyCafe int
+	if err := d.SQL.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version=23 AND name='migrations/00023_cafe_pricing_version.sql'`).Scan(&legacyCafe); err != nil {
+		return err
+	}
+	if legacyCafe > 0 {
+		if _, err := d.SQL.Exec(`UPDATE schema_migrations SET version=25,name='migrations/00025_cafe_pricing_version.sql' WHERE version=23 AND name='migrations/00023_cafe_pricing_version.sql'`); err != nil {
+			return fmt.Errorf("兼容咖啡厅旧迁移编号: %w", err)
+		}
 	}
 	entries, err := fs.Glob(migrationsFS, "migrations/*.sql")
 	if err != nil {

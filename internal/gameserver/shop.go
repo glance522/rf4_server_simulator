@@ -2,6 +2,7 @@ package gameserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -129,11 +130,15 @@ func hStoreBuy(goldCol bool) Handler {
 		if !srv.requireDB(ctx) {
 			return nil, false
 		}
+		fail := func(message string) ([]byte, bool) {
+			ctx.ReplyFailure("System.InvalidOperationException", message)
+			return nil, true
+		}
 		uid := ctx.Sess.Userid
 		strs := treeStrs(ctx.Tree)
 		ints := treeInts(ctx.Tree)
 		if len(strs) < 2 {
-			return []byte{0x0F}, true // Bool false
+			return fail("购买参数无效")
 		}
 		storeID, itemID := strs[0], strs[1]
 		var offer uint64
@@ -144,18 +149,18 @@ func hStoreBuy(goldCol bool) Handler {
 		price, err := srv.storePrice(cctx, storeID, itemID, offer, goldCol)
 		if err != nil {
 			ctx.Log.Warn("商店拒绝购买", "store", storeID, "item", itemID, "gold", goldCol, "err", err)
-			return []byte{0x0F}, true
+			return fail("购买未完成，请刷新商店后重试")
 		}
 		prepared, isBundle, err := srv.prepareStoreGoods(cctx, uid, itemID)
 		if err != nil {
 			ctx.Log.Warn("商店商品不可构造", "item", itemID, "err", err)
-			return []byte{0x0F}, true
+			return fail("购买未完成，请刷新商店后重试")
 		}
 
 		tx, err := beginEconomyTx(cctx, srv.DB)
 		if err != nil {
 			ctx.Log.Warn("商店开启事务失败", "err", err)
-			return []byte{0x0F}, true
+			return fail("购买未完成，请刷新商店后重试")
 		}
 		defer func() { _ = tx.Rollback() }()
 
@@ -169,7 +174,10 @@ func hStoreBuy(goldCol bool) Handler {
 		if err := applyWalletTx(cctx, tx, uid, silverDelta, goldDelta,
 			"buy", itemID, "", note); err != nil {
 			ctx.Log.Warn("商店扣款失败", "item", itemID, "err", err)
-			return []byte{0x0F}, true
+			if errors.Is(err, errInsufficientFunds) {
+				return fail("余额不足，未购买商品")
+			}
+			return fail("购买未完成，请刷新商店后重试")
 		}
 
 		granted := make([]*store.Item, 0, len(prepared))
@@ -177,7 +185,7 @@ func hStoreBuy(goldCol bool) Handler {
 			row, _, gerr := grantPreparedItemTx(cctx, tx, it, true)
 			if gerr != nil {
 				ctx.Log.Warn("商店入库失败", "item", it.ItemID, "err", gerr)
-				return []byte{0x0F}, true
+				return fail("购买未完成，请刷新商店后重试")
 			}
 			granted = append(granted, row)
 		}
@@ -201,7 +209,7 @@ func hStoreBuy(goldCol bool) Handler {
 		}
 		if err := tx.Commit(); err != nil {
 			ctx.Log.Warn("商店事务提交失败", "item", itemID, "err", err)
-			return []byte{0x0F}, true
+			return fail("购买未完成，请刷新商店后重试")
 		}
 
 		trees := make([]*proto.Value, 0, len(granted))
@@ -322,6 +330,9 @@ func registerShopHandlers(d *Dispatch) {
 	d.Register(22, 1, hStoreList)
 	d.Register(22, 2, hStoreBuy(false))
 	d.Register(22, 3, hStoreBuy(true))
+	for _, sub := range []uint8{2, 3} {
+		d.RegisterResponseContract(22, sub, ResponseContractRule{Kind: proto.KindObj, TypeIDs: []uint32{804}, Classes: []string{"jfafgmcfjkc"}})
+	}
 	d.Register(22, 4, hStoreReturn)
 	d.Register(22, 6, hStoreATMQuery)
 }
