@@ -21,6 +21,10 @@ button,input,select,textarea{font:inherit;color:var(--text)}button{cursor:pointe
 #login{min-height:100vh;display:grid;place-items:center;padding:20px}.login-card{width:min(390px,95vw);padding:28px;background:linear-gradient(160deg,#132539,#0b1521);border:1px solid #2a455f;border-radius:22px;box-shadow:0 30px 90px #000b}.login-card .logo{width:58px;height:58px;margin-bottom:18px}.login-card h1{font-size:23px;margin:0 0 4px}.login-card p{color:var(--muted);margin:0 0 20px}.login-card .field{margin-bottom:12px}
 .notice{position:fixed;left:0;right:0;top:0;z-index:95;display:flex;align-items:center;justify-content:center;gap:12px;padding:12px 54px 12px 20px;background:linear-gradient(90deg,#ff9f1c,#ff4d6d 45%,#c026d3);color:#fff;font-weight:800;font-size:15px;letter-spacing:.02em;text-shadow:0 1px 2px #0006;box-shadow:0 10px 30px #0007;animation:noticeIn .35s ease}.notice[hidden]{display:none}.notice .pulse{width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:#fff;box-shadow:0 0 0 0 #ffffff99;animation:pulse 1.6s infinite}.notice .msg{max-width:min(1100px,84vw);text-align:center;line-height:1.5}.notice .msg b{color:#fff45c;font-size:16px}.notice .close{position:absolute;right:14px;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;border:1px solid #ffffff66;background:#00000026;color:#fff;font-size:15px;line-height:1;display:grid;place-items:center;padding:0}.notice .close:hover{background:#00000055}@keyframes noticeIn{from{transform:translateY(-100%)}to{transform:none}}@keyframes pulse{0%{box-shadow:0 0 0 0 #ffffff99}70%{box-shadow:0 0 0 12px #ffffff00}100%{box-shadow:0 0 0 0 #ffffff00}}body.notice-on{padding-top:56px}
 @media(max-width:1100px){.split{grid-template-columns:1fr}.player-list{max-height:300px}.stats{grid-template-columns:repeat(2,1fr)}.form-grid{grid-template-columns:repeat(2,1fr)}.mail-box{grid-template-columns:1fr}}@media(max-width:720px){.shell{grid-template-columns:1fr}.sidebar{height:auto;position:relative;padding:13px}.nav{flex-direction:row;overflow:auto}.nav button{white-space:nowrap}.main{padding:16px}.topbar{align-items:flex-start}.stats,.form-grid,.skills{grid-template-columns:1fr}.modal-bg{padding:8px}}
+
+.main,.card,.view,.sidebar,.nav{min-width:0}.nav{max-width:100%}.player-hero{flex-wrap:wrap}.player-hero>div,.player-row>div{min-width:0;max-width:100%}.player-hero h2,.player-row .n{overflow-wrap:anywhere}
+
+@media(max-width:720px){.shell{grid-template-columns:minmax(0,1fr)}.field.span2{grid-column:auto}.toolbar .grow{min-width:100px}.player-hero .actions,.tabs{flex-wrap:wrap}.tabs button{flex:0 0 auto;white-space:nowrap}.nav button{flex:0 0 auto}}
 </style>
 </head>
 <body>
@@ -185,8 +189,8 @@ function renderPlayerTab(){
       <div class="field"><label>银币（分）</label><input id="pf_silver" type="number" value="${p.silver}"></div>
       <div class="field"><label>金币（分）</label><input id="pf_gold" type="number" value="${p.gold}"></div>
       <div class="field"><label>银行（分）</label><input id="pf_bank" type="number" value="${p.bank}"></div>
-      <div class="field"><label>会员</label><select id="pf_membership"><option value="0" ${p.membership? '':'selected'}>普通</option><option value="1" ${p.membership? 'selected':''}>高级会员</option></select></div>
-      <div class="field"><label>会员到期</label><input id="pf_membership_exp" type="datetime-local" value="${localInput(p.membership_exp)}"></div>
+      <div class="field"><label>会员</label><select id="pf_membership"><option value="0" ${p.membership? '':'selected'}>普通</option><option value="1" ${p.membership===1? 'selected':''}>限时高级会员</option><option value="2" ${p.membership===2? 'selected':''}>永久会员</option></select></div>
+      <div class="field span2"><label>会员到期</label><input id="pf_membership_exp" type="datetime-local" value="${localInput(p.membership_exp)}"></div>
     </div><div class="actions"><button class="btn good" onclick="saveProfile()">保存档案与货币</button><button class="btn alt" onclick="selectPlayer(${p.uid})">撤销修改</button></div>`;
   }
   if(PLAYER_TAB==='items')renderItems();
@@ -202,8 +206,12 @@ function localInput(ts){
 async function saveProfile(){
   const expRaw=$('#pf_membership_exp').value;
   const membership=+$('#pf_membership').value;
-  const membership_exp=expRaw?Math.floor(new Date(expRaw).getTime()/1000):0;
-  const body={uid:PLAYER.uid,name:$('#pf_name').value,level:+$('#pf_level').value,xp:+$('#pf_xp').value,silver:+$('#pf_silver').value,gold:+$('#pf_gold').value,bank:+$('#pf_bank').value,membership,membership_exp};
+  const membership_exp=membership===1&&expRaw?Math.floor(new Date(expRaw).getTime()/1000):0;
+  const body={uid:PLAYER.uid,name:$('#pf_name').value,level:+$('#pf_level').value,xp:+$('#pf_xp').value,silver:+$('#pf_silver').value,gold:+$('#pf_gold').value,bank:+$('#pf_bank').value};
+  if(membership!==PLAYER.membership||expRaw!==localInput(PLAYER.membership_exp)){
+    if(membership===1&&(!Number.isFinite(membership_exp)||membership_exp<=Date.now()/1000)){toast('请选择未来的到期时间','bad');return;}
+    body.membership=membership;body.membership_exp=membership_exp;
+  }
   await api('/api/players/update',{method:'POST',body:JSON.stringify(body)});toast('档案已保存，在线玩家将收到 2/1 刷新');await sleep(400);await selectPlayer(PLAYER.uid);
 }
 function renderItems(){

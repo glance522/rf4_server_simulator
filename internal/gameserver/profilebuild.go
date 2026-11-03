@@ -95,13 +95,16 @@ func (s *Server) BuildProfile307(ctx context.Context, uid int64) (*proto.Value, 
 		placeItems = append(placeItems, proto.BytesOf([]byte(pl)))
 	}
 
+	membership := store.MembershipAt(p.Membership, p.MembershipExp, time.Now().Unix())
+	var membershipKind uint32
 	var membershipExp uint64
-	if p.Membership == 1 {
-		exp := p.MembershipExp
-		if exp <= 0 {
-			exp = time.Now().Add(30 * 24 * time.Hour).Unix()
+	if membership.Active {
+		membershipKind = 1
+		if membership.Permanent {
+			membershipKind = 2
+		} else {
+			membershipExp = uint64(proto.UnixToFiletime(membership.ExpiresAt))
 		}
-		membershipExp = uint64(proto.UnixToFiletime(exp))
 	}
 	totalPts := skillPointsTotal(p.Level)
 
@@ -127,7 +130,7 @@ func (s *Server) BuildProfile307(ctx context.Context, uid int64) (*proto.Value, 
 		7:  proto.U64(uint64(p.Silver)),
 		8:  proto.U64(uint64(p.Gold)),
 		9:  proto.StrVal(""),
-		10: proto.U32(uint32(p.Membership)),
+		10: proto.U32(membershipKind),
 		11: proto.U64(membershipExp),
 		12: BuildPose308(),
 		13: BuildStats322(ctx, s.DB, p.UID),

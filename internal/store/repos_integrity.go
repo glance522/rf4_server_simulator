@@ -21,7 +21,7 @@ var PlayerTables = []string{
 	"rod_pod_setting", "rod_pod_alarm", "rod_setting", "txn", "mail", "keepnet_items",
 	"skill", "skill_node", "player_counters", "player_achievements", "device",
 	"catch_log", "competition", "competition_member", "competition_result", "named_fish", "place_access",
-	"fishing_state", "item_damage_log",
+	"fishing_state", "item_damage_log", "membership_order",
 }
 
 // RuntimeTables 是运营/运行时/迁移元数据表，不属于静态资料或玩家存档。

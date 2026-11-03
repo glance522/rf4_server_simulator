@@ -64,6 +64,7 @@ func NewServer(cfg config.Admin, db *store.DB, log logger, webFS fs.FS) *Server 
 	mux.HandleFunc("GET /api/players", auth(s.handlePlayers))
 	mux.HandleFunc("GET /api/players/detail", auth(s.handlePlayerDetail))
 	mux.HandleFunc("POST /api/players/update", auth(s.handlePlayerUpdate))
+	mux.HandleFunc("POST /api/players/membership", auth(s.handlePlayerMembership))
 	mux.HandleFunc("POST /api/players/grant", auth(s.handleGrantItem))
 	mux.HandleFunc("POST /api/players/items/delete", auth(s.handlePlayerItemDelete))
 	mux.HandleFunc("POST /api/players/keepnet/add", auth(s.handlePlayerKeepnetAdd))
@@ -319,7 +320,8 @@ func (s *Server) handlePlayerDetail(w http.ResponseWriter, r *http.Request) {
 		"uid": p.UID, "name": p.Name, "level": p.Level, "xp": p.XP,
 		"silver": p.Silver, "gold": p.Gold, "bank": p.Bank,
 		"membership": p.Membership, "membership_exp": p.MembershipExp,
-		"stars": p.Stars, "email": p.Email,
+		"membership_active": store.MembershipAt(p.Membership, p.MembershipExp, time.Now().Unix()).Active,
+		"stars":             p.Stars, "email": p.Email,
 		"role": p.Role, "banned": p.Banned,
 		"item_count": len(items), "keepnet_count": len(keepnet), "mail_count": len(mails),
 		"items": items, "keepnet": keepnet, "mails": mailRows, "skills": skills,
@@ -330,15 +332,15 @@ func (s *Server) handlePlayerDetail(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePlayerUpdate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		UID    int64   `json:"uid"`
-		Name   *string `json:"name"`
-		Level  *int64  `json:"level"`
-		XP     *int64  `json:"xp"`
-		Silver *int64  `json:"silver"`
-		Gold   *int64  `json:"gold"`
-		Bank   *int64  `json:"bank"`
-		Membership    *int64 `json:"membership"`
-		MembershipExp *int64 `json:"membership_exp"`
+		UID           int64   `json:"uid"`
+		Name          *string `json:"name"`
+		Level         *int64  `json:"level"`
+		XP            *int64  `json:"xp"`
+		Silver        *int64  `json:"silver"`
+		Gold          *int64  `json:"gold"`
+		Bank          *int64  `json:"bank"`
+		Membership    *int64  `json:"membership"`
+		MembershipExp *int64  `json:"membership_exp"`
 	}
 	if err := readJSON(r, &req); err != nil || req.UID == 0 {
 		httpError(w, 400, "参数错误")
@@ -364,15 +366,17 @@ func (s *Server) handlePlayerUpdate(w http.ResponseWriter, r *http.Request) {
 	// 等级和经验必须保持一致：只改等级时按进度曲线回填对应经验；
 	// 否则下一次经验结算会按累计经验重新计算等级。
 	lvl, xpAfter := gameserver.AdminResolveLevelXP(req.Level, req.XP, p.Level, p.XP)
-	membership := apply(p.Membership, req.Membership)
-	if membership != 0 {
-		membership = 1
-	}
-	exp := apply(p.MembershipExp, req.MembershipExp)
-	if membership == 0 {
-		exp = 0
-	} else if exp <= 0 {
-		exp = time.Now().Add(30 * 24 * time.Hour).Unix()
+	membership, exp := p.Membership, p.MembershipExp
+	if req.Membership != nil || req.MembershipExp != nil {
+		membership = apply(membership, req.Membership)
+		exp = apply(exp, req.MembershipExp)
+		if membership != 1 {
+			exp = 0
+		}
+		if membership < 0 || membership > 2 || (membership == 1 && (exp <= time.Now().Unix() || exp > 253402300799)) {
+			httpError(w, 400, "请选择有效的会员类型和到期时间")
+			return
+		}
 	}
 	_, err = s.db.SQL.ExecContext(ctx, `
 		UPDATE profile SET name=?, level=?, xp=?, silver=?, gold=?, bank=?,

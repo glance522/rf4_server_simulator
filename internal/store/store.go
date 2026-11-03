@@ -68,6 +68,19 @@ func (d *DB) Migrate() error {
 		if err != nil {
 			return err
 		}
+		if name == "migrations/00022_membership_exp_compat.sql" {
+			var legacy int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('profile') WHERE name='membership_expires_at'`).Scan(&legacy); err != nil {
+				_ = tx.Rollback()
+				return err
+			}
+			if legacy > 0 {
+				if _, err := tx.Exec(`UPDATE profile SET membership_exp=membership_expires_at WHERE membership_exp=0 AND membership=1 AND membership_expires_at BETWEEN 1 AND 253402300799`); err != nil {
+					_ = tx.Rollback()
+					return err
+				}
+			}
+		}
 		if _, err := tx.Exec(string(body)); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("迁移 %s: %w", name, err)
