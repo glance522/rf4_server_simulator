@@ -13,6 +13,7 @@ certs/
 
 # 本地数据库、日志和测试产物
 /data/
+gateway_ip_uids.json
 data_*.sqlite3
 data_*.sqlite3-shm
 data_*.sqlite3-wal

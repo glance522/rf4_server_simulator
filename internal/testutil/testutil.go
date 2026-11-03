@@ -49,6 +49,7 @@ func StartGateway(t *testing.T, tunnelAddr, psk string) *GatewayHandle {
 		AckClientFrames:       true,
 		TransportKeepaliveSec: 3600,
 		TokenTTL:              1,
+		AccountsFallbackIP:    true, // 测试沿用无凭据 IP 分配旧行为；账号登录在 accounts_test.go 单测
 	}
 	if err := gateway.EnsureCert(cfg.CertFile, cfg.KeyFile, cfg.LoginDomain); err != nil {
 		t.Fatal(err)

@@ -9,6 +9,8 @@ package gateway
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"sync"
@@ -44,16 +46,21 @@ type Store interface {
 	DeleteHandoff(ctx context.Context, token string) error
 	// NextUserid 全局自增玩家 id（登录签发用）。
 	NextUserid(ctx context.Context) (int64, error)
+	// AccountLookup 按登录用户名查账号（未注册返回 ok=false）。
+	AccountLookup(ctx context.Context, username string) (userid int64, passSHA1 string, ok bool, err error)
+	// SyncProfileName 把游戏内显示名（profile.name）与登录用户名同步。
+	SyncProfileName(ctx context.Context, userid int64, name string) error
 }
 
 // ---- MemStore（测试和内存模式）----
 
 // MemStore 进程内存储（非持久；测试与小规模本地开发用）。
 type MemStore struct {
-	mu      sync.Mutex
-	tokens  map[string]tokenEntry
-	handoff map[string]Handoff
-	userid  int64
+	mu       sync.Mutex
+	tokens   map[string]tokenEntry
+	handoff  map[string]Handoff
+	accounts map[string]accountEntry
+	userid   int64
 }
 
 type tokenEntry struct {
@@ -61,12 +68,18 @@ type tokenEntry struct {
 	expires time.Time
 }
 
+type accountEntry struct {
+	userid   int64
+	passSHA1 string
+}
+
 // NewMemStore 构建内存存储。
 func NewMemStore(startUserid int64) *MemStore {
 	return &MemStore{
-		tokens:  map[string]tokenEntry{},
-		handoff: map[string]Handoff{},
-		userid:  startUserid - 1,
+		tokens:   map[string]tokenEntry{},
+		handoff:  map[string]Handoff{},
+		accounts: map[string]accountEntry{},
+		userid:   startUserid - 1,
 	}
 }
 
@@ -120,6 +133,36 @@ func (m *MemStore) DeleteHandoff(_ context.Context, token string) error {
 func (m *MemStore) NextUserid(_ context.Context) (int64, error) {
 	return atomic.AddInt64(&m.userid, 1), nil
 }
+
+// AccountCreate 预置账号（测试用）。密码传明文，内部哈希为 SHA-1 小写。
+func (m *MemStore) AccountCreate(_ context.Context, username, password string, userid int64) error {
+	sum := sha1.Sum([]byte(password))
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, a := range m.accounts {
+		if a.userid == userid {
+			return errors.New("userid 已被其他账号绑定")
+		}
+	}
+	if _, exists := m.accounts[username]; exists {
+		return errors.New("账号已存在")
+	}
+	m.accounts[username] = accountEntry{userid: userid, passSHA1: hex.EncodeToString(sum[:])}
+	return nil
+}
+
+func (m *MemStore) AccountLookup(_ context.Context, username string) (int64, string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a, ok := m.accounts[username]
+	if !ok {
+		return 0, "", false, nil
+	}
+	return a.userid, a.passSHA1, true, nil
+}
+
+// SyncProfileName 内存实现无 profile 表，no-op。
+func (m *MemStore) SyncProfileName(context.Context, int64, string) error { return nil }
 
 // ErrNoToken token 不存在/已过期。
 var ErrNoToken = errors.New("token 不存在或已过期")

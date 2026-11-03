@@ -31,6 +31,7 @@ var RuntimeTables = []string{
 	"kv", "admin_queue", "achievement_def", "static_dataset_meta", "schema_migrations",
 	"request_receipts", "market_offer", "shop_item_override",
 	"fish_weight_override", "fish_bite_setting", "fish_grade_lines",
+	"accounts", // 登录账号（用户名/密码绑定 userid）
 }
 
 // TableOwnership 返回每张用户表的唯一归属。静态、玩家、运行时三组必须互不相交。

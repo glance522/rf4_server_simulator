@@ -63,6 +63,7 @@ type Gateway struct {
 
 	TokenTTL          int     `yaml:"token_ttl_days"`         // 登录 token 有效期（天）
 	UseridStart       int64   `yaml:"userid_start"`           // 自增 userid 起点
+	AccountsFallbackIP bool   `yaml:"accounts_fallback_ip"`   // 无凭据登录回退按来源 IP 分配 userid（旧行为，默认关）。账号在管理后台创建，登录必须凭据匹配
 	BiteProbability   float64 `yaml:"bite_probability"`       // 起竿判出鱼概率（1.0=每杆必出）
 	BiteDelayScale    float64 `yaml:"bite_delay_scale"`       // 咬钩延迟倍率
 	BiteDelayFixed    float64 `yaml:"bite_delay_fixed"`       // 固定咬钩延迟秒（>0 时忽略分布）

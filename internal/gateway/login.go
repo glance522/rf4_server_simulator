@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -39,6 +40,14 @@ const loginXMLTpl = `<logon success="true"><host>%s</host><port>%d</port>` +
 	`<region>%s</region><server>%s</server><userid>%d</userid>` +
 	`<token>%s</token><logintoken>%s</logintoken>` +
 	`<logintokenexpires>%d</logintokenexpires></logon>`
+
+// loginFailureXML / legacyFailureXML 登录被拒（未注册、密码错、模式关闭）。
+// 与官服一致不区分失败原因，客户端统一显示"用户名或密码不正确"。
+const (
+	loginFailureXML = `<logon success="false"></logon>`
+	legacyFailureXML = `<?xml version="1.0" encoding="UTF-8"?>
+<response success="false"></response>`
+)
 
 // legacyLoginXMLTpl 是旧版 CN 客户端在 7515 明文兼容口上要求的响应格式。
 // 客户端按 <response> 根节点解析；返回 <logon> 会报 Invalid URI。
@@ -163,11 +172,24 @@ func (s *LoginServer) Shutdown(ctx context.Context) error {
 func (s *LoginServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	loginRequests.Inc()
 	_ = r.Body.Close()
-	// 客户端登录不发送账号凭据；本机固定 userid，其他来源 IP 分配独立 userid，
-	// 这样同一台机器重登档案连续，Radmin/局域网多客户端也能各自有账号。
-	userid := s.useridForRemote(r.RemoteAddr)
-	if userid <= 0 {
-		userid, _ = s.nextUserid(r.Context())
+	q := r.URL.Query()
+	username := strings.TrimSpace(q.Get("login"))
+	passSHA1 := strings.ToLower(strings.TrimSpace(q.Get("password")))
+
+	userid, viaAccount, err := s.resolveUserid(r.Context(), r, username, passSHA1)
+	if err != nil {
+		loginErrors.Inc()
+		s.log.Warn("登录被拒",
+			"remote", r.RemoteAddr, "username", username,
+			"reason", err.Error())
+		s.replyXML(w, r, loginFailureXML, legacyFailureXML)
+		return
+	}
+	if viaAccount {
+		// 游戏内显示名与登录用户名保持一致（profile.name）
+		if err := s.store.SyncProfileName(r.Context(), userid, username); err != nil {
+			s.log.Warn("同步游戏内显示名失败", "userid", userid, "err", err)
+		}
 	}
 	info := TokenInfo{Userid: userid, IssuedAt: time.Now().Unix(), Region: s.cfg.Region}
 	ttl := time.Duration(s.cfg.TokenTTL) * 24 * time.Hour
@@ -223,7 +245,68 @@ func (s *LoginServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	s.log.Info("登录",
 		"method", r.Method, "request_uri", r.RequestURI, "path", r.URL.Path,
 		"raw_path", r.URL.RawPath, "remote", r.RemoteAddr,
-		"userid", userid, "region", s.cfg.Region, "realtime", s.cfg.AdvertiseHost)
+		"login", username, "userid", userid, "region", s.cfg.Region, "realtime", s.cfg.AdvertiseHost)
+}
+
+// resolveUserid 决定本次登录使用的 userid：
+//   - 带凭据：命中账号且 SHA-1 匹配 → 绑定的 userid；未注册/密码错一律拒绝
+//     （与官服一致不区分失败原因）。账号只在管理后台创建，不做自动注册。
+//   - 无凭据：仅当 accounts_fallback_ip 开启时回退按来源 IP 分配（旧行为），
+//     否则拒绝。
+// viaAccount=true 表示本次登录通过了账号校验（用于同步游戏内显示名）。
+func (s *LoginServer) resolveUserid(ctx context.Context, r *http.Request, username, passSHA1 string) (int64, bool, error) {
+	if username != "" && passSHA1 != "" {
+		if len(passSHA1) != 40 || !isLowerHex(passSHA1) {
+			return 0, false, errors.New("密码哈希格式非法")
+		}
+		userid, stored, ok, err := s.store.AccountLookup(ctx, username)
+		if err != nil {
+			return 0, false, fmt.Errorf("查询账号: %w", err)
+		}
+		if !ok {
+			return 0, false, errors.New("未注册用户名")
+		}
+		if stored != passSHA1 {
+			return 0, false, errors.New("密码不匹配")
+		}
+		return userid, true, nil
+	}
+	// 无凭据（或旧版兼容客户端仅带 login 无 password）：
+	// 仅当 accounts_fallback_ip 开启时回退按来源 IP 分配，否则拒绝。
+	if s.cfg.AccountsFallbackIP {
+		userid := s.useridForRemote(r.RemoteAddr)
+		if userid <= 0 {
+			userid, _ = s.nextUserid(r.Context())
+		}
+		return userid, false, nil
+	}
+	return 0, false, errors.New("缺少登录凭据")
+}
+
+func isLowerHex(s string) bool {
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// replyXML 按通道回 XML：HTTPS 用 <logon>，旧版明文口用 <response>。
+func (s *LoginServer) replyXML(w http.ResponseWriter, r *http.Request, httpsXML, legacyXML string) {
+	xml := httpsXML
+	if r.TLS == nil {
+		xml = legacyXML
+		w.Header().Set("Content-Type", "text/xml; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Pragma", "no-cache")
+	} else {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(xml)))
+	w.Header().Set("Connection", "close")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(xml))
 }
 
 func (s *LoginServer) nextUserid(ctx context.Context) (int64, error) {

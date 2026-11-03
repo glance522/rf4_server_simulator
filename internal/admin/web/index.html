@@ -54,6 +54,7 @@ button,input,select,textarea{font:inherit;color:var(--text)}button{cursor:pointe
       <button data-view="stores" onclick="go('stores')"><span class="ico">▤</span>商店库存</button>
       <button data-view="fish" onclick="go('fish')"><span class="ico">≈</span>鱼口控制</button>
       <button data-view="mail" onclick="go('mail')"><span class="ico">✉</span>邮件中心</button>
+      <button data-view="accounts" onclick="go('accounts')"><span class="ico">⚿</span>用户管理</button>
       <button data-view="audit" onclick="go('audit')"><span class="ico">≡</span>审计日志</button>
     </nav>
     <div class="side-foot"><div class="u" id="who">admin</div><div class="m"><span class="status-dot"></span> 服务在线</div><button class="btn alt sm" onclick="logout()">退出登录</button></div>
@@ -66,6 +67,7 @@ button,input,select,textarea{font:inherit;color:var(--text)}button{cursor:pointe
     <section class="view" id="view-fish"><div class="card" id="fishRulesCard" style="margin-bottom:16px"><div class="section-head"><div><h2>新吃饵逻辑 <span class="pill" id="fishRulesBadge">正在读取</span></h2><small>全水域共用，默认关闭；保存后最多 30 秒影响后续判鱼。</small></div><button class="btn alt" id="fishRulesToggle" disabled aria-pressed="false" onclick="toggleFishRules()">正在读取</button></div><p class="muted" id="fishRulesMessage" role="status">正在读取开关。</p><p class="muted">已接入：地图名册、后台启禁、已识别饵料和实钓搭配；没有匹配鱼时不出鱼。</p><p class="muted">待接入：钓点分布、双饵组合、船票与上船、特定动作、海图区号。未识别的搭配暂不放行；GM 指定下一条鱼仍按原规则执行。</p></div><div class="grid" style="grid-template-columns:270px minmax(0,1fr)"><div class="card"><div class="section-head"><h2>水域</h2></div><input id="fishSearch" placeholder="筛选水域" oninput="renderFishAreas()"><div id="fishAreas" style="margin-top:10px;max-height:70vh;overflow:auto"></div></div><div class="card" id="fishEditor"><div class="empty">选择水域配置鱼口</div></div></div></section>
     <section class="view" id="view-mail"><div class="mail-box"><div class="card"><div class="section-head"><h2>撰写邮件</h2><small>队列约 2 秒内由主服投递</small></div><div class="form-grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>收件人 UID</label><input id="mailUid" type="number"></div><div class="field"><label>快捷载入玩家</label><input id="mailPlayerSearch" placeholder="搜索并回车" onkeydown="if(event.key==='Enter')findMailPlayer()"></div></div><div class="field" style="margin-top:12px"><label>邮件正文</label><textarea id="mailText" placeholder="写给玩家的消息…"></textarea></div><div class="section-head" style="margin-top:14px"><h2>附件</h2><button class="btn alt sm" onclick="addAttachment()">+ 添加附件</button></div><div id="attachments"></div><div class="actions"><button class="btn good" onclick="sendMail()">发送邮件</button><button class="btn alt" onclick="previewMail()">预览</button></div></div><div class="card"><div class="section-head"><h2>发送预览</h2></div><div id="mailPreview" class="empty">填写邮件后点击预览</div><div class="section-head" style="margin-top:20px"><h2>常用模板</h2></div><div class="actions"><button class="btn alt sm" onclick="mailTemplate('补偿')">补偿邮件</button><button class="btn alt sm" onclick="mailTemplate('活动奖励')">活动奖励</button><button class="btn alt sm" onclick="mailTemplate('测试')">测试邮件</button></div></div></div></section>
     <section class="view" id="view-audit"><div class="card"><div class="section-head"><h2>最近操作</h2><small>最新 200 条</small></div><div class="table-wrap" id="auditTable"></div></div></section>
+    <section class="view" id="view-accounts"><div class="split"><div style="display:flex;flex-direction:column;gap:16px;min-width:300px;max-width:460px"><div class="card"><div class="section-head"><h2>新建账号</h2></div><div class="field" style="margin-bottom:12px"><label>用户名</label><input id="accUser" placeholder="字母/数字/下划线"></div><div class="field" style="margin-bottom:14px"><label>密码</label><input id="accPass" type="password" placeholder="至少 8 位，含大写字母、小写字母和数字"></div><div class="actions"><button class="btn good" onclick="createAccount()">创建账号</button></div></div><div class="card"><div class="section-head"><h2>修改密码 / 删除</h2></div><p class="muted" style="margin:6px 0 14px;font-size:12px;line-height:1.6">输入已存在的账号用户名，或点击右侧列表中的"选中"自动填充。</p><div class="field" style="margin-bottom:12px"><label>用户名</label><input id="accUser2" placeholder="要操作的账号"></div><div class="field" style="margin-bottom:14px"><label>新密码</label><input id="accPass2" type="password" placeholder="仅重置密码时需要填写"></div><div class="actions"><button class="btn" onclick="resetAccountPass()">重置密码</button><button class="btn bad" onclick="deleteAccount()">删除账号</button></div></div></div><div class="card"><div class="section-head"><h2>账号列表</h2><small>密码不可见；UID = 绑定的玩家存档</small></div><div class="table-wrap" id="accTable" style="margin-top:12px"></div></div></div></section>
   </main>
 </div>
 <div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"></div></div>
@@ -110,7 +112,7 @@ async function boot(){
     const initial=location.hash.slice(1);go(titles[initial]?initial:'dashboard',true);if(!DASHBOARD_TIMER)DASHBOARD_TIMER=setInterval(()=>{if(VIEW==='dashboard'&&TOKEN)loadDashboard(false).catch(()=>{})},8000);
   }catch(e){logout()}
 }
-const titles={dashboard:['总览','服务器运行状态与快捷操作'],players:['玩家工作台','档案、背包、护网、技能一站式管理'],stores:['商店库存','覆盖静态货架价格与库存'],fish:['鱼口控制','水域鱼种权重、上鱼概率与发鱼延迟'],mail:['邮件中心','发送文本与多附件邮件'],audit:['审计日志','追踪后台管理操作']};
+const titles={dashboard:['总览','服务器运行状态与快捷操作'],players:['玩家工作台','档案、背包、护网、技能一站式管理'],stores:['商店库存','覆盖静态货架价格与库存'],fish:['鱼口控制','水域鱼种权重、上鱼概率与发鱼延迟'],mail:['邮件中心','发送文本与多附件邮件'],accounts:['用户管理','游戏登录用户名/密码绑定玩家存档'],audit:['审计日志','追踪后台管理操作']};
 function go(name,fromHash=false){
   if(!titles[name])name='dashboard';
   VIEW=name;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('on',b.dataset.view===name));
@@ -121,8 +123,34 @@ function go(name,fromHash=false){
 }
 window.addEventListener('hashchange',()=>go(location.hash.slice(1),true));
 function refreshCurrent(){
-  const jobs={dashboard:loadDashboard,players:()=>loadPlayers(false),stores:loadStores,fish:loadFishAreas,mail:()=>{},audit:loadAudit};
+  const jobs={dashboard:loadDashboard,players:()=>loadPlayers(false),stores:loadStores,fish:loadFishAreas,mail:()=>{},accounts:loadAccounts,audit:loadAudit};
   (jobs[VIEW]||(()=>{}))().catch(e=>toast(e.message,'bad'));
+}
+async function loadAccounts(){
+  const list=await api('/api/accounts');
+  const rows=list.length?list.map(a=>{
+    const unbound=!a.created_at;
+    const badge=unbound?'<span class="muted">未绑定（已有存档）</span>':`<button class="btn sm alt" onclick="pickAccount('${a.username}')">选中</button>`;
+    const time=unbound?'—':new Date(a.created_at*1000).toLocaleString();
+    return `<tr${unbound?' style="opacity:.55"':''}><td class="mono">${a.username}</td><td class="mono">${a.userid}</td><td class="muted">${time}</td><td>${badge}</td></tr>`;
+  }).join(''):'<tr><td colspan="4" class="muted">还没有账号，先在左侧创建</td></tr>';
+  $('#accTable').innerHTML='<table><thead><tr><th>用户名</th><th>UID</th><th>创建时间</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+function pickAccount(u){$('#accUser2').value=u;$('#accUser2').focus()}
+async function createAccount(){
+  const body={username:$('#accUser').value.trim(),password:$('#accPass').value,userid:0};
+  const r=await api('/api/accounts/create',{method:'POST',body:JSON.stringify(body)});
+  toast(`已创建 ${r.username} → UID ${r.userid}`,'good');$('#accPass').value='';loadAccounts();
+}
+async function resetAccountPass(){
+  await api('/api/accounts/password',{method:'POST',body:JSON.stringify({username:$('#accUser2').value.trim(),password:$('#accPass2').value})});
+  toast('密码已重置','good');$('#accPass2').value='';
+}
+async function deleteAccount(){
+  const u=$('#accUser2').value.trim();if(!u)return toast('先填用户名','bad');
+  if(!confirm(`删除账号 ${u}？只影响登录，不清除玩家存档。`))return;
+  await api('/api/accounts/delete',{method:'POST',body:JSON.stringify({username:u})});
+  toast('已删除','good');$('#accUser2').value='';loadAccounts();
 }
 async function loadDashboard(refreshForm=true){
   const d=await api('/api/dashboard');

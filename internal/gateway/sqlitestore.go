@@ -126,6 +126,15 @@ func (s *SQLiteStore) NextUserid(ctx context.Context) (int64, error) {
 	return next, nil
 }
 
+func (s *SQLiteStore) AccountLookup(ctx context.Context, username string) (int64, string, bool, error) {
+	return s.DB.AccountLookup(ctx, username)
+}
+
+// SyncProfileName 把游戏内显示名与登录用户名同步（实现在 store 层）。
+func (s *SQLiteStore) SyncProfileName(ctx context.Context, userid int64, name string) error {
+	return s.DB.SyncProfileName(ctx, userid, name)
+}
+
 func fmtSscan(s string, out *int64) (int, error) {
 	return fmt.Sscanf(s, "%d", out)
 }
