@@ -380,12 +380,12 @@ func hMarketSell(ctx *Ctx) ([]byte, bool) {
 			return []byte{0x0F}, true
 		}
 		for _, g := range removed {
-			res, derr := tx.ExecContext(cctx, `DELETE FROM keepnet_items WHERE uid=? AND echo_guid=?`, uid, g)
+			deleted, derr := srv.DB.DeleteKeepnetTx(cctx, tx, uid, g)
 			if derr != nil {
 				ctx.Log.Warn("20/2 移除护网失败", "guid", g, "err", derr)
 				return []byte{0x0F}, true
 			}
-			if n, _ := res.RowsAffected(); n != 1 {
+			if !deleted {
 				return []byte{0x0F}, true
 			}
 		}
@@ -408,6 +408,7 @@ func hMarketSell(ctx *Ctx) ([]byte, bool) {
 		st.mu.Unlock()
 		ctx.Sess.Push2_1()
 		ctx.Sess.Push4_21(removed)
+		srv.retryCompletedCatchRecovery(ctx.Sess)
 		ctx.Log.Info("20/2 卖出", "条数", len(sold), "银分", total)
 	}
 	out := proto.Args(proto.S("112"))

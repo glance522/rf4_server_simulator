@@ -2089,6 +2089,9 @@ func hRodTake(ctx *Ctx) ([]byte, bool) {
 		rod = guids[0]
 	}
 	st := srv.stateFor(ctx.Sess.Userid)
+	if !srv.pendingCatchAllowsCast(ctx, st) {
+		return nil, true
+	}
 	st.mu.Lock()
 	if rod != "" {
 		st.GearGuid = rod
@@ -2097,14 +2100,6 @@ func hRodTake(ctx *Ctx) ([]byte, bool) {
 	depthCM := st.DepthCM
 	rigType := st.RigType
 	st.mu.Unlock()
-	if rigType == 0 && gear != "" {
-		if row, err := srv.DB.GetItemByGUID(ctx.Sess.pushCtx(), gear); err == nil && row != nil {
-			rigType = srv.rigTypeOfItem(ctx.Sess.pushCtx(), row)
-			st.mu.Lock()
-			st.RigType = rigType
-			st.mu.Unlock()
-		}
-	}
 
 	if gear == "" {
 		// 没有可取竿时返回全零 GUID。
@@ -2113,11 +2108,16 @@ func hRodTake(ctx *Ctx) ([]byte, bool) {
 		}
 		return nil, false
 	}
-	if row, err := srv.DB.GetItemByGUID(ctx.Sess.pushCtx(), gear); err != nil || row == nil || row.Durability <= 0 {
+	row, err := srv.DB.GetItemByGUID(ctx.Sess.pushCtx(), gear)
+	category, categoryKnown := int64(0), false
+	if row != nil {
+		category, categoryKnown = srv.itemCategoryOf(ctx.Sess.pushCtx(), row)
+	}
+	if err != nil || row == nil || row.UID != ctx.Sess.Userid || row.Durability <= 0 || !categoryKnown || category != gearCatRod {
 		st.mu.Lock()
 		st.GearGuid = ""
 		st.mu.Unlock()
-		ctx.Log.Info("取竿被拒：鱼竿已损坏", "rod", shortGUID(gear))
+		ctx.Log.Info("取竿被拒：鱼竿无效或已损坏", "rod", shortGUID(gear))
 		if body := castReady158(ctx, "", depthCM, 0); body != nil {
 			return body, true
 		}
@@ -2127,6 +2127,16 @@ func hRodTake(ctx *Ctx) ([]byte, bool) {
 	if srv.ensureRig(ctx.Sess.pushCtx(), ctx.Sess.Userid, gear) {
 		ctx.Sess.Push4_22Full()
 	}
+	// 每次换竿都读取该竿的钓组，不能沿用上一根竿的浮钓/路亚类型。
+	row, err = srv.DB.GetItemByGUID(ctx.Sess.pushCtx(), gear)
+	if err != nil || row == nil {
+		ctx.ReplyFailure("System.IO.IOException", "鱼竿状态未能读取，请重试")
+		return nil, true
+	}
+	rigType = srv.rigTypeOfItem(ctx.Sess.pushCtx(), row)
+	st.mu.Lock()
+	st.RigType = rigType
+	st.mu.Unlock()
 	body := castReady158(ctx, gear, depthCM, rigType)
 	if body == nil {
 		return nil, false

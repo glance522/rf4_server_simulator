@@ -144,19 +144,14 @@ func TestFishBaitNoCandidateTimerAndHotReload(t *testing.T) {
 	if s.tunableF("fish_bait_rules_enabled", 0) != 1 {
 		t.Fatal("hot reload failed")
 	}
-	addFishingRecoverySession(s, 1000001, 901)
-	sess := s.liveSessionByUID(1000001)
+	sess := registerBiteTestSession(t, s, 901, nil)
 	st := s.stateFor(sess.Userid)
 	st.mu.Lock()
 	st.CastActive, st.InWater = true, true
 	st.Loc, st.Bait = "level_900_rules", "rule_lure"
 	st.CastTs = time.Now().Add(-time.Minute)
-	timer := time.NewTimer(time.Hour)
-	defer timer.Stop()
-	st.biteTimer = timer
-	gen := st.BiteGen
 	st.mu.Unlock()
-	s.onBiteTimer(sess.Userid, gen)
+	s.onBiteTimer(sess.Userid)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if !st.Resolved || st.Pending != nil || st.PushSent {
