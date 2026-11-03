@@ -2,6 +2,7 @@ package gameserver
 
 import (
 	"context"
+	"errors"
 	"math"
 	"math/rand"
 	"strings"
@@ -275,38 +276,64 @@ func (s *Server) fishingKeep(ctx *Ctx) ([]byte, bool) {
 	}
 	cctx := ctx.Sess.pushCtx()
 	st := s.stateFor(uid)
+	st.finishMu.Lock()
+	defer st.finishMu.Unlock()
 
 	st.mu.Lock()
 	pending := st.Pending
 	var echo string
 	if pending != nil {
-		echo = want
-		if echo == "" {
-			echo = pending.FishGUID
+		if want != "" && !strings.EqualFold(want, pending.FishGUID) {
+			st.mu.Unlock()
+			ctx.ReplyFailure("System.ArgumentException", "入护的鱼与本次钓获不一致")
+			return nil, true
 		}
+		echo = pending.FishGUID
 		kept := *pending
 		kept.FishGUID = echo
 		if kept.LocLevel == "" {
 			kept.LocLevel = s.currentLevel(uid)
 		}
 		keepLevel := kept.LocLevel
+		capacity, err := s.keepnetCapacity(cctx, uid)
+		if err != nil {
+			st.mu.Unlock()
+			ctx.ReplyFailure("System.IO.IOException", "护网容量未能读取，请重试")
+			return nil, true
+		}
 		// 落库
-		err := s.DB.KeepnetInsert(cctx, &store.KeepnetEntry{
+		keptInNet, err := s.DB.KeepFishingCatchWithCapacity(cctx, &store.KeepnetEntry{
 			EchoGUID: echo, UID: uid, Species: kept.Species, NameZh: kept.Name,
 			WeightG: kept.WeightG, LengthM: kept.LengthM, Cat: kept.Grade,
 			KeepLoc: st.Loc, KeepSpot: int64(st.Spot), KeepBait: st.Bait,
 			KeepLevel: keepLevel, TS: float64(time.Now().UnixNano()) / 1e9,
-		})
-		if err == nil {
-			_ = s.DB.CatchLogInsert(cctx, uid, st.Loc, int64(st.Spot), kept.Species, "",
-				kept.WeightG, kept.LengthM, "keep", st.Bait, kept.Grade, kept.XP, kept.Silver, kept.LocLevel)
-			st.Pending = nil
+		}, kept.XP, kept.Silver, capacity)
+		if err != nil {
+			st.mu.Unlock()
+			ctx.Log.Warn("入护保存失败", "err", err)
+			if errors.Is(err, store.ErrKeepnetFull) {
+				ctx.ReplyFailure("System.InvalidOperationException", "护网已满，请先腾出位置")
+			} else {
+				ctx.ReplyFailure("System.IO.IOException", "入护未能保存，请重试")
+			}
+			return nil, true
+		}
+		st.Pending = nil
+		st.CastActive = false
+		st.Hooked = false
+		st.Resolved = true
+		st.persist.recoverCompleted, st.persist.recoverPending = false, false
+		st.cancelBiteTimerLocked()
+		st.cancelPendingTimerLocked()
+		if keptInNet {
 			st.Keepnet = append(st.Keepnet, &kept)
-			pending = &kept
 		}
 		st.mu.Unlock()
-		f25 := s.buildPending25(&kept, st, keepLevel)
-		body, err2 := proto.EncodeValue(build800(proto.Args(proto.S("61"), f25), proto.Null(), proto.Null()), ctx.Sess.Table())
+		out := proto.Args(proto.S("61"))
+		if keptInNet {
+			out.Items = append(out.Items, s.buildPending25(&kept, st, keepLevel))
+		}
+		body, err2 := proto.EncodeValue(build800(out, proto.Null(), proto.Null()), ctx.Sess.Table())
 		if err2 != nil {
 			return nil, false
 		}
@@ -321,7 +348,7 @@ func (s *Server) fishingKeep(ctx *Ctx) ([]byte, bool) {
 			if level == "" {
 				level = s.currentLevel(uid)
 			}
-			f25 := buildKeepnet25(e, level)
+			f25 := s.keepnetItemTree(cctx, e, level)
 			body, err2 := proto.EncodeValue(build800(proto.Args(proto.S("61"), f25), proto.Null(), proto.Null()), ctx.Sess.Table())
 			if err2 != nil {
 				return nil, false
@@ -337,7 +364,7 @@ func (s *Server) fishingKeep(ctx *Ctx) ([]byte, bool) {
 			if level == "" {
 				level = s.currentLevel(uid)
 			}
-			out.Items = append(out.Items, buildKeepnet25(e, level))
+			out.Items = append(out.Items, s.keepnetItemTree(cctx, e, level))
 		}
 	}
 	body, err := proto.EncodeValue(build800(out, proto.Null(), proto.Null()), ctx.Sess.Table())
@@ -355,9 +382,11 @@ func (s *Server) fishingRelease(ctx *Ctx) ([]byte, bool) {
 	}
 	uid := ctx.Sess.Userid
 	st := s.stateFor(uid)
+	st.finishMu.Lock()
+	defer st.finishMu.Unlock()
 	st.mu.Lock()
 	pending := st.Pending
-	st.Pending = nil
+	loc := st.Loc
 	st.mu.Unlock()
 
 	if pending != nil {
@@ -370,9 +399,11 @@ func (s *Server) fishingRelease(ctx *Ctx) ([]byte, bool) {
 				fid = pending.FishGUID
 			}
 			if ok, why := canNameFish(cctx, s.DB, pending.Grade, fid); ok {
-				if ok2, why2 := s.insertNamedFish(cctx, uid, pending, fid, name, st.Loc); ok2 {
+				if ok2, why2 := s.insertNamedFish(cctx, uid, pending, fid, name, loc); ok2 {
+					st.mu.Lock()
 					pending.Name = strings.TrimSpace(name)
 					pending.NamedID = fid
+					st.mu.Unlock()
 					ctx.Log.Info("蓝冠命名成功", "鱼种", pending.Species, "重量", pending.WeightG, "名字", pending.Name)
 				} else {
 					ctx.Log.Warn("蓝冠命名被拒", "原因", why2, "鱼种", pending.Species, "名字", name)
@@ -380,10 +411,6 @@ func (s *Server) fishingRelease(ctx *Ctx) ([]byte, bool) {
 			} else {
 				ctx.Log.Warn("蓝冠命名被拒", "原因", why, "鱼种", pending.Species, "名字", name)
 			}
-		}
-		// 被命名鱼又被钓到/放生一次 → 计数 +1（note_recatch；含刚命名的这条）
-		if pending.NamedID != "" {
-			s.DB.NamedFishNoteRecatch(cctx, pending.NamedID)
 		}
 		// 放生奖励：base × release_xp_ratio（默认 0.5）
 		base := pending.XP
@@ -393,12 +420,27 @@ func (s *Server) fishingRelease(ctx *Ctx) ([]byte, bool) {
 		}
 		ratio := s.tunableF("release_xp_ratio", 0.5)
 		bonus := int64(math.Round(float64(base) * ratio))
-		if bonus > 0 {
-			newLevel, _, gained := s.grantXp(cctx, uid, bonus)
+		result, replayed, err := s.releaseCatchOnce(cctx, uid, pending.FishGUID, bonus)
+		if err != nil {
+			ctx.Log.Warn("放生保存失败", "err", err)
+			ctx.ReplyFailure("System.IO.IOException", "放生未能保存，请重试")
+			return nil, true
+		}
+		st.mu.Lock()
+		st.Pending = nil
+		st.CastActive = false
+		st.Hooked = false
+		st.Resolved = true
+		st.persist.recoverCompleted, st.persist.recoverPending = false, false
+		st.mu.Unlock()
+		if !replayed && pending.NamedID != "" {
+			s.DB.NamedFishNoteRecatch(cctx, pending.NamedID)
+		}
+		if !replayed && result.Bonus > 0 {
 			ctx.Sess.Push2_9(100, uint64(bonus))
 			ctx.Sess.Push2_1()
-			if gained > 0 {
-				ctx.Sess.Push2_6(max64(1, newLevel-1))
+			if result.LevelsGained > 0 {
+				ctx.Sess.Push2_6(max64(1, result.Level-1))
 			}
 		}
 	}

@@ -33,7 +33,7 @@ func hProfile(ctx *Ctx) ([]byte, bool) {
 	return body, true
 }
 
-// 容器枚举（Go 只建模 0 背包 / 5 鱼护）。
+// 背包和鱼护使用业务容器，导入的其余容器保留原编号。
 const (
 	containerBackpack = 0
 	containerKeepnet  = 5
@@ -53,12 +53,18 @@ func hItemCount(ctx *Ctx) ([]byte, bool) {
 	case containerBackpack:
 		used, _ = srv.DB.CountItemsByContainers(cctx, ctx.Sess.Userid, []string{"backpack", "rig"})
 	case containerKeepnet:
+		srv.retryCompletedCatchRecovery(ctx.Sess)
 		n, err := srv.DB.KeepnetList(cctx, ctx.Sess.Userid)
 		if err == nil {
 			used = int64(len(n))
 		}
 		cap, capMember = 100, 150
+	default:
+		if names := nativeInventoryContainers(container); names != nil {
+			used, _ = srv.DB.CountItemsByContainers(cctx, ctx.Sess.Userid, names)
+		}
 	}
+	cap, capMember = srv.importedContainerCapacity(cctx, ctx.Sess.Userid, container, cap, capMember)
 	obj := wiregen.MustMakeObj("pbndmldbfai", map[int]*proto.Value{
 		0: proto.U32(uint32(used)),
 		1: proto.U32(uint32(cap)),
@@ -85,11 +91,33 @@ func hItemGUIDs(ctx *Ctx) ([]byte, bool) {
 	case containerBackpack:
 		guids, _ = srv.DB.ItemGUIDsByContainers(cctx, ctx.Sess.Userid, []string{"backpack", "rig"})
 	case containerKeepnet:
+		srv.retryCompletedCatchRecovery(ctx.Sess)
 		list, err := srv.DB.KeepnetList(cctx, ctx.Sess.Userid)
 		if err == nil {
 			for _, e := range list {
 				guids = append(guids, e.EchoGUID)
 			}
+		}
+	default:
+		if names := nativeInventoryContainers(container); names != nil {
+			guids, _ = srv.DB.ItemGUIDsByContainers(cctx, ctx.Sess.Userid, names)
+		}
+	}
+	if ctx.Tree.ArgCount() >= 3 {
+		start, startOK := ctx.ArgInt(1)
+		count, countOK := ctx.ArgInt(2)
+		if !startOK || !countOK || start > 100000 || count > 500 {
+			ctx.ReplyFailure("System.ArgumentException", "物品分页参数无效")
+			return nil, true
+		}
+		if start >= uint64(len(guids)) {
+			guids = nil
+		} else {
+			end := start + count
+			if end > uint64(len(guids)) {
+				end = uint64(len(guids))
+			}
+			guids = guids[start:end]
 		}
 	}
 	body, err := proto.EncodeValue(proto.GuidArr(guids), ctx.Sess.Table())
@@ -111,21 +139,18 @@ func hItemDetails(ctx *Ctx) ([]byte, bool) {
 	cctx := ctx.Sess.pushCtx()
 	out := proto.Args(proto.S("61"))
 	if container == containerKeepnet {
+		srv.retryCompletedCatchRecovery(ctx.Sess)
 		for _, g := range guids {
 			e, err := srv.DB.KeepnetGet(cctx, ctx.Sess.Userid, g)
 			if err != nil || e == nil {
 				continue
 			}
-			out.Items = append(out.Items, buildKeepnet25(e, srv.currentLevel(ctx.Sess.Userid)))
+			out.Items = append(out.Items, srv.keepnetItemTree(cctx, e, srv.currentLevel(ctx.Sess.Userid)))
 		}
-	} else if container != containerBackpack {
-		// 非背包容器必须返回空。把背包物品下发到其他容器会让同一 GUID
-		// 被客户端登记两次，导致容器索引冲突。鱼护内容单独处理。
-		ctx.Log.Info("4/5 容器不在建模范围 -> 回空", "container", container)
-	} else {
+	} else if containers := nativeInventoryContainers(container); containers != nil {
 		for _, g := range guids {
 			row, err := srv.DB.GetItemByGUID(cctx, g)
-			if err != nil || row == nil || row.UID != ctx.Sess.Userid {
+			if err != nil || row == nil || row.UID != ctx.Sess.Userid || !inventoryContainerMatches(row.Container, containers) {
 				continue
 			}
 			tree, err := srv.ItemToTree(cctx, row)
@@ -209,13 +234,17 @@ func hShortcutBind(ctx *Ctx) ([]byte, bool) {
 	if !srv.requireDB(ctx) {
 		return nil, false
 	}
-	slot, _ := ctx.ArgInt(0)
+	slot, validSlot := ctx.ArgInt(0)
 	guids := deepGUIDs(ctx.Tree)
-	g := ""
-	if len(guids) > 0 {
-		g = guids[0]
+	if !validSlot || slot > 2147483647 || len(guids) != 1 {
+		ctx.ReplyFailure("System.ArgumentException", "快捷栏绑定参数无效")
+		return nil, true
 	}
-	_ = srv.DB.BindShortcut(ctx.Sess.pushCtx(), ctx.Sess.Userid, int64(slot), g)
+	g := guids[0]
+	if err := srv.DB.BindShortcut(ctx.Sess.pushCtx(), ctx.Sess.Userid, int64(slot), g); err != nil {
+		ctx.ReplyFailure("System.ArgumentException", "快捷栏物品不可用")
+		return nil, true
+	}
 	body, err := proto.EncodeValue(build136(int64(slot), g), ctx.Sess.Table())
 	if err != nil {
 		return nil, false
@@ -228,8 +257,15 @@ func hShortcutUnbind(ctx *Ctx) ([]byte, bool) {
 	if !srv.requireDB(ctx) {
 		return nil, false
 	}
-	slot, _ := ctx.ArgInt(0)
-	_ = srv.DB.BindShortcut(ctx.Sess.pushCtx(), ctx.Sess.Userid, int64(slot), "")
+	slot, validSlot := ctx.ArgInt(0)
+	if !validSlot || slot > 2147483647 {
+		ctx.ReplyFailure("System.ArgumentException", "快捷栏解绑参数无效")
+		return nil, true
+	}
+	if err := srv.DB.BindShortcut(ctx.Sess.pushCtx(), ctx.Sess.Userid, int64(slot), ""); err != nil {
+		ctx.ReplyFailure("System.InvalidOperationException", "快捷栏解绑未保存")
+		return nil, true
+	}
 	body, err := proto.EncodeValue(build136(int64(slot), ""), ctx.Sess.Table())
 	if err != nil {
 		return nil, false
@@ -593,6 +629,9 @@ func hCastPrepare(ctx *Ctx) ([]byte, bool) {
 		gear = guids[0]
 	}
 	st := srv.stateFor(ctx.Sess.Userid)
+	if !srv.pendingCatchAllowsCast(ctx, st) {
+		return nil, true
+	}
 	st.mu.Lock()
 	st.GearGuid = gear
 	depthCM := st.DepthCM
@@ -643,6 +682,9 @@ func hCast(ctx *Ctx) ([]byte, bool) {
 		gear = guids[len(guids)-1]
 	}
 	st := srv.stateFor(ctx.Sess.Userid)
+	if !srv.pendingCatchAllowsCast(ctx, st) {
+		return nil, true
+	}
 	if ctx.Tree != nil {
 		if loc := findObjStr(ctx.Tree, "olieodeoaof"); loc != "" {
 			st.Loc = loc
@@ -679,10 +721,16 @@ func hCast(ctx *Ctx) ([]byte, bool) {
 		if hasData && !nearWater {
 			ctx.Log.Info("距水体过远，本杆不派鱼", "loc", locNow, "x", px, "z", pz, "reach", waterReachM)
 		} else {
-			srv.scheduleBite(ctx.Sess, st)
+			if !srv.scheduleBite(ctx.Sess, st) {
+				ctx.ReplyFailure("System.InvalidOperationException", "请先处理当前鱼获")
+				return nil, true
+			}
 		}
 	} else {
-		srv.scheduleBite(ctx.Sess, st)
+		if !srv.scheduleBite(ctx.Sess, st) {
+			ctx.ReplyFailure("System.InvalidOperationException", "请先处理当前鱼获")
+			return nil, true
+		}
 	}
 
 	// 响应 800.f0 返回当前钓组 157 对象，包含完整竿树和重建后的 f5。
@@ -865,13 +913,10 @@ func hFishingLeft(ctx *Ctx) ([]byte, bool) {
 	ctx.Log.Info("14/12 鱼状态", "f0", f0)
 	if f0 == 3 {
 		st.PushSent = false
-		pending := st.Pending
-		castActive := st.CastActive
-		st.mu.Unlock()
-		if castActive && pending != nil {
-			uid := ctx.Sess.Userid
-			time.AfterFunc(6*time.Second, func() { srv.repushPending14_14(uid) })
+		if st.CastActive && st.Pending != nil {
+			srv.armPendingTimerLocked(ctx.Sess.Userid, st, 6*time.Second)
 		}
+		st.mu.Unlock()
 		return nil, true
 	}
 	if f0 == 5 {

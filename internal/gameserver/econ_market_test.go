@@ -174,6 +174,11 @@ func TestFishMarketFlow(t *testing.T) {
 	if resp := fc.WaitResponse(3 * time.Second); resp == nil || resp.Body[0] != 0x01 {
 		t.Fatalf("14/2 应回 800: %+v", resp)
 	}
+	waterBody, err := proto.EncodeValue(proto.Args524(wiregen.MustMakeObj("lobemkloehp", map[int]*proto.Value{5: proto.U32(0x600)})), wiregen.Table())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc.SendRequest(203, 14, 7, waterBody...)
 	// 14/14（bite_delay_fixed=0.3，落水保护顺延至 ~6s）
 	fish14 := waitPushCmd(t, fc, 14, 14, 20*time.Second)
 	if fish14 == nil {

@@ -25,14 +25,16 @@ const (
 	damageEventLineExhausted   = "line_exhausted"
 	damageEventLostOnLineBreak = "lost_on_line_break"
 	damageEventRodBreak        = "rod_break"
+	damageEventHookBreak       = "hook_break"
 	damageEventRepair          = "repair"
 )
 
 type gearBreakOutcome struct {
-	LineBroken   bool
-	BrokenGUID   string
-	RemovedGUIDs []string
-	UpdatedTrees []*proto.Value
+	BrokenCategory int64
+	LineBroken     bool
+	BrokenGUID     string
+	RemovedGUIDs   []string
+	UpdatedTrees   []*proto.Value
 }
 
 // lineBreakTerminalCategories 是断线时随线一起丢失的终端组件。
@@ -122,8 +124,7 @@ func (s *Server) itemBrokenForMount(ctx context.Context, row *store.Item) bool {
 	return s.itemLength(ctx, row) <= 0
 }
 
-// breakLineOrRod 处理 17/9：按断件品类分流为断线或断竿，并在同一事务内
-// 更新线长/耐久、删除断线终端组件并写入损伤历史。
+// breakLineOrRod 只损坏当前竿本体或实际装配的线材、鱼钩。
 func (s *Server) breakLineOrRod(ctx context.Context, uid int64, rodGUID, brokenGUID string) (*gearBreakOutcome, error) {
 	rodGUID = strings.TrimSpace(rodGUID)
 	brokenGUID = strings.TrimSpace(brokenGUID)
@@ -134,6 +135,10 @@ func (s *Server) breakLineOrRod(ctx context.Context, uid int64, rodGUID, brokenG
 	if err != nil || rod == nil || rod.UID != uid {
 		return nil, sql.ErrNoRows
 	}
+	rodDef, err := s.itemDefForRow(ctx, rod)
+	if err != nil || rodDef == nil || rodDef.Category != gearCatRod {
+		return nil, sql.ErrNoRows
+	}
 	if brokenGUID == "" || brokenGUID == zeroGUID {
 		if g, gerr := s.storedRigItemGUID(ctx, rod, csLine); gerr == nil && g != "" {
 			brokenGUID = g
@@ -141,18 +146,35 @@ func (s *Server) breakLineOrRod(ctx context.Context, uid int64, rodGUID, brokenG
 			brokenGUID = rodGUID
 		}
 	}
-
-	brokenRow, _ := s.DB.GetItemByGUID(ctx, brokenGUID)
-	brokenCat := int64(0)
-	if brokenRow != nil {
-		if def, derr := s.itemDefForRow(ctx, brokenRow); derr == nil && def != nil {
-			brokenCat = def.Category
+	if brokenGUID == rodGUID {
+		return s.breakRodTx(ctx, uid, rodGUID, brokenGUID)
+	}
+	brokenRow, err := s.DB.GetItemByGUID(ctx, brokenGUID)
+	if err != nil || brokenRow == nil || brokenRow.UID != uid {
+		return nil, sql.ErrNoRows
+	}
+	brokenDef, err := s.itemDefForRow(ctx, brokenRow)
+	if err != nil || brokenDef == nil || (!sourceLineCategories[brokenDef.Category] && brokenDef.Category != catHook) {
+		return nil, errors.New("断件类型尚不支持，未扣除耐久")
+	}
+	mounted := false
+	if fields, ferr := FieldsFromJSON(rod.FieldsJSON); ferr == nil {
+		if idx := fieldIdxByCS(rod.WireClass, csLine); idx >= 0 && idx < len(fields) {
+			mounted = fields[idx].GuidHex() == brokenGUID
+		}
+		for _, comp := range rigCompsOf(protoFieldAt(fields, rod.WireClass, csRigObject)) {
+			if comp.GUID == brokenGUID && (sourceLineCategories[comp.Category] || comp.Category == catHook) {
+				mounted = true
+			}
 		}
 	}
-	if sourceLineCategories[brokenCat] {
-		return s.breakLineTx(ctx, uid, rodGUID, brokenGUID)
+	if !mounted {
+		return nil, errors.New("断件不在当前钓组中，未扣除耐久")
 	}
-	return s.breakRodTx(ctx, uid, rodGUID, brokenGUID)
+	if brokenDef.Category == catHook {
+		return s.breakHookTx(ctx, uid, rodGUID, brokenGUID)
+	}
+	return s.breakLineTx(ctx, uid, rodGUID, brokenGUID)
 }
 
 func (s *Server) storedRigItemGUID(ctx context.Context, rod *store.Item, csName string) (string, error) {
@@ -346,7 +368,7 @@ func (s *Server) breakLineTx(ctx context.Context, uid int64, rodGUID, brokenGUID
 		return nil, err
 	}
 
-	out := &gearBreakOutcome{LineBroken: true, BrokenGUID: brokenGUID, RemovedGUIDs: removed}
+	out := &gearBreakOutcome{BrokenCategory: catLine, LineBroken: true, BrokenGUID: brokenGUID, RemovedGUIDs: removed}
 	updated := []string{rodGUID}
 	if lineRow != nil && afterLength > 0 {
 		updated = append(updated, lineRow.GUID)
@@ -391,9 +413,56 @@ func (s *Server) breakRodTx(ctx context.Context, uid int64, rodGUID, brokenGUID 
 		return nil, err
 	}
 	return &gearBreakOutcome{
-		LineBroken: false, BrokenGUID: brokenGUID,
+		BrokenCategory: gearCatRod, LineBroken: false, BrokenGUID: brokenGUID,
 		UpdatedTrees: s.loadUpdatedTrees(ctx, []string{rodGUID}),
 	}, nil
+}
+
+func (s *Server) breakHookTx(ctx context.Context, uid int64, rodGUID, hookGUID string) (*gearBreakOutcome, error) {
+	tx, err := s.DB.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rod, err := s.DB.GetItemByGUIDTx(ctx, tx, rodGUID)
+	if err != nil || rod == nil || rod.UID != uid {
+		return nil, sql.ErrNoRows
+	}
+	hook, err := s.DB.GetItemByGUIDTx(ctx, tx, hookGUID)
+	if err != nil || hook == nil || hook.UID != uid {
+		return nil, sql.ErrNoRows
+	}
+	rodFields, err := FieldsFromJSON(rod.FieldsJSON)
+	if err != nil {
+		return nil, err
+	}
+	_, comp, found := rigCompKeyForGUID(rigCompsOf(protoFieldAt(rodFields, rod.WireClass, csRigObject)), hookGUID)
+	if !found || comp.Category != catHook {
+		return nil, sql.ErrNoRows
+	}
+	fields, err := FieldsFromJSON(hook.FieldsJSON)
+	if err != nil {
+		return nil, err
+	}
+	if !setWireFloat(fields, hook.WireClass, fieldIdxByCS(hook.WireClass, csDurability), 0) {
+		return nil, errDurabilityField
+	}
+	before := hook.Durability
+	hook.Durability = 0
+	if err := updateItemFieldsTx(ctx, s.DB, tx, hook, fields); err != nil {
+		return nil, err
+	}
+	if err := store.AddItemDamageLog(ctx, tx, store.ItemDamageLog{
+		UID: uid, ItemGUID: hook.GUID, ItemID: hook.ItemID, Event: damageEventHookBreak,
+		BeforeDurability: ptrFloat64(before), AfterDurability: ptrFloat64(0), BrokenGUID: hookGUID,
+		DetailJSON: damageDetailJSON(map[string]any{"rod_guid": rodGUID}),
+	}); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &gearBreakOutcome{BrokenCategory: catHook, BrokenGUID: hookGUID, UpdatedTrees: s.loadUpdatedTrees(ctx, []string{hookGUID})}, nil
 }
 
 func (s *Server) loadUpdatedTrees(ctx context.Context, guids []string) []*proto.Value {

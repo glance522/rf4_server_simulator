@@ -2,8 +2,10 @@ package gameserver
 
 import (
 	"context"
+	"encoding/hex"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"rf4server/internal/config"
 	"rf4server/internal/logging"
@@ -111,82 +113,95 @@ func TestXpMonotonicLevel(t *testing.T) {
 	}
 }
 
-// TestSettleMembershipDoesNotChangeXP 验证会员身份只影响档案展示，不改变钓获经验。
-func TestSettleMembershipDoesNotChangeXP(t *testing.T) {
-	srv, db := newProgressSrv(t)
-	ctx := context.Background()
-
-	mk := func(uid int64, membership int64) {
-		t.Helper()
-		if _, err := srv.DB.EnsureProfile(ctx, uid); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.SQL.ExecContext(ctx,
-			`UPDATE profile SET membership=? WHERE uid=?`, membership, uid); err != nil {
-			t.Fatal(err)
-		}
-	}
-	fish := func(uid int64) *RolledFish {
-		return &RolledFish{
-			FishGUID: newFishGUID(), Species: "perch", Grade: 2, WeightG: 642,
-			LengthM: 0.28, LocLevel: "level_001_lake",
-		}
-	}
-
-	// 永久会员：不得产生额外 XP 或 Premium 分解项。
-	mk(1000001, 2)
-	f := fish(1000001)
-	res := srv.settleCatchXP(ctx, 1000001, f, 1)
-	if res.baseXP != 229 {
-		t.Fatalf("基础经验=%d, want 229（perch 642g grade2）", res.baseXP)
-	}
-	if res.totalXP != 229 {
-		t.Fatalf("会员总经验=%d, want 229（会员不增加 XP）", res.totalXP)
-	}
-	if f.XP != 229 {
-		t.Fatalf("25 条目 XP=%d, want 229", f.XP)
-	}
-	p, _ := srv.DB.GetProfile(ctx, 1000001)
-	if p.XP != 229 {
-		t.Fatalf("入账累计 xp=%d, want 229", p.XP)
-	}
-
-	// 813 内嵌 310：f0=229、f5=0、f6 必须为空列表。
-	obj813 := srv.buildSettle813(ctx, 1000001, f, res)
-	obj310 := obj813.Field(8).Val
-	if obj310 == nil || obj310.Class != "kegeppimjbm" {
-		t.Fatalf("813.f8 不是 310 块: %v", obj813.Field(8).Val)
-	}
-	if got := u64Of(obj310.Field(0).Num); got != 229 {
-		t.Fatalf("310.f0=%d, want 229（本条鱼总经验）", got)
-	}
-	if got := u32Of(obj310.Field(1).Num); got != 1 {
-		t.Fatalf("310.f1=%d, want 1（该鱼种尚无入护纪录）", got)
-	}
-	if got := u32Of(obj310.Field(5).Num); got != 0 {
-		t.Fatalf("310.f5=%d, want 0（229 XP 不足以升 2 级）", got)
-	}
-	bonusList := obj310.Field(6).Val
-	if bonusList == nil || len(bonusList.Items) != 0 {
-		t.Fatalf("310.f6 应为空列表，got %v", bonusList)
-	}
-
-	// 非会员逐值一致。
-	mk(1000002, 0)
-	f2 := fish(1000002)
-	res2 := srv.settleCatchXP(ctx, 1000002, f2, 1)
-	if res2.totalXP != 229 {
-		t.Fatalf("非会员总经验=%d, want 229", res2.totalXP)
-	}
-	obj813b := srv.buildSettle813(ctx, 1000002, f2, res2)
-	b2 := obj813b.Field(8).Val.Field(6).Val
-	if b2 == nil || len(b2.Items) != 0 {
-		t.Fatalf("非会员 310.f6 应为空列表，got %v", b2)
-	}
-
-	// 编码烟测：813 全树可编码（wire 合同）
-	if _, err := proto.EncodeValue(obj813, srv.Table()); err != nil {
-		t.Fatalf("813 编码失败: %v", err)
+// 有效会员的分解、鱼条目和实际累计经验必须一致，过期后不再加成。
+func TestSettleMembershipAddsMatchingXP(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		kind, expiry int64
+		active       bool
+	}{
+		{"none", 0, 0, false}, {"permanent", 2, 0, true},
+		{"temporary", 1, time.Now().Unix() + 86400, true},
+		{"expired", 1, time.Now().Unix() - 1, false}, {"legacy_missing_expiry", 1, 0, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			srv, db := newProgressSrv(t)
+			ctx := context.Background()
+			const uid = int64(1000001)
+			if _, err := db.EnsureProfile(ctx, uid); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.SQL.Exec(`UPDATE profile SET membership=?,membership_exp=? WHERE uid=?`, test.kind, test.expiry, uid); err != nil {
+				t.Fatal(err)
+			}
+			f := &RolledFish{FishGUID: newFishGUID(), Species: "perch", Grade: 2, WeightG: 642, LengthM: .28, LocLevel: "level_001_lake"}
+			result := srv.settleCatchXP(ctx, uid, f, 1)
+			total, bonus := int64(229), int64(0)
+			if test.active {
+				total, bonus = 458, 229
+			}
+			if result == nil || result.baseXP != 229 || result.totalXP != total || result.premiumXP != bonus || f.XP != total {
+				t.Fatalf("会员奖励计算不符: %+v fishXP=%d", result, f.XP)
+			}
+			p, err := db.GetProfile(ctx, uid)
+			if err != nil || p.XP != total {
+				t.Fatalf("实际入账不符: %+v %v", p, err)
+			}
+			tree := srv.buildSettle813(ctx, uid, f, result)
+			raw, err := proto.EncodeValue(tree, srv.Table())
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, _, err := proto.DecodeValue(raw, 0, srv.Table())
+			if err != nil {
+				t.Fatal(err)
+			}
+			exp := decoded.Field(8).Val
+			if got := u64Of(exp.Field(0).Num); got != uint64(total) {
+				t.Fatalf("显示总经验=%d，实际%d", got, total)
+			}
+			bonuses := exp.Field(6).Val
+			if test.active {
+				if bonuses == nil || bonuses.ArgCodeStr() != "31" || len(bonuses.Items) != 1 {
+					t.Fatalf("缺少Premium分解: %+v", bonuses)
+				}
+				item := bonuses.Items[0]
+				if item.TypeID != 111 || u64Of(item.Field(2).Num) != 229 || u32Of(item.Field(3).Num) != 9 || u32Of(item.Field(4).Num) != 4 {
+					t.Fatalf("Premium分解类型/数值错误: %+v", item)
+				}
+			} else if bonuses == nil || len(bonuses.Items) != 0 {
+				t.Fatal("无有效会员仍发加成")
+			}
+			profile, err := srv.BuildProfile307(ctx, uid)
+			if err != nil {
+				t.Fatal(err)
+			}
+			kind := uint32(0)
+			if test.active {
+				kind = uint32(test.kind)
+			}
+			if got := u32Of(profile.Field(10).Num); got != kind {
+				t.Fatalf("档案会员状态=%d want%d", got, kind)
+			}
+			expiry := uint64(0)
+			if test.active && test.kind == 1 {
+				expiry = uint64(proto.UnixToFiletime(test.expiry))
+			}
+			if got := u64Of(profile.Field(11).Num); got != expiry {
+				t.Fatalf("到期时间被伪造: %d want%d", got, expiry)
+			}
+			if _, err := db.SQL.Exec(`UPDATE profile SET membership=0,membership_exp=0 WHERE uid=?`, uid); err != nil {
+				t.Fatal(err)
+			}
+			replay := srv.settleCatchXP(ctx, uid, f, 1)
+			if replay == nil || !replay.replayed || replay.totalXP != total || replay.premiumXP != bonus {
+				t.Fatalf("重放改变原奖励: %+v", replay)
+			}
+			p, err = db.GetProfile(ctx, uid)
+			if err != nil || p.XP != total {
+				t.Fatalf("重复入账: %+v %v", p, err)
+			}
+		})
 	}
 }
 
@@ -290,3 +305,43 @@ func TestPersonalRecordFlagFollowsKeptWeight(t *testing.T) {
 }
 
 func ptrI64(v int64) *int64 { return &v }
+
+func TestLegacyCatchReceiptRemainsUnchangedAfterMembershipActivation(t *testing.T) {
+	srv, db := newProgressSrv(t)
+	ctx := context.Background()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SQL.Exec(`UPDATE profile SET membership=2,xp=229 WHERE uid=?`, uid); err != nil {
+		t.Fatal(err)
+	}
+	const guid = "11111111111111111111111111111111"
+	if err := db.KVSet(ctx, "catch-settlement:1000001:"+guid, `{"BaseXP":229,"TotalXP":229,"Level":1,"AccumulatedXP":229,"SkillID":1}`); err != nil {
+		t.Fatal(err)
+	}
+	result := srv.settleCatchXP(ctx, uid, &RolledFish{FishGUID: guid, Species: "perch", WeightG: 642, Grade: 2}, 1)
+	if result == nil || !result.replayed || result.totalXP != 229 || result.premiumXP != 0 {
+		t.Fatalf("旧回执被追补会员奖励: %+v", result)
+	}
+	profile, err := db.GetProfile(ctx, uid)
+	if err != nil || profile.XP != 229 {
+		t.Fatalf("旧鱼重复入账: %+v %v", profile, err)
+	}
+}
+
+// 来源：4.0.25034 客户端序列化器；经验类别 9 才参与分项和基础经验扣减。
+func TestPremiumXPClientFixture(t *testing.T) {
+	srv, _ := newProgressSrv(t)
+	result := &settleXpResult{baseXP: 758, totalXP: 1516, premiumXP: 758, skillID: 1, skillGain: 0.2}
+	fish := &RolledFish{FishGUID: newFishGUID(), Species: "perch", Grade: 2, WeightG: 642}
+	tree := srv.buildSettle813(context.Background(), 1000001, fish, result)
+	raw, err := proto.EncodeValue(tree.Field(8).Val, srv.Table())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const expected = "0136010000ec050000000000000000000001cdcc4c3e0000000000030233310100016f0000000000803f00000000000000000000000000000000f602000000000000090400"
+	if hex.EncodeToString(raw) != expected {
+		t.Fatalf("客户端经验分解格式不符: %x", raw)
+	}
+}
