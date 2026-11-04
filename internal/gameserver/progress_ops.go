@@ -30,6 +30,8 @@ type settleXpResult struct {
 	isRecord     bool    // 是否破个人纪录（310.f1：1=是，0=否）
 	skillID      int64   // 310.f2 钓法大类（1 浮钓 / 2 纺车 / 3 底钓 / 11 海钓）
 	skillGain    float64 // 310.f3 本次实际熟练度增量
+	bonuses      []catchXPBonus
+	replayed     bool
 }
 
 // grantXpMonotonic 增加累计经验并重算等级，保证等级不下降。
@@ -60,37 +62,17 @@ func (s *Server) grantXpMonotonic(ctx context.Context, uid, xpGain int64) (int64
 	return newLevel, newXp, max64(0, newLevel-oldLevel)
 }
 
-// settleCatchXP 计算并持久化一条钓获的经验、熟练度、纪录和装备磨损。
-// 经验依次经过技能倍率和单调入账；prevBest 在写入 catch_log 前读取。
+// settleCatchXP 使用鱼 GUID 作为结算幂等键，统一提交经验、熟练度和装备磨损。
 func (s *Server) settleCatchXP(ctx context.Context, uid int64, f *RolledFish, rigType int64) *settleXpResult {
-	r := &settleXpResult{skillID: fishingSkillCatForRig(rigType)}
-	xp0, silver := catchValue(f.Species, f.Grade, f.WeightG)
-	// 技能与全局经验倍率。
-	skillMult := s.tunableF("xp_gain", 1.0)
-	r.baseXP = int64(math.Round(float64(xp0) * skillMult))
-	if r.baseXP < 1 {
-		r.baseXP = 1
+	r, err := s.settleCatchOnce(ctx, uid, f, rigType)
+	if err != nil {
+		s.log.Warn("钓获结算未保存", "err", err)
+		return nil
 	}
-	r.totalXP = r.baseXP
-	r.silver = silver
-	// 写入 catch_log 前读取现有纪录。
-	r.prevBest, _ = s.DB.CatchLogMaxWeight(ctx, uid, f.Species)
-	r.isRecord = r.prevBest <= 0 || f.WeightG > r.prevBest
-	// 经验入账（累计模型 + 单调）
-	r.newLevel, r.totalXp, r.levelsGained = s.grantXpMonotonic(ctx, uid, r.totalXP)
-	// 按实际钓组大类增长；概率随当前熟练度反比下降，满熟练度不再增加。
-	r.skillID, r.skillGain = s.awardFishingProficiency(ctx, uid, rigType)
-	// catch_log 在入护时写入一次；释放鱼不进入统计和纪录。
-	f.XP = r.totalXP
-	f.Silver = r.silver
-	// 同步钓获磨损到列、fields_json 和版本戳。
-	s.wearRigForCatchPersisted(ctx, stGearOf(s, uid))
-	// 结算日志：鱼种、重量、档位、经验分解与等级。
-	s.log.Info("14/4 结算",
-		"鱼种", f.Species, "重量", f.WeightG, "grade", f.Grade,
-		"基础经验", r.baseXP, "总经验", r.totalXP,
-		"新纪录", r.isRecord, "累计", r.totalXp, "等级", r.newLevel,
-		"技能", r.skillID, "熟练度增量", r.skillGain)
+	st := s.stateFor(uid)
+	st.mu.Lock()
+	f.XP, f.Silver = r.totalXP, r.silver
+	st.mu.Unlock()
 	return r
 }
 
@@ -288,7 +270,18 @@ func (s *Server) buildSettle813(ctx context.Context, uid int64, f *RolledFish, r
 	silverCents := int64(math.Round(silverRate * math.Max(1, float64(f.WeightG))))
 
 	// 310 经验块：f0=总经验，f2=钓法大类，f3=熟练度增量，
-	// f5=本次升级数，f6=加成分解列表。
+	// f5=本次升级数，f6=鱼竿等经验加成分解。
+	bonuses := proto.Args(proto.S("31"))
+	for _, bonus := range r.bonuses {
+		bonuses.Items = append(bonuses.Items, wiregen.MustMakeObj("ffjmgigkjdg", map[int]*proto.Value{
+			0: proto.F32(float32(bonus.Multiplier)),
+			1: proto.Guid(bonus.GUID),
+			2: proto.U64(uint64(bonus.XP)),
+			3: proto.U32(9),
+			4: proto.U32(bonus.Kind),
+			5: proto.U32(1),
+		}))
+	}
 	obj310 := wiregen.MustMakeObj("kegeppimjbm", map[int]*proto.Value{
 		0: proto.U64(uint64(r.totalXP)),
 		1: proto.U32(personalRecordFlag(r != nil && r.isRecord)),
@@ -296,7 +289,7 @@ func (s *Server) buildSettle813(ctx context.Context, uid int64, f *RolledFish, r
 		3: proto.F32(float32(r.skillGain)),
 		4: proto.Null(),
 		5: proto.U32(uint32(max64(0, r.levelsGained))),
-		6: proto.Args(proto.S("31")),
+		6: bonuses,
 	})
 	keep25 := s.buildPending25(f, s.stateFor(uid), s.currentLevel(uid))
 	// ndiejnnioni.f0..f6 必须按 U32 克重编码；写成 F32 位型会导致客户端显示错误。
@@ -321,6 +314,8 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 	}
 	uid := ctx.Sess.Userid
 	st := s.stateFor(uid)
+	st.finishMu.Lock()
+	defer st.finishMu.Unlock()
 	st.mu.Lock()
 	if st.biteTimer != nil {
 		st.biteTimer.Stop()
@@ -337,6 +332,14 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 	var profileTree *proto.Value
 	var skill312 *proto.Value
 	hasFish := pending != nil && hooked
+	if hasFish {
+		if pending.GearGUID != "" {
+			gearGUID = pending.GearGUID
+		}
+		if pending.RigType > 0 {
+			rigType = pending.RigType
+		}
+	}
 
 	if pending != nil && !hooked {
 		// 鱼已咬钩但玩家未刺中，记录一次逃脱。
@@ -346,14 +349,20 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 	var res *settleXpResult
 	if hasFish {
 		res = s.settleCatchXP(cctx, uid, pending, rigType)
+		if res == nil {
+			ctx.ReplyFailure("System.IO.IOException", "钓获结算未能保存，请重试")
+			return nil, true
+		}
 		stats813 = s.buildSettle813(cctx, uid, pending, res)
 		profileTree, _ = s.BuildProfile307(cctx, uid)
 		skill312 = s.buildSingleSkill312(cctx, uid, res.skillID)
 		st.mu.Lock()
 		st.LastSkill = res.skillID
 		st.mu.Unlock()
-		// 奖杯/蓝冠与破纪录经聊天频道播报；普通鱼由结算卡展示。
-		s.notifyFishLanded(ctx.Sess, pending, res.isRecord)
+		if !res.replayed {
+			// 奖杯/蓝冠与破纪录经聊天频道播报；普通鱼由结算卡展示。
+			s.notifyFishLanded(ctx.Sess, pending, res.isRecord)
+		}
 	}
 
 	// 801 即使空竿也返回完整对象，f0/f6/f7 为 null。
@@ -391,12 +400,12 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 	}
 
 	// 结算后推送升级和最新档案；多级连升只推送一次。
-	if hasFish && res != nil && res.levelsGained > 0 {
+	if hasFish && res != nil && !res.replayed && res.levelsGained > 0 {
 		ctx.Sess.Push2_6(max64(1, res.newLevel-1))
 		// 官方聊天模板播报升级（k00；f2 填等级的 f32 位模式）。
 		ctx.Sess.pushLevelUpChat(res.newLevel)
 	}
-	if hasFish {
+	if hasFish && res != nil && !res.replayed {
 		ctx.Sess.Push2_1()
 	}
 	return body, true

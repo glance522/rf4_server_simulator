@@ -15,6 +15,8 @@ type FishingFish struct {
 	BaitGUIDs  string  `json:"bait_guids,omitempty"`
 	BaitsKnown bool    `json:"baits_known,omitempty"`
 	FishGUID   string  `json:"fish_guid"`
+	GearGUID   string  `json:"gear_guid,omitempty"`
+	RigType    int64   `json:"rig_type,omitempty"`
 	Species    string  `json:"species"`
 	Grade      int64   `json:"grade"`
 	WeightG    int64   `json:"weight_g"`

@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"rf4server/internal/proto"
@@ -19,6 +20,7 @@ import (
 // FishState 保存单个玩家的钓鱼状态，重连后继续使用。
 type FishState struct {
 	mu           fishStateMutex
+	finishMu     sync.Mutex
 	GearGuid     string
 	RigType      int64 // jppmjnahbpo 钓组种类（on_cast 记录；路亚族单独节奏）
 	Loc          string
@@ -63,6 +65,8 @@ type RolledFish struct {
 	BaitsKnown bool
 
 	FishGUID string
+	GearGUID string
+	RigType  int64
 	Species  string
 	Grade    int64
 	WeightG  int64
@@ -1373,6 +1377,8 @@ func (s *Server) onBiteTimer(uid int64, gen uint64) {
 		f := st.Armed
 		st.Armed = nil
 		f.LocLevel = s.currentLevel(uid)
+		f.GearGUID = st.GearGuid
+		f.RigType = st.RigType
 		st.Pending = f
 		gear := st.GearGuid
 		st.mu.Unlock()
@@ -1411,6 +1417,8 @@ func (s *Server) onBiteTimer(uid int64, gen uint64) {
 		f.BaitGUIDs, f.BaitsKnown = s.biteBaitSnapshot(s.dbCtx(), st.GearGuid)
 	}
 	f.LocLevel = s.currentLevel(uid)
+	f.GearGUID = st.GearGuid
+	f.RigType = st.RigType
 	st.Pending = f
 	gear := st.GearGuid
 	st.mu.Unlock()

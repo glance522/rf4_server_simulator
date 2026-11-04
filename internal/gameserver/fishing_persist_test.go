@@ -65,6 +65,8 @@ func TestFishingStateRestorePendingNoReroll(t *testing.T) {
 	biteAt := castAt.Add(13 * time.Second)
 	want := &RolledFish{
 		FishGUID: "22222222222222222222222222222222",
+		GearGUID: "11111111111111111111111111111111",
+		RigType:  12,
 		Species:  "c.roach",
 		Grade:    2,
 		WeightG:  318,
