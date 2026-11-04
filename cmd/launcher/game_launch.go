@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 )
@@ -113,19 +114,33 @@ func buildGameCommand(rawPath, rawRegion string) (*exec.Cmd, error) {
 	return cmd, nil
 }
 
-func normalizeGameExecutable(rawPath string) (string, error) {
-	gamePath := strings.TrimSpace(rawPath)
-	if len(gamePath) >= 2 {
-		first, last := gamePath[0], gamePath[len(gamePath)-1]
-		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
-			gamePath = strings.TrimSpace(gamePath[1 : len(gamePath)-1])
+// sanitizeGamePath 清理粘贴路径里的干扰字符：Unicode 格式字符（BOM、
+// 零宽空格、LTR/RTL 方向标记等，常见于从聊天窗口/资源管理器“复制为路径”
+// 之后）以及中日韩输入法打出的全角冒号、反斜杠。残留一个方向标记就会让
+// filepath.IsAbs 判定为相对路径，报“必须填写绝对路径”。
+func sanitizeGamePath(rawPath string) string {
+	cleaned := strings.Map(func(r rune) rune {
+		switch {
+		case r == '\uFEFF', unicode.Is(unicode.Cf, r):
+			return -1
+		case r == '：': // 全角冒号
+			return ':'
+		case r == '＼' || r == '／': // 全角反斜杠 / 斜杠
+			return '\\'
 		}
-	}
+		return r
+	}, rawPath)
+	// 去掉两端空白与配对/半残的引号（资源管理器“复制为路径”会带双引号）。
+	return strings.Trim(cleaned, " \t\r\n\"'")
+}
+
+func normalizeGameExecutable(rawPath string) (string, error) {
+	gamePath := sanitizeGamePath(rawPath)
 	if gamePath == "" {
 		return "", fmt.Errorf("请填写 rf4_x64.exe 的完整路径")
 	}
 	if !filepath.IsAbs(gamePath) {
-		return "", fmt.Errorf("必须填写绝对路径")
+		return "", fmt.Errorf("必须填写绝对路径（当前识别为 %q，请检查路径首尾是否混入了空格、引号或不可见字符）", gamePath)
 	}
 	gamePath = filepath.Clean(gamePath)
 	if !strings.EqualFold(filepath.Base(gamePath), "rf4_x64.exe") {

@@ -23,6 +23,7 @@ func init() {
 		d.Register(3, 21, hChangeRegion)
 		d.Register(3, 23, hVerifyEmail)
 		d.Register(24, 10, hSocialPublic)
+		d.Register(24, 1, hSocialMove)
 		d.Register(24, 2, hSocialCurrent)
 		d.Register(24, 3, hSocialCurrent)
 	})
@@ -326,6 +327,311 @@ func buildChatEchoPush(loc, msg string, uid uint64, users uint32) *proto.Value {
 	return proto.Args524(msgObj, proto.StrVal(loc), proto.U32(users))
 }
 
+// pushSystemChat 经聊天推送通道发送一条系统提示。
+// 默认走已验证的公聊回显（24/27，kind=0）；管理面板可调 tunables 探测
+// 客户端的其他聊天通道与消息类型（约 30s 热生效）：
+//
+//	fish_tv_channel  27..31（24/27..31 是客户端接受的聊天推送族）
+//	fish_tv_kind     401.f0 消息类型（0=玩家发言，其余待探测，可能有颜色）
+func (s *Session) pushSystemChat(text string) {
+	if s == nil || s.closed.Load() {
+		return
+	}
+	channel := int(s.Srv.tunableF("fish_tv_channel", 27))
+	kind := int(s.Srv.tunableF("fish_tv_kind", 0))
+	s.pushChatProbe(channel, kind, text, nil)
+}
+
+// pushChatProbe 经指定聊天推送通道/消息类型发送文本。
+// 28..31 的载荷形状官服未抓样（合同通配），按 [消息, 频道名] / [消息]
+// 试探；无效组合客户端直接忽略。kv 非空时作为 401.f4 模板参数（kind=3
+// 的钓获播报模板：键1=鱼种key 键2=重量 键6=榜单类型）。
+func (s *Session) pushChatProbe(channel, kind int, text string, kv *proto.Value) {
+	if s == nil || s.closed.Load() {
+		return
+	}
+	f2 := uint32(s.Userid)
+	// 探测专用外层覆盖：str 槽默认频道名、u32 槽默认人数。
+	outerStr := ""
+	outerU32 := uint32(0)
+	haveOuter := false
+	switch kind {
+	case -26: // 探测专用：重量裸值放 f2
+		kind = 26
+		f2 = 7777
+	case -27: // 探测专用：重量按 f32 位模式放 f2
+		kind = 26
+		f2 = proto.F32Bits(7777)
+	case -28: // 探测专用：等级按 f32 位模式放 f2（k00"达到X级别"）
+		kind = 0
+		f2 = proto.F32Bits(34)
+	case -29: // 外层=鱼名(中文)+重量f32位
+		kind, outerStr, outerU32, haveOuter = 26, "丁鱵", proto.F32Bits(7777), true
+	case -30: // 外层=鱼名(key)+重量f32位
+		kind, outerStr, outerU32, haveOuter = 26, "g_tench", proto.F32Bits(7777), true
+	case -31: // k03 普通钓获：外层=鱼名(中文)+重量f32位
+		kind, outerStr, outerU32, haveOuter = 3, "丁鱵", proto.F32Bits(7777), true
+	case -32: // 外层=频道名+重量f32位（str 保持合法频道名）
+		kind, outerU32, haveOuter = 26, proto.F32Bits(7777), true
+	case -33: // 外层=频道名+重量裸值
+		kind, outerU32, haveOuter = 26, 7777, true
+	case -34: // f1=重量数字文本，k26 稀有鱼模板
+		kind = 26
+	case -35: // f1=重量数字文本，k25 超级稀有鱼模板
+		kind = 25
+	case -36: // f1=重量数字文本，k03 普通钓获模板
+		kind = 3
+	}
+	ch := sessChannel(s)
+	users := ch.Users
+	if users < 1 {
+		users = 1
+	}
+	f4 := proto.Null()
+	if kv != nil {
+		f4 = kv
+	}
+	msgObj := wiregen.MustMakeObj("lfbdbaffeai", map[int]*proto.Value{
+		0: proto.U32(uint32(kind)),
+		1: proto.StrVal(text),
+		2: proto.U32(f2),
+		3: proto.U64(uint64(proto.WindowsFiletimeNow())),
+		4: f4,
+	})
+	switch channel {
+	case 28, 29:
+		// 形状未抓样（合同为通配）：按 [消息, 频道名] 试探。
+		s.Push(24, uint8(channel), proto.Args524(msgObj, proto.StrVal(ch.Name)))
+	case 30, 31:
+		s.Push(24, uint8(channel), proto.Args524(msgObj))
+	default: // 27 及一切未知值回退到已验证的公聊回显形状
+		str2 := proto.StrVal(ch.Name)
+		u3 := proto.U32(uint32(users))
+		if haveOuter {
+			if outerStr != "" {
+				str2 = proto.StrVal(outerStr)
+			}
+			u3 = proto.U32(outerU32)
+		}
+		s.Push(24, 27, proto.Args524(msgObj, str2, u3))
+	}
+}
+
+// pushLevelUpChat 官方升级播报：k00 模板（"player 达到X级别"），
+// f2 填等级的 f32 位模式（探测验证：等级 34 → "达到34级别"）。
+func (s *Session) pushLevelUpChat(level int64) {
+	if s == nil || s.closed.Load() {
+		return
+	}
+	msgObj := wiregen.MustMakeObj("lfbdbaffeai", map[int]*proto.Value{
+		0: proto.U32(0),
+		1: proto.StrVal(""),
+		2: proto.U32(proto.F32Bits(float32(level))),
+		3: proto.U64(uint64(proto.WindowsFiletimeNow())),
+		4: proto.Null(),
+	})
+	ch := sessChannel(s)
+	users := ch.Users
+	if users < 1 {
+		users = 1
+	}
+	s.Push(24, 27, proto.Args524(msgObj, proto.StrVal(ch.Name), proto.U32(uint32(users))))
+}
+
+// pushChatRaw 绕过推送形状守卫的探测通道：参数可能在外层 args 里
+// （24/27 合同只登记了 [401, 频道名, 人数]，官方钓获播报可能带第 4 项）。
+// variant: 101=24/27+[401,loc,users,KV×3]  102=24/28+[401,KV×3]
+//
+//	103=24/30+[401,KV×3]            104=24/27+[401,loc,users,DICT]
+//	105=24/29+[401,KV×3]            106=24/31+[401,KV×3]
+func (s *Session) pushChatRaw(variant, kind int, text string) {
+	if s == nil || s.closed.Load() {
+		return
+	}
+	ch := sessChannel(s)
+	users := ch.Users
+	if users < 1 {
+		users = 1
+	}
+	k1, k2, k6 := "1", "2", "6"
+	v1, v2, v6 := "g_tench", "7777", "0"
+	kvs := []*proto.Value{
+		proto.KV(&k1, &v1), proto.KV(&k2, &v2), proto.KV(&k6, &v6),
+	}
+	msgObj := wiregen.MustMakeObj("lfbdbaffeai", map[int]*proto.Value{
+		0: proto.U32(uint32(kind)),
+		1: proto.StrVal(text),
+		2: proto.U32(uint32(s.Userid)),
+		3: proto.U64(uint64(proto.WindowsFiletimeNow())),
+		4: proto.Null(),
+	})
+	kvArr := &proto.Value{Kind: proto.KindArray, Items: kvs}
+	kvDict := proto.DictOf("",
+		proto.Pair{K: &k1, V: proto.StrVal(v1)},
+		proto.Pair{K: &k2, V: proto.StrVal(v2)},
+		proto.Pair{K: &k6, V: proto.StrVal(v6)},
+	)
+	var body *proto.Value
+	switch variant {
+	case 101:
+		body = proto.Args524(msgObj, proto.StrVal(ch.Name), proto.U32(uint32(users)), kvArr)
+	case 104:
+		body = proto.Args524(msgObj, proto.StrVal(ch.Name), proto.U32(uint32(users)), kvDict)
+	case 102, 105, 103, 106:
+		body = proto.Args524(msgObj, kvArr)
+	default:
+		return
+	}
+	bodyBytes, err := proto.EncodeValue(body, s.Srv.Table())
+	if err != nil {
+		return
+	}
+	sub := uint8(27)
+	switch variant {
+	case 102:
+		sub = 28
+	case 103:
+		sub = 30
+	case 105:
+		sub = 29
+	case 106:
+		sub = 31
+	}
+	s.PushRaw(24, sub, bodyBytes)
+}
+
+// fishTVKv 构造 401.f4 的鱼名和重量参数。
+func fishTVKv(fishKey string, weightG int64) *proto.Value {
+	if fishKey == "" {
+		fishKey = "g_tench"
+	}
+	if weightG < 0 {
+		weightG = 0
+	}
+	return proto.KVList(
+		proto.KVEntry{Key: 1, Val: proto.StrVal(fishKey)},
+		proto.KVEntry{Key: 2, Val: proto.U32(uint32(weightG))},
+	)
+}
+
+// fishTVKvShape 按 shape 编号构造 401.f4 钓获模板 KV 参数（键1=鱼种key
+// 键2=重量 键6=榜单类型），用于探测客户端的模板渲染形状。
+func fishTVKvShape(shape int64, fishKey string, weightG int64) *proto.Value {
+	k1, k2, k6 := "1", "2", "6"
+	v1 := fishKey
+	if v1 == "" {
+		v1 = "g_tench"
+	}
+	v2 := fmt.Sprintf("%d", weightG)
+	if weightG <= 0 {
+		v2 = "3280"
+	}
+	v6 := "0"
+	kvs := []*proto.Value{
+		proto.KV(&k1, &v1),
+		proto.KV(&k2, &v2),
+		proto.KV(&k6, &v6),
+	}
+	switch shape {
+	case 1:
+		return &proto.Value{Kind: proto.KindArray, Items: kvs}
+	case 2:
+		return proto.Args524(kvs...)
+	case 3:
+		fk, wk, bk := "fish", "weight", "board"
+		return &proto.Value{Kind: proto.KindArray, Items: []*proto.Value{
+			proto.KV(&fk, &v1), proto.KV(&wk, &v2), proto.KV(&bk, &v6),
+		}}
+	case 4:
+		// DICT，字符串值。
+		return proto.DictOf("",
+			proto.Pair{K: &k1, V: proto.StrVal(v1)},
+			proto.Pair{K: &k2, V: proto.StrVal(v2)},
+			proto.Pair{K: &k6, V: proto.StrVal(v6)},
+		)
+	case 5:
+		// DICT，键2/键6 用数值。
+		w, _ := strconv.ParseInt(v2, 10, 64)
+		b, _ := strconv.ParseInt(v6, 10, 64)
+		return proto.DictOf("",
+			proto.Pair{K: &k1, V: proto.StrVal(v1)},
+			proto.Pair{K: &k2, V: proto.U32(uint32(w))},
+			proto.Pair{K: &k6, V: proto.U32(uint32(b))},
+		)
+	case 6:
+		// 无码 ARGLIST 包 KV。
+		return proto.Args(nil, kvs...)
+	case 7:
+		// 扁平字符串对：[k1,v1,k2,v2,...] 的 ARGLIST。
+		return proto.Args(nil,
+			proto.StrVal(k1), proto.StrVal(v1),
+			proto.StrVal(k2), proto.StrVal(v2),
+			proto.StrVal(k6), proto.StrVal(v6),
+		)
+	case 8:
+		// 带 DTO 类型名的 DICT。
+		return proto.DictOf("epbgnjmmiem",
+			proto.Pair{K: &k1, V: proto.StrVal(v1)},
+			proto.Pair{K: &k2, V: proto.StrVal(v2)},
+			proto.Pair{K: &k6, V: proto.StrVal(v6)},
+		)
+	case 9:
+		// 单个 KV，不套容器。
+		return proto.KV(&k2, &v2)
+	case 10:
+		// STR3：[鱼种, 重量, 空]。
+		empty := ""
+		return proto.Str3(&v1, &v2, &empty)
+	case 11:
+		// args("61") 装 KV。
+		code := "61"
+		return proto.Args(&code, kvs...)
+	case 12:
+		// 裸数值：f4 直接是重量 U32。
+		w, _ := strconv.ParseInt(v2, 10, 64)
+		return proto.U32(uint32(w))
+	case 20:
+		// f4 = 判鱼 27 对象（fgogccpglhb：f1=鱼种key f2=档位 f4=重量）。
+		w, _ := strconv.ParseInt(v2, 10, 64)
+		return wiregen.MustMakeObj("fgogccpglhb", map[int]*proto.Value{
+			1: proto.StrVal(v1),
+			2: proto.U32(3),
+			4: proto.U32(uint32(w)),
+		})
+	case 30:
+		// 官方 KV 数组，附加榜单类型键 6。
+		w, _ := strconv.ParseInt(v2, 10, 64)
+		list := fishTVKv(v1, w)
+		return &proto.Value{Kind: proto.KindKVList, Items: append(list.Items,
+			&proto.Value{Kind: proto.KindKVEntry, Marker: 6, Items: []*proto.Value{proto.StrVal(v6)}})}
+	case 40:
+		return &proto.Value{Kind: proto.KindKVList}
+	case 41:
+		w, _ := strconv.ParseInt(v2, 10, 64)
+		return proto.KVList(proto.KVEntry{Key: 2, Val: proto.U32(uint32(w))})
+	case 42:
+		return proto.KVList(proto.KVEntry{Key: 1, Val: proto.StrVal(v1)})
+	case 43:
+		w, _ := strconv.ParseInt(v2, 10, 64)
+		return &proto.Value{Kind: proto.KindKVArr, Items: []*proto.Value{
+			{Kind: proto.KindKVEntry, Marker: 1, Items: []*proto.Value{proto.StrVal(v1)}},
+			{Kind: proto.KindKVEntry, Marker: 2, Items: []*proto.Value{proto.U32(uint32(w))}},
+		}}
+	case 44:
+		return &proto.Value{Kind: proto.KindTypedArr, TypeName: "System.String"}
+	case 45:
+		return &proto.Value{Kind: proto.KindTypedArr, TypeName: "dejdolfnooh, Assembly-CSharp"}
+	case 50:
+		return &proto.Value{Kind: proto.KindTypedArr, TypeName: v1}
+	case 51:
+		w, _ := strconv.ParseInt(v2, 10, 64)
+		return proto.KVListCustom(v1,
+			proto.KVEntry{Key: 1, Val: proto.StrVal(v1)},
+			proto.KVEntry{Key: 2, Val: proto.U32(uint32(w))})
+	}
+	return nil
+}
+
 // hSocialCurrent 处理 24/3 social/current / 24/2 social/auto：
 // 返回当前公共聊天频道。客户端没有频道时聊天输入框不会发送 24/10。
 func hSocialCurrent(ctx *Ctx) ([]byte, bool) {
@@ -358,6 +664,25 @@ func hSocialCurrent(ctx *Ctx) ([]byte, bool) {
 		return nil, false
 	}
 	return body, true
+}
+
+// hSocialMove 处理 24/1 social/move：客户端在上船、跨水域时上报目标频道名。
+//
+// 只记录会话频道，响应回 null。回完整频道对象 godhiicbgng 时客户端会认为移动
+// 未生效，以约 16ms 间隔持续重发并最终断开连接；回 null 时只发一次。
+func hSocialMove(ctx *Ctx) ([]byte, bool) {
+	name := argFirstStr(ctx.Tree)
+	ch := sessChannel(ctx.Sess)
+	if name == "" {
+		name = ch.Name
+	}
+	ctx.Sess.SetState("channel", map[string]any{
+		"name":    name,
+		"region":  ch.Region,
+		"users":   ch.Users,
+		"private": false,
+	})
+	return []byte{0x00}, true
 }
 
 // hSocialPublic 处理 24/10 公聊，命令本身不返回响应。

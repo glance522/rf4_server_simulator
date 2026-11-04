@@ -8,6 +8,98 @@ import (
 	"rf4server/internal/store"
 )
 
+// RepairReelEnginePower 补齐电轮电机对象的功率与最高速度。
+//
+// 电机 wire 类 kbpmmclfipg/1470 的 f0/f1 字段名（npnlhobgfen/mbbdpnidheg）
+// 与定义里的 afmboidbbaj/fgkfkgimfgo 不同，按名字回填会漏掉，早期物化出来
+// 的电轮这两个值是 0，客户端据此算不出收线速度。
+func (s *Server) RepairReelEnginePower(ctx context.Context) (int, error) {
+	if s.DB == nil {
+		return 0, nil
+	}
+	rows, err := s.DB.SQL.QueryContext(ctx, `SELECT guid FROM item WHERE wire_class=?`, "dgjinoebdop")
+	if err != nil {
+		return 0, err
+	}
+	var guids []string
+	for rows.Next() {
+		var g string
+		if err := rows.Scan(&g); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		guids = append(guids, g)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	fixed := 0
+	for _, g := range guids {
+		it, gerr := s.DB.GetItemByGUID(ctx, g)
+		if gerr != nil || it == nil {
+			continue
+		}
+		fields, ferr := FieldsFromJSON(it.FieldsJSON)
+		if ferr != nil {
+			continue
+		}
+		idx := fieldIdxByCS(it.WireClass, "dfjpnambjcj")
+		if idx < 0 || idx >= len(fields) || fields[idx].Val == nil || fields[idx].Val.Kind != proto.KindObj {
+			continue
+		}
+		motor := fields[idx].Val
+		if motor.Class != "kbpmmclfipg" {
+			continue
+		}
+		var nid uint64
+		if ni := fieldIdxByCS(motor.Class, csNumericID); ni >= 0 && ni < motor.FieldCount() {
+			nid = u64Of(motor.Fields[ni].Num)
+		}
+		if nid == 0 {
+			continue
+		}
+		def, derr := s.DB.GetItemDef(ctx, int64(nid))
+		if derr != nil || def == nil {
+			continue
+		}
+		attrs := defAttrs(def)
+		if attrs == nil {
+			continue
+		}
+		changed := false
+		setBits := func(cs, attr string) {
+			fi := fieldIdxByCS(motor.Class, cs)
+			if fi < 0 || fi >= motor.FieldCount() {
+				return
+			}
+			raw, ok := attrs[attr].(float64)
+			if !ok || raw == 0 {
+				return
+			}
+			want := uint64(raw)
+			if u64Of(motor.Fields[fi].Num) == want {
+				return
+			}
+			motor.Fields[fi].Num = ptrU64(want)
+			changed = true
+		}
+		setBits("npnlhobgfen", "afmboidbbaj")
+		setBits("mbbdpnidheg", "fgkfkgimfgo")
+		if !changed {
+			continue
+		}
+		fj, jerr := FieldsToJSON(fields)
+		if jerr != nil {
+			continue
+		}
+		if err := s.DB.UpdateItemFields(ctx, it.GUID, fj, it.Qty, it.Durability, it.Workmanship, it.RigGUID); err != nil {
+			continue
+		}
+		fixed++
+	}
+	return fixed, nil
+}
+
 // RepairReelComponents 修复渔线轮零件槽，但保留工坊已选择的同品类改装件。
 //
 // 历史数据里的子零件可能是旧型号/别的轮子留下的（定义与实际零件对不上），
@@ -65,12 +157,6 @@ func (s *Server) RepairReelComponents(ctx context.Context) (int, error) {
 			if idx < 0 || idx >= len(fields) || fields[idx].Op != "VAL" {
 				continue
 			}
-			// 只重建已有零件槽：缺槽新增会用错 wire 类（f14 引擎槽就曾因此
-			// 让客户端解码抛 InvalidCastException），缺的槽留给后续单独适配。
-			if fields[idx].Val == nil || fields[idx].Val.Kind != proto.KindObj {
-				continue
-			}
-			old := fields[idx].Val
 			expectedCat := int64(0)
 			switch n := cfg["mgkfaekpnoj"].(type) {
 			case float64:
@@ -78,6 +164,15 @@ func (s *Server) RepairReelComponents(ctx context.Context) (int, error) {
 			case int64:
 				expectedCat = n
 			}
+			// 只重建已有零件槽：缺槽新增一旦用错 wire 类，客户端解码会抛
+			// InvalidCastException。电机槽（kind 81）已确认是
+			// kbpmmclfipg/1470，允许补建空槽；其余缺槽仍留空。
+			if fields[idx].Val == nil || fields[idx].Val.Kind != proto.KindObj {
+				if expectedCat != 81 {
+					continue
+				}
+			}
+			old := fields[idx].Val
 			// 同品类即视为合法工坊改装件，绝不能按母轮出厂配置覆盖。
 			// 同时补齐历史版本漏写的摩擦力、挂载位和母轮传动比。
 			if selected := s.reelPartDef(ctx, old); selected != nil && selected.Category == expectedCat {

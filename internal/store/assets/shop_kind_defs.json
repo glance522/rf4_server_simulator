@@ -52609,6 +52609,12 @@
     "gold": 0,
     "stock": 432203
    }
+  ],
+  "8": [
+   {"item_id": "ticket_quad_carp_24", "silver": 350, "gold": 0, "stock": 9999},
+   {"item_id": "ticket_quad_carp_48", "silver": 470, "gold": 0, "stock": 9999},
+   {"item_id": "ticket_quad_carp_72", "silver": 550, "gold": 0, "stock": 9999},
+   {"item_id": "ticket_quad_carp_120", "silver": 660, "gold": 0, "stock": 9999}
   ]
  },
  "sources": {

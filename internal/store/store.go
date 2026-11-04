@@ -23,10 +23,11 @@ var migrationsFS embed.FS
 // DB 存储句柄。StaticPath 非空时，每个物理连接都只读 ATTACH 该配置库，
 // 并由 staticConnector 创建同名 TEMP 视图与写保护 authorizer。
 type DB struct {
-	SQL        *sql.DB
-	Path       string
-	StaticPath string
-	static     *staticState
+	SQL            *sql.DB
+	Path           string
+	StaticPath     string
+	static         *staticState
+	shopSupplement shopSupplement
 }
 
 // Open 打开（必要时创建）主库并设置 WAL/忙等待。该入口不挂载 static，
@@ -45,6 +46,16 @@ func (d *DB) Migrate() error {
 	// 修改现有表，因此先补齐这些列，避免仓储查询或写入失败。
 	if err := d.ensureLegacyPlayerColumns(); err != nil {
 		return fmt.Errorf("补全玩家表列: %w", err)
+	}
+	// 按文件名识别旧分支，保留同编号的主线迁移。
+	if _, err := d.SQL.Exec(`UPDATE schema_migrations
+		SET version=CASE WHEN name='migrations/00025_bait_consumption.sql' THEN 28 ELSE 30 END,
+		    name=CASE WHEN name='migrations/00025_bait_consumption.sql'
+		      THEN 'migrations/00028_bait_consumption.sql' ELSE 'migrations/00030_cafe_pricing_version.sql' END
+		WHERE name IN ('migrations/00023_cafe_pricing_version.sql','migrations/00025_cafe_pricing_version.sql',
+		               'migrations/00027_cafe_pricing_version.sql','migrations/00029_cafe_pricing_version.sql',
+		               'migrations/00025_bait_consumption.sql')`); err != nil {
+		return fmt.Errorf("兼容旧分支迁移编号: %w", err)
 	}
 	entries, err := fs.Glob(migrationsFS, "migrations/*.sql")
 	if err != nil {

@@ -86,8 +86,11 @@ func TestFishStats321FromCatchLog(t *testing.T) {
 }
 
 func TestRecordCardDefaultsAndCategory81(t *testing.T) {
-	if got := categoryWireClass[81]; got.Class != "dbjjakbbbfc" || got.TypeID != 12601 {
-		t.Fatalf("category 81 映射=%+v，期望 dbjjakbbbfc/12601", got)
+	// category 81 只有 rengine_1/rengine_2（渔轮电机）。渔轮 DTO 里 f14
+	// dfjpnambjcj 声明的类型是 odlknjlbooh，对应 wire 类 kbpmmclfipg/1470；
+	// 原来的 dbjjakbbbfc/12601 会让客户端解出未知类型，电机槽无法使用。
+	if got := categoryWireClass[81]; got.Class != "kbpmmclfipg" || got.TypeID != 1470 {
+		t.Fatalf("category 81 映射=%+v，期望 kbpmmclfipg/1470", got)
 	}
 	card := recordCard320(catchStatRow{
 		TS: 1.25, FishKey: "roach", Grade: 0, WeightG: 100,

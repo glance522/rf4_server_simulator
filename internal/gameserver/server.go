@@ -70,6 +70,12 @@ type Server struct {
 	// 技能定义缓存
 	skillDefs     map[int64][]skillNodeDef
 	skillDefsOnce sync.Once
+
+	// 引线制作：普通主线 -> 前导线定义的静态映射缓存。
+	leaderWireMu     sync.Mutex
+	leaderWireLoaded bool
+	leaderWireDefs   []*store.ItemDef
+	leaderWireErr    error
 }
 
 // NewServer 构建主服务器。

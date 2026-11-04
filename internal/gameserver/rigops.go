@@ -192,7 +192,7 @@ var canonicalRigIndex = func() map[int64]int64 {
 
 // slotIndicesFor 返回指定钓组类型和品类对应的规范索引列表。
 func slotIndicesFor(rigType, category int64) []int64 {
-	if category == 27 && rigType != 0 {
+	if category == 27 && rigType != 0 && len(slotIndicesFor(rigType, catHook)) <= 1 {
 		return []int64{350, 351}
 	}
 	tpl := rigSlotTemplates[rigType]
@@ -234,7 +234,7 @@ func canonicalIndex(category, clientIndex int64, rigType int64) int64 {
 // 合法客户端索引优先，否则使用模板中对应序号的槽。
 func canonicalIndexForOrdinal(category, clientIndex, rigType, ordinal int64) int64 {
 	if category == 27 {
-		if ordinal == 1 {
+		if ordinal == 1 && len(slotIndicesFor(rigType, catHook)) <= 1 {
 			return 351
 		}
 		return 350
@@ -285,6 +285,8 @@ func rigCompsOf(f5 *proto.Value) map[int64]rigComp {
 	if comps == nil {
 		return out
 	}
+	_, rigType, _ := rigIdentity(f5)
+	singleHook := len(slotIndicesFor(rigType, catHook)) <= 1
 	counts := map[int64]int64{}
 	for _, it := range comps.Items {
 		if it == nil || it.Kind != proto.KindObj {
@@ -297,7 +299,7 @@ func rigCompsOf(f5 *proto.Value) map[int64]rigComp {
 		}
 		cat := int64(f0.U32())
 		ordinal := counts[cat]
-		if cat == 27 {
+		if cat == 27 && singleHook {
 			switch f2.U32() {
 			case 351:
 				ordinal = 1
@@ -917,6 +919,7 @@ func (s *Server) handitemLoadedGuid(ctx context.Context, parentGUID string) stri
 
 // rigSetOpts 保存装配操作的选项。
 type rigSetOpts struct {
+	KeepRebait        bool // 自动补挂成功后由调用方删除原请求。
 	ParentType        int  // 命令族号（13/15/16/17），不是钓组种类
 	EnforceCategory   bool // 显式槽位 ≠ 物品品类时用 fits_slot 校验（17/3/单测路径）
 	SplitStack        bool // 计件物品挂载拆分（钓竿必须拆分；手持工具例外）
@@ -959,6 +962,15 @@ func (s *Server) rigSetComponent(ctx context.Context, uid int64, parentGUID stri
 			"durability", it.Durability, "category", itemCat)
 		res.Rejected = true
 		return res
+	}
+	// 断竿不能继续装配：竿耐久归零后须先修理，再重组线组。
+	if prow, perr := s.DB.GetItemByGUID(ctx, parentGUID); perr == nil && prow != nil {
+		if pcat, _ := s.itemCategoryOf(ctx, prow); pcat == gearCatRod && prow.Durability <= 0 {
+			s.log.Warn("装配被拒：父竿已损坏", "parent", shortGUID(parentGUID),
+				"durability", prow.Durability)
+			res.Rejected = true
+			return res
+		}
 	}
 	if slot <= 0 && hasCat {
 		slot = itemCat // 槽位 = 物品品类（17/2 请求无槽位，见模块头注）
@@ -1013,6 +1025,10 @@ func (s *Server) rigSetComponent(ctx context.Context, uid int64, parentGUID stri
 
 	// 同品类多槽时由实例 f5 选择空闲序号；只有目标序号已占用时才替换现有组件。
 	ordinal, oldGUID := s.rigSetTarget(ctx, parentGUID, slot, itemGUID, extra)
+	oldHook := ""
+	if slot == catBait || slot == catLure {
+		oldHook, _ = s.DB.GetRodSetting(ctx, parentGUID, "bait_hook:"+oldGUID)
+	}
 	if oldGUID != "" && oldGUID != itemGUID {
 		if prev, oerr := s.DB.GetItemByGUID(ctx, oldGUID); oerr == nil && prev != nil {
 			if s.refundableSplitChild(ctx, prev) {
@@ -1053,8 +1069,14 @@ func (s *Server) rigSetComponent(ctx context.Context, uid int64, parentGUID stri
 	// 顺序反过来会导致拆卸只删索引，实例中仍保留组件。
 	s.rigComponentWriteAt(ctx, parentGUID, slot, ordinal, itemGUID, extra)
 	_ = s.DB.SetItemRigLink(ctx, itemGUID, parentGUID, slot)
-	if slot == 27 {
+	if slot == 27 && !opts.KeepRebait {
 		_, _ = s.DB.SQL.ExecContext(ctx, `DELETE FROM rod_setting WHERE guid=? AND key=?`, parentGUID, fmt.Sprintf("rebait:%d", ordinal))
+	}
+
+	if slot == catBait || slot == catLure {
+		if err := s.rememberMountedBaitHook(ctx, parentGUID, itemGUID, oldHook, slot, ordinal); err != nil {
+			s.log.Warn("钩饵关联保存失败", "err", err)
+		}
 	}
 
 	// 手持工具将装填物 GUID 写入父实例 f1。
@@ -1140,8 +1162,8 @@ func (s *Server) rigSetTarget(ctx context.Context, parentGUID string, slot int64
 	// 天然饵只有显式第二饵位才组成双饵；普通换饵仍替换第一饵。
 	if slot == 27 {
 		ordinal := int64(0)
-		if extra == 351 {
-			ordinal = 1
+		if slotCount := int64(baitSlotCount(s.rigTypeForWrite(ctx, parentGUID))); extra > 350 && extra < 350+slotCount {
+			ordinal = extra - 350
 		}
 		return ordinal, comps[rigCompKey(slot, ordinal)].GUID
 	}
@@ -1309,7 +1331,7 @@ func (s *Server) rigItemMutate(ctx context.Context, rodGUID string, slot *int64,
 	}
 
 	fields[idx].Op = "VAL"
-	fields[idx].Val = buildRig153WithClip(name, curType, comps, curDepth, rigClipOf(stored))
+	fields[idx].Val = buildRig153Like(stored, name, curType, comps, curDepth, rigClipOf(stored))
 	s.saveItemFields(ctx, row, fields)
 	_ = s.reconcileRigProjection(ctx, rodGUID)
 	if curType != originalType {
@@ -1364,7 +1386,7 @@ func (s *Server) rigItemDeleteComponentAt(ctx context.Context, rodGUID string, s
 	}
 	depth := rigDepthOf(stored, defaultDepthFor(name, curType))
 	fields[idx].Op = "VAL"
-	fields[idx].Val = buildRig153WithClip(name, curType, comps, depth, rigClipOf(stored))
+	fields[idx].Val = buildRig153Like(stored, name, curType, comps, depth, rigClipOf(stored))
 	s.saveItemFields(ctx, row, fields)
 	_ = s.reconcileRigProjection(ctx, rodGUID)
 	return true
@@ -1526,7 +1548,7 @@ func (s *Server) rigDetachAt(ctx context.Context, parentGUID string, slot, ordin
 
 // rigRemoveAll 拆下父对象上的全部组件。
 func (s *Server) rigRemoveAll(ctx context.Context, uid int64, parentGUID string) []*rigDetachResult {
-	_, _ = s.DB.SQL.ExecContext(ctx, `DELETE FROM rod_setting WHERE guid=? AND key IN ('rebait:0','rebait:1')`, parentGUID)
+	_, _ = s.DB.SQL.ExecContext(ctx, `DELETE FROM rod_setting WHERE guid=? AND key LIKE 'rebait:%'`, parentGUID)
 	rows, _ := s.DB.ListRigComponents(ctx, parentGUID)
 	comps := s.storedRigComponents(ctx, parentGUID)
 	seen := map[string]bool{}
@@ -1808,7 +1830,7 @@ func (s *Server) liveRig153(ctx context.Context, row *store.Item, storedF5 *prot
 	if saved, ok := s.savedReelClipM(ctx, row.GUID); ok {
 		clipM = saved
 	}
-	return buildRig153WithClip(name, curType, comps, depth, clipM)
+	return buildRig153Like(storedF5, name, curType, comps, depth, clipM)
 }
 
 // buildRigObject 构造当前钓组的 157 对象。
@@ -1912,7 +1934,8 @@ func (s *Server) rigItem157Fallback(ctx context.Context, uid int64, rigGUID stri
 	if saved, ok := s.savedReelClipM(ctx, rigGUID); ok {
 		clipM = saved
 	}
-	f5 := buildRig153WithClip(name, rigType, comps, defaultDepthFor(name, rigType), clipM)
+	f5 := buildRig153Full(name, rigType, comps, defaultDepthFor(name, rigType), clipM,
+		s.baitMountFor(ctx, rigGUID), defaultBaitMountAvail)
 	vals := map[int]*proto.Value{
 		3:  proto.Guid(lineGUID),
 		5:  f5,
@@ -2324,8 +2347,14 @@ func hRigBaitMount(ctx *Ctx) ([]byte, bool) {
 	}
 	cctx := ctx.Sess.pushCtx()
 	if len(ints) > 1 {
-		mask := ints[len(ints)-1]
-		_ = srv.DB.UpsertRodSetting(cctx, guids[0], "baitmount", strconv.FormatInt(int64(mask), 10))
+		mask := clampBaitMount(int64(ints[len(ints)-1]))
+		// 客户端 17/6 只带一个整数，没有语义名；落库前先记一条，
+		// 便于把「卡片 ↔ 数值」对上（BaitMountType 取值尚未逐个确认）。
+		ctx.Log.Info("17/6 挂饵方式", "rod", shortGUID(guids[0]), "mask", mask, "guids", len(guids), "ints", len(ints))
+		_ = srv.DB.UpsertRodSetting(cctx, guids[0], baitMountSettingKey, strconv.FormatInt(mask, 10))
+		if err := srv.applyRigBaitMount(cctx, guids[0], mask); err != nil {
+			ctx.Log.Warn("写入挂饵方式失败", "rod", shortGUID(guids[0]), "mask", mask, "err", err)
+		}
 	}
 	body, err := proto.EncodeValue(srv.buildRigSnapshotFull(cctx, ctx.Sess.Userid), ctx.Sess.Table())
 	if err != nil {
@@ -2528,4 +2557,8 @@ func hexHead(b []byte, n int) string {
 		b = b[:n]
 	}
 	return fmt.Sprintf("%x", b)
+}
+
+func baitSlotCount(rigType int64) int {
+	return max(2, len(slotIndicesFor(rigType, catHook)))
 }

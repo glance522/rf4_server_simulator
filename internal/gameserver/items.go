@@ -59,6 +59,7 @@ var categoryWireClass = map[int64]wireClassEntry{
 	44: {"fcdgfdomnjm", 160}, // Sbirolino
 	46: {"cilmgoaoofg", 120}, // 成品窝料
 	47: {"eebdgfednim", 700}, // 铃铛/咬钩信号器 dadgbbiijki
+	57: {"fmaajjlcdmc", 167}, // 铅芯线（客户端 emfindpkead；f0=强度）
 	48: {"npnkhkicfkg", 613}, // 渔轮导线环
 	49: {"bnfpgceodij", 616}, // 制动钮
 	50: {"jjikombcnnj", 614}, // 轮手柄
@@ -68,7 +69,9 @@ var categoryWireClass = map[int64]wireClassEntry{
 	54: {"gpldfemlfch", 612},   // 蜗杆轴
 	59: {"iknkgeomkip", 3200},  // Cobra 打窝器
 	60: {"ifnaghdaolg", 3201},  // Slingshot 弹弓
-	81: {"dbjjakbbbfc", 12601}, // 扩展类别映射
+	79: {"abmokghdbhf", 11500}, // 竿架（rod pod），客户端模型 pphmpibfgea
+	80: {"ipdakkbfoja", 13301}, // 技能书（客户端按 wrapper 承载书目配置）
+	81: {"kbpmmclfipg", 1470},  // 渔轮电机（装在轮 f14 扩展槽，DTO odlknjlbooh）
 }
 
 const fallbackWireClass = "ohciikgjghe"
@@ -194,13 +197,15 @@ func (s *Server) ItemToTree(ctx context.Context, it *store.Item) (*proto.Value, 
 		s.materializeInto(ctx, class, def, obj, it.GUID, it.Workmanship, it.Durability)
 		s.canonicalizeItemPhysicalFields(ctx, it, obj.Fields)
 	}
-
 	// 鱼竿动态接管（竿上组件/钓组/挂线挂轮必须现算，快照过期会让插槽列表失真）
 	if class == "cnolibojkao" {
 		if err := s.rebuildRod(ctx, it, obj); err != nil {
 			return nil, err
 		}
 	}
+	// 损坏态投影：耐久耗尽的装备点亮客户端红框/折断渲染（只动 wire，不落库）。
+	// 必须放在 rebuildRod 之后——竿的 hgaijieklek 会按定义基值重建，之前写入会被抹掉。
+	applyBrokenItemState(class, obj, it.Durability)
 	return obj, nil
 }
 
@@ -229,12 +234,22 @@ func (s *Server) materializeInto(ctx context.Context, class string, def *store.I
 		fill(reelPartKeys, false)
 	case "oldfpclaabo": // 前导 f1/f2（f3 线槽 def 无配置恒 null）
 		fill(leaderPartKeys, false)
-		// f0 强度等于钢丝配置 kngaaefkpka 乘以工艺。
+		if idx := fieldIdxByCS(class, gearAttrLeaderIn); idx >= 0 && idx < len(obj.Fields) {
+			if normalized, changed := normalizeLeaderInnerWire(obj.Fields[idx].Val); changed {
+				obj.Fields[idx].Val = normalized
+			}
+		}
+		// f0 强度取线材与连接件中的最弱值，再乘以成品工艺。
 		if idx := fieldIdxByCS(class, csStrength); idx >= 0 && fieldIsFloat(class, idx) && obj.Fields[idx].Float == 0 {
-			if wireCfg, ok := attrs["mbnambppbom"].(map[string]any); ok {
-				if bits, ok := wireCfg["kngaaefkpka"].(float64); ok {
-					obj.Fields[idx].Float = float64(proto.F32FromBits(uint32(bits)) * float32(workmanship))
+			strength := 0.0
+			for _, key := range []string{"mbnambppbom", "lbadjgllglo"} {
+				cfg, _ := attrs[key].(map[string]any)
+				if value := nestedF32(cfg, gearAttrMaxLoad); value > 0 && (strength == 0 || value < strength) {
+					strength = value
 				}
+			}
+			if strength > 0 {
+				obj.Fields[idx].Float = strength * workmanship
 			}
 		}
 	case "ioombppcnlh": // 拟饵 f0 = args(60) 出厂钩
@@ -247,6 +262,33 @@ func (s *Server) materializeInto(ctx context.Context, class string, def *store.I
 			}
 		}
 	}
+}
+
+// normalizeLeaderInnerWire 修复旧版本把主线对象类直接塞进前导 f1 的记录。
+// cat11 与 cat15 的线材字段名基本一致，按字段名搬到 cat15 对象即可保留
+// 真实外观 numeric_id、强度、线径、长度、耐久和实例 GUID。
+func normalizeLeaderInnerWire(old *proto.Value) (*proto.Value, bool) {
+	if old == nil || old.Kind != proto.KindObj {
+		return old, false
+	}
+	target := categoryWireClass[gearCatLeaderWire]
+	if old.Class == target.Class {
+		return old, false
+	}
+	if old.Class != categoryWireClass[gearCatLine].Class {
+		return old, false
+	}
+	obj, err := wiregen.MakeObj(target.Class, nil)
+	if err != nil {
+		return old, false
+	}
+	for _, targetField := range wiregen.ClassMeta[target.Class].Fields {
+		sourceIdx := fieldIdxByCS(old.Class, targetField.Name)
+		if sourceIdx >= 0 && sourceIdx < len(old.Fields) {
+			obj.Fields[targetField.Idx] = old.Fields[sourceIdx]
+		}
+	}
+	return obj, true
 }
 
 // canonicalizeItemPhysicalFields 是物品物理字段的统一投影入口。
@@ -719,6 +761,21 @@ func (s *Server) applyDefAttrs(def *store.ItemDef, class string, obj *proto.Valu
 	if err := json.Unmarshal([]byte(def.AttrsJSON), &attrs); err != nil {
 		return
 	}
+	// 渔轮电机（kbpmmclfipg/1470）的功率与最高速度在定义里叫
+	// afmboidbbaj / fgkfkgimfgo，wire 类字段叫 npnlhobgfen / mbbdpnidheg，
+	// 名字对不上，直接按别名映射；这两个值是 f32 位模式，走下面的 float 分支。
+	if class == "kbpmmclfipg" {
+		if v, ok := attrs["afmboidbbaj"]; ok {
+			if _, exists := attrs["npnlhobgfen"]; !exists {
+				attrs["npnlhobgfen"] = v
+			}
+		}
+		if v, ok := attrs["fgkfkgimfgo"]; ok {
+			if _, exists := attrs["mbbdpnidheg"]; !exists {
+				attrs["mbbdpnidheg"] = v
+			}
+		}
+	}
 	for cs, val := range attrs {
 		idx := fieldIdxByCS(class, cs)
 		if idx < 0 || idx >= len(obj.Fields) {
@@ -858,10 +915,16 @@ func netTicksNow() int64 {
 }
 
 // reclassifyStoredItem 把误落成钓线类的物品改写成该类别自己的实例类。
-// 已购工具、材料和铃铛靠这一步恢复实例类型，不必重买。
+// 已购工具、材料、铃铛和铅芯线靠这一步恢复实例类型，不必重买。
 // guid、容器、数量、耐久和工艺保持不变。类别已经对上，或不是钓线回退类时不改。
+//
+// reclassifyCategories 限定允许改写的类别：这些类别的实例在客户端是独立 DTO，
+// 早期没有映射时被创建成钓线类 ohciikgjghe，必须换类才能正常渲染。
+// 新增映射时可把类别加进来，启动修复会对存量物品重写一次。
+var reclassifyCategories = map[int64]bool{41: true, 42: true, 47: true, 57: true}
+
 func (s *Server) reclassifyStoredItem(ctx context.Context, it *store.Item, def *store.ItemDef) (bool, error) {
-	if it == nil || def == nil || (def.Category != 41 && def.Category != 42 && def.Category != 47) {
+	if it == nil || def == nil || !reclassifyCategories[def.Category] {
 		return false, nil
 	}
 	cls, ok := categoryWireClass[def.Category]

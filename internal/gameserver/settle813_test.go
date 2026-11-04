@@ -37,7 +37,7 @@ func TestSettle813UsesIntegerMassFields(t *testing.T) {
 
 	for tag, obj := range map[string]*proto.Value{
 		"progress": srv.buildSettle813(ctx, 1000001, f, r),
-		"baseline": srv.build813(ctx, 1000001, f, 0, 0.2),
+		"baseline": srv.build813(ctx, 1000001, f, 0, 0.2, 0),
 	} {
 		for idx, want := range []uint32{220, 1200, 2000, 2498} {
 			field := obj.Field(idx)

@@ -2,6 +2,8 @@ package gameserver
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 
@@ -177,7 +179,7 @@ func TestFishingLeftBumpsEscapes(t *testing.T) {
 	st.Pending = &RolledFish{FishGUID: "44444444444444444444444444444444", Species: "c.roach"}
 	st.CastActive = true
 	st.mu.Unlock()
-	obj := proto.Obj("lhicjpmglbo", 0, proto.Field{Op: "U32", Num: ptrU64(2)})
+	obj := proto.Obj("lhicjpmglbo", 0, proto.Field{Op: "U32", Num: ptrU64(0)})
 	tree := proto.Args524(obj)
 	sess := newProbeSess(srv)
 	if _, ok := hFishingLeft(&Ctx{Sess: sess, Main: 14, Sub: 12, Tree: tree, DecodeOK: true, Log: logging.Discard()}); !ok {
@@ -189,6 +191,95 @@ func TestFishingLeftBumpsEscapes(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("escapes=%d，期望1", n)
+	}
+}
+
+func TestFishingLeftStatus8KeepsInWaterCastAndSchedulesNextFish(t *testing.T) {
+	srv, db := newDetachTestServer(t)
+	const uid = int64(1000001)
+	st := srv.stateFor(uid)
+	st.mu.Lock()
+	st.Pending = &RolledFish{FishGUID: "55555555555555555555555555555555", Species: "c.roach"}
+	st.CastActive = true
+	st.InWater = true
+	st.PushSent = true
+	st.Hooked = false
+	st.Resolved = false
+	st.mu.Unlock()
+
+	obj := proto.Obj("lhicjpmglbo", 0, proto.Field{Op: "U32", Num: ptrU64(8)})
+	tree := proto.Args524(obj)
+	sess := newProbeSess(srv)
+	if _, ok := hFishingLeft(&Ctx{Sess: sess, Main: 14, Sub: 12, Tree: tree, DecodeOK: true, Log: logging.Discard()}); !ok {
+		t.Fatal("14/12 未处理")
+	}
+
+	st.mu.Lock()
+	if !st.CastActive || !st.InWater {
+		t.Fatalf("鱼自然离开后钓组应仍在水中: CastActive=%v InWater=%v", st.CastActive, st.InWater)
+	}
+	if st.Resolved || st.Pending != nil || st.PushSent || st.Hooked {
+		t.Fatalf("当前鱼状态未清干净: Resolved=%v Pending=%+v PushSent=%v Hooked=%v",
+			st.Resolved, st.Pending, st.PushSent, st.Hooked)
+	}
+	if st.biteTimer == nil || st.BiteAt.IsZero() {
+		t.Fatal("鱼自然离开后没有安排下一次判鱼")
+	}
+	st.biteTimer.Stop()
+	st.biteTimer = nil
+	st.mu.Unlock()
+
+	var n int
+	err := db.SQL.QueryRow(`SELECT value FROM player_counters WHERE uid=? AND key='escapes'`, uid).Scan(&n)
+	if err != nil && err != sql.ErrNoRows {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("自然离场不应计为跑鱼，escapes=%d", n)
+	}
+}
+
+func TestFishingLeftStatus1KeepsInWaterCastAndSchedulesNextFish(t *testing.T) {
+	srv, db := newDetachTestServer(t)
+	const uid = int64(1000001)
+	st := srv.stateFor(uid)
+	st.mu.Lock()
+	st.Pending = &RolledFish{FishGUID: "66666666666666666666666666666666", Species: "c.roach"}
+	st.CastActive = true
+	st.InWater = true
+	st.PushSent = true
+	st.Hooked = false
+	st.Resolved = false
+	st.mu.Unlock()
+
+	obj := proto.Obj("lhicjpmglbo", 0, proto.Field{Op: "U32", Num: ptrU64(1)})
+	tree := proto.Args524(obj)
+	sess := newProbeSess(srv)
+	if _, ok := hFishingLeft(&Ctx{Sess: sess, Main: 14, Sub: 12, Tree: tree, DecodeOK: true, Log: logging.Discard()}); !ok {
+		t.Fatal("14/12 未处理")
+	}
+
+	st.mu.Lock()
+	if !st.CastActive || !st.InWater {
+		t.Fatalf("鱼未中钩离场后钓组应仍在水中: CastActive=%v InWater=%v", st.CastActive, st.InWater)
+	}
+	if st.Resolved || st.Pending != nil || st.PushSent || st.Hooked {
+		t.Fatalf("当前鱼状态未清干净: Resolved=%v Pending=%+v PushSent=%v Hooked=%v",
+			st.Resolved, st.Pending, st.PushSent, st.Hooked)
+	}
+	if st.biteTimer == nil {
+		t.Fatal("鱼未中钩离场后没有重新安排下一尾")
+	}
+	st.biteTimer.Stop()
+	st.biteTimer = nil
+	st.mu.Unlock()
+
+	var escapes int
+	if err := db.SQL.QueryRow(`SELECT value FROM player_counters WHERE uid=? AND key='escapes'`, uid).Scan(&escapes); err != nil && err != sql.ErrNoRows {
+		t.Fatal(err)
+	}
+	if escapes != 0 {
+		t.Fatalf("鱼未中钩离场不应计为跑鱼: escapes=%d", escapes)
 	}
 }
 
@@ -225,4 +316,70 @@ func TestCastLandingPositionFromObject(t *testing.T) {
 	if !ok || x != 123.5 || z != -45.25 {
 		t.Fatalf("landing=(%v,%v,%v), want=(123.5,-45.25,true)", x, z, ok)
 	}
+}
+
+func TestFishingLeftRigNotReadyRepushesSameFish(t *testing.T) {
+	for _, state := range []uint32{3, 5, 6} {
+		t.Run(fmt.Sprintf("status%d", state), func(t *testing.T) {
+			srv, _ := newDetachTestServer(t)
+			const uid = int64(1000001)
+			st := srv.stateFor(uid)
+			fish := &RolledFish{FishGUID: "77777777777777777777777777777777", Species: "c.roach"}
+			st.mu.Lock()
+			st.Pending = fish
+			st.CastActive = true
+			st.InWater = true
+			st.PushSent = true
+			st.Hooked = false
+			st.Resolved = false
+			st.mu.Unlock()
+
+			obj := proto.Obj("lhicjpmglbo", 0, proto.Field{Op: "U32", Num: ptrU64(uint64(state))})
+			tree := proto.Args524(obj)
+			sess := newProbeSess(srv)
+			if _, ok := hFishingLeft(&Ctx{Sess: sess, Main: 14, Sub: 12, Tree: tree, DecodeOK: true, Log: logging.Discard()}); !ok {
+				t.Fatal("14/12 未处理")
+			}
+			st.mu.Lock()
+			defer st.mu.Unlock()
+			if st.Pending != fish || st.Pending.FishGUID != fish.FishGUID {
+				t.Fatal("钓组未就绪时应保留并重推当前鱼")
+			}
+			if st.PushSent || st.Hooked || st.Resolved || !st.CastActive {
+				t.Fatalf("重推状态错误: PushSent=%v Hooked=%v Resolved=%v CastActive=%v", st.PushSent, st.Hooked, st.Resolved, st.CastActive)
+			}
+		})
+	}
+}
+
+func TestFishingLeftStatus2KeepsInWaterCastAndSchedulesNextFish(t *testing.T) {
+	srv, _ := newDetachTestServer(t)
+	const uid = int64(1000001)
+	st := srv.stateFor(uid)
+	st.mu.Lock()
+	st.Pending = &RolledFish{FishGUID: "22222222222222222222222222222222", Species: "c.roach"}
+	st.CastActive = true
+	st.InWater = true
+	st.PushSent = true
+	st.Hooked = false
+	st.Resolved = false
+	st.mu.Unlock()
+
+	obj := proto.Obj("lhicjpmglbo", 0, proto.Field{Op: "U32", Num: ptrU64(2)})
+	tree := proto.Args524(obj)
+	sess := newProbeSess(srv)
+	if _, ok := hFishingLeft(&Ctx{Sess: sess, Main: 14, Sub: 12, Tree: tree, DecodeOK: true, Log: logging.Discard()}); !ok {
+		t.Fatal("14/12 未处理")
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if !st.CastActive || !st.InWater || st.Resolved || st.Pending != nil || st.PushSent || st.Hooked {
+		t.Fatalf("鱼离场状态错误: CastActive=%v InWater=%v Resolved=%v Pending=%+v PushSent=%v Hooked=%v",
+			st.CastActive, st.InWater, st.Resolved, st.Pending, st.PushSent, st.Hooked)
+	}
+	if st.biteTimer == nil || st.BiteAt.IsZero() {
+		t.Fatal("鱼离场后没有重新安排下一尾")
+	}
+	st.biteTimer.Stop()
+	st.biteTimer = nil
 }

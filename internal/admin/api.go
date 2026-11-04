@@ -61,6 +61,7 @@ func NewServer(cfg config.Admin, db *store.DB, log logger, webFS fs.FS) *Server 
 	mux.HandleFunc("GET /api/dashboard", auth(s.handleDashboard))
 	mux.HandleFunc("GET /api/tunables", auth(s.handleTunableList))
 	mux.HandleFunc("POST /api/tunables", auth(s.handleTunableSet))
+	mux.HandleFunc("POST /api/fish_tv_test", auth(s.handleFishTVTest))
 	mux.HandleFunc("GET /api/players", auth(s.handlePlayers))
 	mux.HandleFunc("GET /api/players/detail", auth(s.handlePlayerDetail))
 	mux.HandleFunc("POST /api/players/update", auth(s.handlePlayerUpdate))
@@ -236,7 +237,7 @@ func (s *Server) handleTunableSet(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 400, "参数错误")
 		return
 	}
-	if (req.Key == "fish_bait_rules_enabled" || req.Key == "fish_distribution_enabled") && req.Value != "0" && req.Value != "1" {
+	if (req.Key == "fish_bait_rules_enabled" || req.Key == "fish_distribution_enabled" || req.Key == "fish_weather_enabled" || req.Key == "happy_hour_enabled") && req.Value != "0" && req.Value != "1" {
 		httpError(w, 400, "鱼群开关只能为 0 或 1")
 		return
 	}
@@ -323,6 +324,7 @@ func (s *Server) handlePlayerDetail(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	skillTotal, skillSpent, skillBonus, skillAvail := s.db.SkillPointsAvailable(ctx, uid)
+	happy, _ := s.db.GetHappyHourStatus(ctx, uid, time.Now())
 	writeJSON(w, map[string]any{
 		"uid": p.UID, "name": p.Name, "level": p.Level, "xp": p.XP,
 		"silver": p.Silver, "gold": p.Gold, "bank": p.Bank,
@@ -334,6 +336,7 @@ func (s *Server) handlePlayerDetail(w http.ResponseWriter, r *http.Request) {
 		"items": items, "keepnet": keepnet, "mails": mailRows, "skills": skills,
 		"skill_total": skillTotal, "skill_spent": skillSpent,
 		"skill_bonus": skillBonus, "available_points": skillAvail,
+		"happy_hour": happy,
 	})
 }
 
@@ -424,6 +427,37 @@ func (s *Server) handleGrantItem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true})
 }
 
+// handleFishTVTest 将鱼汛通道测试指令写入共享队列，由主服务器推送到客户端
+// 聊天窗，用于探测 24/27..31 通道、401.f0 消息类型和 401.f4 模板参数。
+func (s *Server) handleFishTVTest(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UID     int64  `json:"uid"`
+		Channel int64  `json:"channel"`
+		Kind    int64  `json:"kind"`
+		KVShape int64  `json:"kv_shape"`
+		Species string `json:"species"`
+		WeightG int64  `json:"weight_g"`
+		Text    string `json:"text"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		httpError(w, 400, "参数错误")
+		return
+	}
+	if req.Channel < 24 || req.Channel > 31 {
+		httpError(w, 400, "channel 取值 24..31")
+		return
+	}
+	if req.Kind < -36 || req.Kind > 36 {
+		httpError(w, 400, "kind 取值 -36..36")
+		return
+	}
+	_ = s.db.QueuePush(r.Context(), mustJSON(map[string]any{
+		"op": "fish_tv_test", "uid": req.UID, "channel": req.Channel, "kind": req.Kind,
+		"kv_shape": req.KVShape, "species": req.Species, "weight_g": req.WeightG,
+		"text": req.Text,
+	}))
+	writeJSON(w, map[string]any{"ok": true})
+}
 func (s *Server) handleKick(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		UID int64 `json:"uid"`

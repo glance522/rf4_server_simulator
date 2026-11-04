@@ -22,6 +22,7 @@ import (
 
 	"rf4server/internal/config"
 	"rf4server/internal/metrics"
+	"rf4server/internal/portal"
 	"rf4server/internal/proto"
 )
 
@@ -72,6 +73,16 @@ func NewLoginServer(cfg config.Gateway, store Store, log *slog.Logger, obs *metr
 	// 双斜杠清理为单斜杠并返回 307，客户端随后会因 URI 被破坏而登录失败。
 	// 登录服务本来就接受任意路径，因此直接使用 HandlerFunc，保留 RequestURI。
 	s.handler = http.HandlerFunc(s.handleLogin)
+	if storage, ok := store.(*SQLiteStore); ok {
+		accountPortal := portal.New(storage.DB, s.useridForRemote)
+		s.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/portal/") {
+				accountPortal.ServeHTTP(w, r)
+				return
+			}
+			s.handleLogin(w, r)
+		})
+	}
 	s.srv = &http.Server{
 		Addr:              cfg.LoginAddr,
 		Handler:           s.handler,

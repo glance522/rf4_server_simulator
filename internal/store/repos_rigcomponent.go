@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 )
 
@@ -62,6 +63,19 @@ func (d *DB) UpsertRigComponentAuto(ctx context.Context, rigGUID string, slot in
 // ReplaceRigComponents 原子替换一个 rig 的全部派生组件行。空列表也会清空，
 // 这是“派生表永不留幽灵行”的唯一重建入口。
 func (d *DB) ReplaceRigComponents(ctx context.Context, rigGUID string, comps []RigComponent) error {
+	tx, err := d.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := d.ReplaceRigComponentsTx(ctx, tx, rigGUID, comps); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ReplaceRigComponentsTx 在调用方事务内全量重建派生组件行。
+func (d *DB) ReplaceRigComponentsTx(ctx context.Context, tx *sql.Tx, rigGUID string, comps []RigComponent) error {
 	seen := make(map[[2]int64]bool, len(comps))
 	for _, c := range comps {
 		key := [2]int64{c.Slot, c.Ordinal}
@@ -70,11 +84,6 @@ func (d *DB) ReplaceRigComponents(ctx context.Context, rigGUID string, comps []R
 		}
 		seen[key] = true
 	}
-	tx, err := d.SQL.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM rig_component WHERE rig_guid=?`, rigGUID); err != nil {
 		return err
 	}
@@ -86,7 +95,7 @@ func (d *DB) ReplaceRigComponents(ctx context.Context, rigGUID string, comps []R
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // DeleteRigComponentAt 精确删一个投影槽；不再按品类误删同品类的其它实例。

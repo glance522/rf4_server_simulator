@@ -15,7 +15,7 @@ import (
 )
 
 func TestFishingRuleSwitchAPIAndRestart(t *testing.T) {
-	for _, key := range []string{"fish_bait_rules_enabled", "fish_distribution_enabled"} {
+	for _, key := range []string{"fish_bait_rules_enabled", "fish_distribution_enabled", "fish_weather_enabled", "happy_hour_enabled"} {
 		t.Run(key, func(t *testing.T) { testFishingSwitchAPIAndRestart(t, key) })
 	}
 }
@@ -43,7 +43,7 @@ func testFishingSwitchAPIAndRestart(t *testing.T, key string) {
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &login) != nil || login.Token == "" {
 		t.Fatalf("login=%s", w.Body)
 	}
-	if _, exists, err := db.TunableGet(ctx, key); err != nil && !errors.Is(err, sql.ErrNoRows) || exists {
+	if _, exists, err := db.TunableGet(ctx, key); err != nil && !errors.Is(err, sql.ErrNoRows) || (exists && key != "happy_hour_enabled") {
 		t.Fatalf("default should be unset: %v", err)
 	}
 	if got := call("POST", "/api/tunables", "", `{"key":"`+key+`","value":"1"}`).Code; got != 401 {

@@ -137,21 +137,15 @@ func (s *Server) castPayloadWeights(ctx context.Context, rodGUID string) (rigWei
 	return rigWeightG, baitWeightG
 }
 
-// castSkillStats 读取当前钓法的真实熟练度和已学习节点效果。
-func (s *Server) castSkillStats(ctx context.Context, uid, rigType int64) (category int64, mastery, nodeEffect float64) {
+// castSkillStats 合成当前钓法熟练度；未知节点不按通用投距加成计算。
+func (s *Server) castSkillStats(ctx context.Context, uid, rigType int64, gears ...string) (category int64, mastery, nodeEffect float64) {
 	category = fishingSkillCatForRig(rigType)
-	if s == nil || s.DB == nil {
+	effects, err := s.effectiveFishingSkills(ctx, uid, gears...)
+	if err != nil {
 		return category, 0, 0
 	}
-	points, _ := s.DB.ListSkills(ctx, uid)
-	nodes, _ := s.DB.ListSkillNodes(ctx, uid)
-	mastery = clampFloat(points[category], 0, profCap)
-	for _, def := range s.skillDefsOfCat(category) {
-		if level := nodes[def.NodeID]; level > 0 {
-			nodeEffect += float64(level) * skillNodeEffectPoints(def)
-		}
-	}
-	return category, mastery, nodeEffect
+	return category, effects.mastery(category), 0
+
 }
 
 // castReelSpoolStats 从当前轮子实例优先读取工作坊安装的线杯；老轮子没有内嵌

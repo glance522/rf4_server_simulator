@@ -111,8 +111,8 @@ func TestXpMonotonicLevel(t *testing.T) {
 	}
 }
 
-// TestSettleMembershipDoesNotChangeXP 验证会员身份只影响档案展示，不改变钓获经验。
-func TestSettleMembershipDoesNotChangeXP(t *testing.T) {
+// 没有有效会员或竿体加成时，实际入账和原生经验块保持基础值。
+func TestSettleWithoutXPBonusSources(t *testing.T) {
 	srv, db := newProgressSrv(t)
 	ctx := context.Background()
 
@@ -133,15 +133,15 @@ func TestSettleMembershipDoesNotChangeXP(t *testing.T) {
 		}
 	}
 
-	// 永久会员：不得产生额外 XP 或 Premium 分解项。
-	mk(1000001, 2)
+	// 无有效会员和手持竿时，不产生 Premium 或竿体分解项。
+	mk(1000001, 0)
 	f := fish(1000001)
 	res := srv.settleCatchXP(ctx, 1000001, f, 1)
 	if res.baseXP != 229 {
 		t.Fatalf("基础经验=%d, want 229（perch 642g grade2）", res.baseXP)
 	}
 	if res.totalXP != 229 {
-		t.Fatalf("会员总经验=%d, want 229（会员不增加 XP）", res.totalXP)
+		t.Fatalf("无加成总经验=%d, want 229", res.totalXP)
 	}
 	if f.XP != 229 {
 		t.Fatalf("25 条目 XP=%d, want 229", f.XP)
@@ -160,8 +160,8 @@ func TestSettleMembershipDoesNotChangeXP(t *testing.T) {
 	if got := u64Of(obj310.Field(0).Num); got != 229 {
 		t.Fatalf("310.f0=%d, want 229（本条鱼总经验）", got)
 	}
-	if got := u32Of(obj310.Field(1).Num); got != 1 {
-		t.Fatalf("310.f1=%d, want 1（该鱼种尚无入护纪录）", got)
+	if got := u32Of(obj310.Field(1).Num); got != 0 {
+		t.Fatalf("310.f1=%d, want 0（229 XP 尚未达到升级门槛）", got)
 	}
 	if got := u32Of(obj310.Field(5).Num); got != 0 {
 		t.Fatalf("310.f5=%d, want 0（229 XP 不足以升 2 级）", got)
@@ -190,9 +190,8 @@ func TestSettleMembershipDoesNotChangeXP(t *testing.T) {
 	}
 }
 
-// TestGradeLinesFromSpeciesWeight 验证档位由 species_weight 的三条重量线决定：
-// trophy_g 是达标线，trophy_line_g 是奖杯线，super_trophy_line_g 是蓝冠线。
-func TestGradeLinesFromSpeciesWeight(t *testing.T) {
+// 结算尺优先沿用内置值；其他鱼种使用尺上的补全分界。
+func TestGradeLinesFollowSettlementRuler(t *testing.T) {
 	srv, db := newProgressSrv(t)
 	ctx := srv.dbCtx()
 
@@ -214,8 +213,8 @@ func TestGradeLinesFromSpeciesWeight(t *testing.T) {
 		want int64
 		note string
 	}{
-		{"perch_test", 339, 1, "w < 达标线(trophy_g)"},
-		{"perch_test", 340, 2, "w >= 达标线"},
+		{"perch_test", 259, 1, "w < 结算尺达标线"},
+		{"perch_test", 260, 2, "w >= 结算尺达标线"},
 		{"perch_test", 1499, 2, "达标 ≤ w < 奖杯线(trophy_line_g)"},
 		{"perch_test", 1500, 3, "w >= 奖杯线"},
 		{"perch_test", 2999, 3, "奖杯 ≤ w < 蓝冠线(super_trophy_line_g)"},
@@ -232,18 +231,18 @@ func TestGradeLinesFromSpeciesWeight(t *testing.T) {
 		t.Fatalf("gradeFromLines 边界=%d, want 3", got)
 	}
 
-	// 内置池回退路径同样接表：表有行按三线，无行回退池内 valuable 单线
+	// 内置池与静态库都按结算尺，缺表时也沿用尺上的补全分界。
 	srv.stateFor(1000001).GearGuid = ""
 	e := fishPoolEntry{species: "perch_test", minG: 50, maxG: 9000, valuableLineG: 340}
 	if got := srv.poolGrade(e, 2000); got != 3 {
 		t.Fatalf("poolGrade(表行)=%d, want 3", got)
 	}
 	e2 := fishPoolEntry{species: "not_in_table", valuableLineG: 400}
-	if got := srv.poolGrade(e2, 400); got != 2 {
-		t.Fatalf("poolGrade(无表行,=valuable)=%d, want 2", got)
+	if got := srv.poolGrade(e2, 277); got != 2 {
+		t.Fatalf("poolGrade(无表行,=结算尺达标线)=%d, want 2", got)
 	}
-	if got := srv.poolGrade(e2, 399); got != 1 {
-		t.Fatalf("poolGrade(无表行,<valuable)=%d, want 1", got)
+	if got := srv.poolGrade(e2, 276); got != 1 {
+		t.Fatalf("poolGrade(无表行,<结算尺达标线)=%d, want 1", got)
 	}
 
 	// 25 条目/14/14 的档位必须与三线判定一致（grade 即档位线落点）
@@ -258,7 +257,7 @@ func TestGradeLinesFromSpeciesWeight(t *testing.T) {
 	})
 }
 
-func TestPersonalRecordFlagFollowsKeptWeight(t *testing.T) {
+func TestPersonalRecordFollowsKeptWeight(t *testing.T) {
 	srv, db := newProgressSrv(t)
 	ctx := context.Background()
 	const uid = int64(1000001)
@@ -273,18 +272,18 @@ func TestPersonalRecordFlagFollowsKeptWeight(t *testing.T) {
 	if res.isRecord {
 		t.Fatal("642g 未超过已入护的 800g，不应记为个人纪录")
 	}
-	if got := u32Of(srv.buildSettle813(ctx, uid, lighter, res).Field(8).Val.Field(1).Num); got != 0 {
-		t.Fatalf("310.f1=%d, want 0", got)
+	if got := u32Of(srv.buildSettle813(ctx, uid, lighter, res).Field(8).Val.Field(1).Num); int64(got) != res.levelsGained {
+		t.Fatalf("310.f1=%d, want 升级数%d", got, res.levelsGained)
 	}
 	heavier := &RolledFish{FishGUID: newFishGUID(), Species: "perch", Grade: 4, WeightG: 900, LengthM: 0.35, LocLevel: "level_001_lake"}
 	res2 := srv.settleCatchXP(ctx, uid, heavier, 1)
 	if !res2.isRecord {
 		t.Fatal("900g 超过已入护的 800g，应记为个人纪录")
 	}
-	if got := u32Of(srv.buildSettle813(ctx, uid, heavier, res2).Field(8).Val.Field(1).Num); got != 1 {
-		t.Fatalf("310.f1=%d, want 1", got)
+	if got := u32Of(srv.buildSettle813(ctx, uid, heavier, res2).Field(8).Val.Field(1).Num); int64(got) != res2.levelsGained {
+		t.Fatalf("310.f1=%d, want 升级数%d", got, res2.levelsGained)
 	}
-	if got := u32Of(srv.build813(ctx, uid, heavier, 900, 0).Field(8).Val.Field(1).Num); got != 0 {
+	if got := u32Of(srv.build813(ctx, uid, heavier, 900, 0, 0).Field(8).Val.Field(1).Num); got != 0 {
 		t.Fatalf("同重 310.f1=%d, want 0", got)
 	}
 }

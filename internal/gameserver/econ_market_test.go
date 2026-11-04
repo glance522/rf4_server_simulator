@@ -174,6 +174,11 @@ func TestFishMarketFlow(t *testing.T) {
 	if resp := fc.WaitResponse(3 * time.Second); resp == nil || resp.Body[0] != 0x01 {
 		t.Fatalf("14/2 应回 800: %+v", resp)
 	}
+	waterBody, err := proto.EncodeValue(proto.Args524(wiregen.MustMakeObj("lobemkloehp", map[int]*proto.Value{5: proto.U32(0x600)})), wiregen.Table())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc.SendRequest(203, 14, 7, waterBody...)
 	// 14/14（bite_delay_fixed=0.3，落水保护顺延至 ~6s）
 	fish14 := waitPushCmd(t, fc, 14, 14, 20*time.Second)
 	if fish14 == nil {
@@ -237,13 +242,14 @@ func TestFishMarketFlow(t *testing.T) {
 		t.Fatalf("刚入护的鱼不应腐败: flag=%d", flag)
 	}
 
-	// 20/3 分组：卖前应有一组 301。
+	// 咖啡厅订单独立于玩家护网。
 	fc.SendRequest(207, 20, 3)
 	resp = fc.WaitResponse(3 * time.Second)
 	dec, _, _ = proto.DecodeValue(resp.Body, 0, table)
-	if dec == nil || dec.ArgCodeStr() != "110" || dec.ArgCount() != 1 {
-		t.Fatalf("20/3 卖前应 1 组: code=%q n=%d", dec.ArgCodeStr(), dec.ArgCount())
+	if dec == nil || dec.ArgCodeStr() != "110" || dec.ArgCount() != 10 {
+		t.Fatalf("20/3 应有10张独立订单: code=%q n=%d", dec.ArgCodeStr(), dec.ArgCount())
 	}
+	cafeID := dec.ArgItem(0).Field(0).Hex
 
 	// 20/2 卖出：入账 = 报价（恰一次）
 	fc.SendRequest(208, 20, 2, bodyWithGUIDs(fishGUID)...)
@@ -280,12 +286,12 @@ func TestFishMarketFlow(t *testing.T) {
 		t.Fatal("20/2 后未收到 4/21 移除推送")
 	}
 
-	// 20/3 卖后应为空分组。
+	// 卖鱼不清空咖啡厅需求。
 	fc.SendRequest(209, 20, 3)
 	resp = fc.WaitResponse(3 * time.Second)
 	dec, _, _ = proto.DecodeValue(resp.Body, 0, table)
-	if dec == nil || dec.ArgCodeStr() != "110" || dec.ArgCount() != 0 {
-		t.Fatalf("20/3 卖后应无分组: code=%q n=%d", dec.ArgCodeStr(), dec.ArgCount())
+	if dec == nil || dec.ArgCodeStr() != "110" || dec.ArgCount() != 10 || dec.ArgItem(0).Field(0).Hex != cafeID {
+		t.Fatalf("20/3 卖后应保留原订单: code=%q n=%d", dec.ArgCodeStr(), dec.ArgCount())
 	}
 
 	// 21/1 工坊列表：无磨损物品时空 args(144)

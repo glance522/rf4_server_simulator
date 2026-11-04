@@ -177,7 +177,15 @@ func (s *Server) tryBaitDig(ctx *Ctx) ([]byte, bool) {
 	if err != nil {
 		return s.replyBaitDigFailed(ctx, "饵物品树构造失败: "+err.Error()), true
 	}
-	body, ok := s.replyBaitDigResult(ctx, tree, gain)
+	previewRow := *row
+	if err := setPreparedItemQuantity(&previewRow, qty); err != nil {
+		return s.replyBaitDigFailed(ctx, "饵获得数量构造失败: "+err.Error()), true
+	}
+	preview, err := s.ItemToTree(cctx, &previewRow)
+	if err != nil {
+		return s.replyBaitDigFailed(ctx, "饵获得预览构造失败: "+err.Error()), true
+	}
+	body, ok := s.replyBaitDigResult(ctx, preview, tree, gain)
 	if !ok {
 		return nil, true
 	}
@@ -223,11 +231,16 @@ func stackCountFromRow(it *store.Item) int64 {
 	return 1
 }
 
-func (s *Server) replyBaitDigResult(ctx *Ctx, tree *proto.Value, masteryGain float64) ([]byte, bool) {
+// replyBaitDigResult 将本次获得预览放入 803.f1，库存快照仍保留累计数量。
+// 预览与库存使用独立物品树，避免修改提示数量时覆盖背包数量。
+//
+// replyBaitDigResult puts this acquisition's preview in 803.f1 while inventory snapshots retain the stack total.
+// The preview and inventory use separate item trees so changing the displayed gain cannot overwrite inventory counts.
+func (s *Server) replyBaitDigResult(ctx *Ctx, preview, tree *proto.Value, masteryGain float64) ([]byte, bool) {
 	items := proto.Args(proto.S("61"), tree)
 	obj := wiregen.MustMakeObj("beckiiffkem", map[int]*proto.Value{
 		0: proto.U32(1),
-		1: items,
+		1: proto.Args(proto.S("61"), preview),
 		2: masteryGainValue(captureBaitSkillID, masteryGain),
 		3: proto.Null(),
 		6: items,

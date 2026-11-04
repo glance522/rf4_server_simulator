@@ -2,6 +2,12 @@ package proto
 
 import "fmt"
 
+// 401.f4 官方 KV 参数数组的线上常量（客户端 mdbadlkabhk/dejdolfnooh）。
+const (
+	kvListElementType = "dejdolfnooh"
+	kvEntryTypeID     = 400 // wiregen 注册表：400 = plbmkhnmeim（dejdolfnooh codec）
+)
+
 // EncodeValue 将树节点编码为 wire 字节。
 // ops 表用于 obj：按类名取 op 序列，并要求字段数与 ops 数一致。
 func EncodeValue(v *Value, table *OpsTable) ([]byte, error) {
@@ -167,6 +173,91 @@ func EncodeValue(v *Value, table *OpsTable) ([]byte, error) {
 		}
 		out = append(out, vb...)
 		return out, nil
+
+	case KindKVList:
+		// 客户端 mdbadlkabhk（对象数组，marker 0x03）：
+		// [0x03][元素类型名][u16 count] + 元素（各自带 marker）。
+		// 读取端 Array.CreateInstance(元素类型, n) 产出真数组——f4 字段
+		// 类型是 dejdolfnooh[]，用 List 容器(0x0A)会转型失败致客户端断连。
+		out := []byte{0x03}
+		et := kvListElementType
+		etb, err := PackShortStr(&et)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, etb...)
+		if len(v.Items) > 0xFFFF {
+			return nil, errAt("encode", "kvlist", "too many entries", len(v.Items))
+		}
+		out = append(out, PackU16(uint32(len(v.Items)))...)
+		for _, e := range v.Items {
+			eb, err := EncodeValue(e, table)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, eb...)
+		}
+		return out, nil
+
+	case KindKVArr:
+		// 裸类型化数组（lpdfanjcalm<T> 静态类型直读的推测形状）：
+		// [u16 n] + n×([键字节][值 marker+载荷])，无容器与元素头。
+		if len(v.Items) > 0xFFFF {
+			return nil, errAt("encode", "kvarr", "too many entries", len(v.Items))
+		}
+		out := PackU16(uint32(len(v.Items)))
+		for _, e := range v.Items {
+			if e == nil || e.Kind != KindKVEntry || len(e.Items) == 0 {
+				return nil, errAt("encode", "kvarr", "entry must be kventry", 0)
+			}
+			vb, err := EncodeValue(e.Items[0], table)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, e.Marker)
+			out = append(out, vb...)
+		}
+		return out, nil
+
+	case KindTypedArr:
+		// 自定义类型名数组（探测用）：[0x03][类型名][u16 n] + 元素（各带 marker）。
+		out := []byte{0x03}
+		tn := v.TypeName
+		tb, err := PackShortStr(&tn)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, tb...)
+		out = append(out, PackU16(uint32(len(v.Items)))...)
+		for _, e := range v.Items {
+			eb, err := EncodeValue(e, table)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, eb...)
+		}
+		return out, nil
+
+	case KindKVEntry:
+		// typed object（marker 0x01）+ typeid 400（plbmkhnmeim/dejdolfnooh）
+		// + [1 字节键] + 通用值。读取端 ghgfmpajoej 按 marker 分发，自洽。
+		// typed object（marker 0x01）+ typeid 400（plbmkhnmeim/dejdolfnooh）
+		// + [1 字节键] + 通用值。读取端 ghgfmpajoej 按 marker 分发，自洽。
+		var val []byte
+		var err error
+		if len(v.Items) > 0 {
+			val, err = EncodeValue(v.Items[0], table)
+		} else {
+			val = []byte{0x00}
+		}
+		if err != nil {
+			return nil, err
+		}
+		out := make([]byte, 0, 7+len(val))
+		out = append(out, 0x01)
+		out = append(out, PackU32(kvEntryTypeID)...)
+		out = append(out, v.Marker)
+		return append(out, val...), nil
 
 	case KindDateTime:
 		out := []byte{0x0B}

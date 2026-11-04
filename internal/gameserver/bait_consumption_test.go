@@ -284,18 +284,32 @@ func TestBaitConsumptionThroughBiteAndReplay(t *testing.T) {
 		t.Fatalf("real bite did not save its bait snapshot: %+v", pending)
 	}
 	row, _ := db.GetItemByGUID(t.Context(), source)
-	if row == nil || baitQuantity(row) != 4 {
-		t.Fatal("real bite did not consume exactly one unit")
+	if row == nil || baitQuantity(row) != 4 || len(s.currentBaits(t.Context(), rod)) != 1 {
+		t.Fatal("fish push consumed bait before the client confirmed a hook")
 	}
 	s.repushPending14_14(1000001)
 	row, _ = db.GetItemByGUID(t.Context(), source)
+	if row == nil || baitQuantity(row) != 4 || len(s.currentBaits(t.Context(), rod)) != 1 {
+		t.Fatal("replaying fish consumed bait before hook confirmation")
+	}
+	sess := s.liveSessionByUID(1000001)
+	if _, ok := hFishingHooked(&Ctx{Sess: sess, Main: 14, Sub: 11, Log: logging.Discard()}); !ok {
+		t.Fatal("14/11 hook confirmation was not handled")
+	}
+	row, _ = db.GetItemByGUID(t.Context(), source)
 	if row == nil || baitQuantity(row) != 4 {
-		t.Fatal("replaying fish consumed another bait")
+		t.Fatal("hook confirmation did not consume exactly one unit")
+	}
+	if _, ok := hFishingHooked(&Ctx{Sess: sess, Main: 14, Sub: 11, Log: logging.Discard()}); !ok {
+		t.Fatal("replayed 14/11 hook confirmation was not handled")
+	}
+	row, _ = db.GetItemByGUID(t.Context(), source)
+	if row == nil || baitQuantity(row) != 4 {
+		t.Fatal("replayed hook confirmation consumed another bait")
 	}
 	if len(s.currentBaits(t.Context(), rod)) != 0 {
 		t.Fatal("next bait was mounted during the fight")
 	}
-	sess := s.liveSessionByUID(1000001)
 	if err := sess.prepareBaitForCast(st, rod); err != nil {
 		t.Fatal(err)
 	}
@@ -312,5 +326,40 @@ func TestBaitConsumptionThroughBiteAndReplay(t *testing.T) {
 	row, _ = db.GetItemByGUID(t.Context(), source)
 	if row == nil || baitQuantity(row) != 3 || len(s.currentBaits(t.Context(), rod)) != 1 {
 		t.Fatal("next cast did not reserve exactly one replacement")
+	}
+}
+
+func TestMarineBaitConsumptionReloadsAllSlotsInOrder(t *testing.T) {
+	s, db := newRigTestServer(t)
+	ctx := t.Context()
+	const uid int64 = 1000001
+	rod, err := s.CreateItem(ctx, uid, "boatr_10222_SBH80_100", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.rigSetType(ctx, uid, rod.GUID, 59) {
+		t.Fatal("marine rig rejected")
+	}
+	ids := []string{"worm_01", "muckworm", "fly"}
+	for i, id := range ids {
+		baitTestMount(t, s, rod.GUID, id, 5, int64(350+i))
+	}
+	snapshot, known := s.biteBaitSnapshot(ctx, rod.GUID)
+	if !known || len(strings.Fields(snapshot)) != len(ids) {
+		t.Fatalf("snapshot=%q", snapshot)
+	}
+	change, err := s.consumeBaitEvent(ctx, uid, rod.GUID, "marine-bite", strings.Fields(snapshot), false)
+	if err != nil || len(change.Removed) != len(ids) {
+		t.Fatalf("deduction=%+v err=%v", change, err)
+	}
+	if _, err := s.reloadBaitForCast(ctx, uid, rod.GUID); err != nil {
+		t.Fatal(err)
+	}
+	for i, id := range ids {
+		guid := s.storedRigComponents(ctx, rod.GUID)[rigCompKey(catBait, int64(i))].GUID
+		row, err := db.GetItemByGUID(ctx, guid)
+		if err != nil || row == nil || row.ItemID != id {
+			t.Fatalf("slot %d: row=%+v want=%s err=%v", i, row, id, err)
+		}
 	}
 }

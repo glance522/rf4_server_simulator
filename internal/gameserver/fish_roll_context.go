@@ -7,12 +7,17 @@ import (
 
 // fishRollContext 只传递本次判鱼的区域和钩上饵，不改动存档格式。
 type fishRollContext struct {
-	x, z   float64
-	hasPos bool
-	spot   uint64
-	now    time.Time
-	baits  []string
-	forRig bool
+	x, z      float64
+	hasPos    bool
+	spot      uint64
+	now       time.Time
+	baits     []string
+	forRig    bool
+	depthCM   int64
+	weather   fishingWeather
+	rigType   int64
+	happyBite float64
+	biteRoll  func() float64
 }
 
 func rollContext(contexts []fishRollContext) fishRollContext {

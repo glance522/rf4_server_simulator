@@ -109,7 +109,7 @@ func (s *Server) fishingEnd(ctx *Ctx) ([]byte, bool) {
 		st.LastSkill = skillID
 		st.mu.Unlock()
 
-		stats813 = s.build813(cctx, uid, pending, prevBest, skillGain)
+		stats813 = s.build813(cctx, uid, pending, prevBest, skillGain, levelsGained)
 		profileTree, _ = s.BuildProfile307(cctx, uid)
 		skill312 = s.buildSingleSkill312(cctx, uid, skillID)
 	}
@@ -159,7 +159,7 @@ func (s *Server) fishingEnd(ctx *Ctx) ([]byte, bool) {
 }
 
 // build813 搏鱼统计块（813 内嵌 310 + 25）。
-func (s *Server) build813(ctx context.Context, uid int64, f *RolledFish, prevBest int64, skillGain float64) *proto.Value {
+func (s *Server) build813(ctx context.Context, uid int64, f *RolledFish, prevBest int64, skillGain float64, levelsGained int64) *proto.Value {
 	// SPECIES_FIGHT_STATICS 鱼种静态组（未知鱼种按 species_weight 推导）
 	st := s.settleStatics(ctx, f.Species)
 	f0, f1, f2, f3, f5 := float64(st[0]), float64(st[1]), float64(st[2]), float64(st[3]), float64(st[5])
@@ -175,11 +175,11 @@ func (s *Server) build813(ctx context.Context, uid int64, f *RolledFish, prevBes
 
 	obj310 := wiregen.MustMakeObj("kegeppimjbm", map[int]*proto.Value{
 		0: proto.U64(uint64(f.XP)), // 单鱼经验（不是累计）
-		1: proto.U32(personalRecordFlag(prevBest <= 0 || f.WeightG > prevBest)),
+		1: proto.U32(uint32(max64(0, levelsGained))),
 		2: proto.U32(uint32(stLastSkill(s, uid))),
 		3: proto.F32(float32(skillGain)),
 		4: proto.Null(),
-		5: proto.U32(0), // levelsGained 由 2/6 承担
+		5: proto.U32(0),
 		6: proto.Args(proto.S("31")),
 	})
 	keep25 := s.buildPending25(f, s.stateFor(uid), s.currentLevel(uid))
@@ -211,27 +211,8 @@ func stLastSkill(s *Server, uid int64) int64 {
 
 // buildSingleSkill312 单大类 312（801.f6 用）。
 func (s *Server) buildSingleSkill312(ctx context.Context, uid, catID int64) *proto.Value {
-	points, _ := s.DB.ListSkills(ctx, uid)
-	nodes, _ := s.DB.ListSkillNodes(ctx, uid)
-	catNodes := proto.Args(proto.S("122"))
-	for _, nd := range s.skillDefsOfCat(catID) {
-		catNodes.Items = append(catNodes.Items,
-			wiregen.MustMakeObj("bmdafhbpfci", map[int]*proto.Value{
-				0: proto.U32(uint32(nd.NodeID)),
-				1: proto.U32(f32bitsOf(nd.UnlockPct)),
-				2: proto.U32(uint32(nd.MaxLevel)),
-				3: proto.U32(uint32(nodes[nd.NodeID])),
-				4: proto.U32(f32bitsOf(nd.EffectPct)),
-				5: proto.U32(uint32(nd.GroupID)),
-				6: proto.U32(boolU32(nodeUnlocked(nd, points[catID], 0))),
-			}))
-	}
-	return wiregen.MustMakeObj("kmepameiibi", map[int]*proto.Value{
-		0: proto.U32(uint32(catID)),
-		1: proto.F32(float32(points[catID])),
-		2: proto.F32(0.0),
-		3: catNodes,
-	})
+	effects, _ := s.effectiveFishingSkills(ctx, uid)
+	return s.skillCategory312(catID, effects)
 }
 
 // build5003 5012 赛季块（801.f3）。
@@ -319,6 +300,7 @@ func (s *Server) fishingKeep(ctx *Ctx) ([]byte, bool) {
 			st.Keepnet = append(st.Keepnet, &kept)
 		}
 		st.mu.Unlock()
+		s.notifyFishKept(ctx.Sess, &kept)
 		out := proto.Args(proto.S("61"))
 		if keptInNet {
 			out.Items = append(out.Items, s.buildPending25(&kept, st, keepLevel))
@@ -418,6 +400,7 @@ func (s *Server) fishingRelease(ctx *Ctx) ([]byte, bool) {
 				ctx.Sess.Push2_6(max64(1, newLevel-1))
 			}
 		}
+		s.notifyFishReleased(ctx.Sess, pending)
 	}
 	// 响应 807：{null, null, 307, null, null, null}
 	profileTree, err := s.BuildProfile307(ctx.Sess.pushCtx(), uid)

@@ -5,6 +5,7 @@ import (
 	"math"
 	"testing"
 
+	"rf4server/internal/config"
 	"rf4server/internal/logging"
 	"rf4server/internal/proto"
 	"rf4server/internal/wiregen"
@@ -43,8 +44,10 @@ func TestDynamicProtocolHandlersShapeAndEcho(t *testing.T) {
 		if got := f0.StrOr(); got != "loc12_01" {
 			t.Fatalf("1/10 f0=%q, 期望 loc12_01", got)
 		}
-		if grid := dec.Field(1).Val; grid == nil || grid.Kind != proto.KindArgs || grid.ArgCodeStr() != "15004" {
-			t.Fatalf("1/10 f1 应为 args(15004)，实得 %#v", grid)
+		if grid := dec.Field(1).Val; grid == nil || grid.Kind != proto.KindNull {
+			// 客户端 4.0.25034 不认识 15004，连空的 args(15004) 都会抛
+			// GetType not found 并断线，所以默认只回 f1=null。
+			t.Fatalf("1/10 f1 应为 null，实得 %#v", grid)
 		}
 		if reason := srv.dispatch.checkRegisteredResponse(1, 10, body, srv.Table()); reason != "" {
 			t.Fatalf("1/10 合同守卫误拒: %s", reason)
@@ -74,7 +77,8 @@ func TestDynamicProtocolHandlersShapeAndEcho(t *testing.T) {
 		}
 	})
 
-	t.Run("17/9 echoes broken component guid", func(t *testing.T) {
+	t.Run("17/9 echoes broken component guid without DB", func(t *testing.T) {
+		srv := NewServer(config.Game{}, logging.Discard(), nil)
 		rodGUID := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 		brokenGUID := "fedcba9876543210fedcba9876543210"
 		tree := rigRequestTree(t, proto.Guid(rodGUID), proto.Guid(brokenGUID), proto.U32(1), proto.Null())
@@ -90,7 +94,7 @@ func TestDynamicProtocolHandlersShapeAndEcho(t *testing.T) {
 			t.Fatalf("17/9 响应类型=%s/%d", dec.Class, dec.TypeID)
 		}
 		if u64Of(dec.Fields[0].Num) != 0 {
-			t.Fatal("无库物品时兼容响应 f0 应为 false")
+			t.Fatal("无数据库时兼容响应 f0 应为 false")
 		}
 		f1 := dec.Field(1)
 		if got := f1.GuidHex(); got != brokenGUID {

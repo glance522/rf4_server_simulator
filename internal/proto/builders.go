@@ -116,6 +116,28 @@ func Str3(a, b, c *string) *Value { return &Value{Kind: KindStr3, S3: [3]*string
 
 func KV(k, v *string) *Value { return &Value{Kind: KindKV, S3: [3]*string{k, v}} }
 
+// KVEntry 客户端 dejdolfnooh 模板参数条目。Key 为 ncimfffikjb 键位
+// （1=鱼种key 字符串 2=重量克 int 3/4/7=int 6=榜单类型字符串）。
+type KVEntry struct {
+	Key byte
+	Val *Value
+}
+
+// KVList 构造 401.f4 官方 KV 参数数组：对象数组容器（marker 0x03）+
+// typed KV 元素。值用 StrVal（短串 0x14）与 U32（int）。
+func KVList(entries ...KVEntry) *Value {
+	return KVListCustom(kvListElementType, entries...)
+}
+
+// KVListCustom 同 KVList 但允许自定义元素类型名（探测注册表用）。
+func KVListCustom(typeName string, entries ...KVEntry) *Value {
+	items := make([]*Value, 0, len(entries))
+	for _, e := range entries {
+		items = append(items, &Value{Kind: KindKVEntry, Marker: e.Key, Items: []*Value{e.Val}})
+	}
+	return &Value{Kind: KindTypedArr, TypeName: typeName, Items: items}
+}
+
 func ElemNull() *Value { return &Value{Kind: KindElemNull} }
 
 // ---- 字段级构造 ----

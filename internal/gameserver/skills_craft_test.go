@@ -294,8 +294,11 @@ func TestCraftFlow(t *testing.T) {
 	if f1 == nil || f1.Kind != proto.KindArgs || len(f1.Items) != 1 {
 		t.Fatalf("803.f1 应为 1 件产出，实得 %+v", f1)
 	}
+	if v.Fields[7].Val == nil || v.Fields[7].Val.Kind != proto.KindNull {
+		t.Fatalf("803.f7 不应发送，实得 %+v", v.Fields[7].Val)
+	}
 	if f8 := v.Fields[8].Val; f8 == nil || f8.Kind != proto.KindGuidArr || len(f8.Items) != 1 {
-		t.Fatalf("803.f8 应移除 1 个材料 guid，实得 %+v", f8)
+		t.Fatalf("803.f8 应移除耗尽的材料，实得 %+v", f8)
 	}
 	if got := countOf("loaf_01"); got != 0 {
 		t.Fatalf("loaf_01 应被扣空，实得 %d", got)

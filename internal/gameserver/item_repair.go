@@ -10,7 +10,9 @@ import (
 // itemPhysicsRepairKey 记录最近一次物理字段修复的版本与统计。
 // 每次启动仍会重新扫描，以修复后续导入或回档产生的异常数据。
 const itemPhysicsRepairKey = "repair:item_physics:v5"
-const itemPhysicsRepairVersion = "8"
+const itemPhysicsRepairVersion = "10"
+
+const craftedLeaderQuarantineContainer = "craft_quarantine"
 
 // RepairItemPhysics 修复已落库物品的物理字段快照：
 //   - 把误落成钓线类的工具、材料和铃铛改写成自己的实例类；
@@ -18,7 +20,8 @@ const itemPhysicsRepairVersion = "8"
 //   - 补全线、钩、竿、轮的顶层强度；
 //   - 回填零值状态位和容器枚举；
 //   - 修正渔轮刹车片曳力与成色；
-//   - 将竿的 f5 类型限制在竿型允许范围内。
+//   - 将竿的 f5 类型限制在竿型允许范围内；
+//   - 把自制引线的普通主线子对象换成对应的前导线定义。
 //
 // 兼容性只用于装配推荐，不覆盖玩家显式选择。修复写回 fields_json，
 // 并通过 ensureRig 同步 rig/rig_component。成功后写版本和统计标记；
@@ -50,6 +53,7 @@ func (s *Server) RepairItemPhysics(ctx context.Context) error {
 
 	changed := 0
 	rigsRepaired := 0
+	quarantined := 0
 	for _, guid := range guids {
 		it, err := s.DB.GetItemByGUID(ctx, guid)
 		if err != nil {
@@ -73,9 +77,21 @@ func (s *Server) RepairItemPhysics(ctx context.Context) error {
 			return fmt.Errorf("物品物理状态修复：解析 %s: %w", guid, err)
 		}
 		fields = alignFieldsToOps(it, fields)
+		leaderChanged, invalidLeader, lerr := s.repairCraftedLeaderWire(ctx, it, fields)
+		if lerr != nil {
+			return fmt.Errorf("物品物理状态修复：修复引线 %s: %w", guid, lerr)
+		}
+		if invalidLeader {
+			if err := s.DB.UpdateItemContainer(ctx, it.GUID, craftedLeaderQuarantineContainer); err != nil {
+				return fmt.Errorf("物品物理状态修复：隔离无效引线 %s: %w", guid, err)
+			}
+			quarantined++
+			s.log.Warn("无效自制引线已隔离", "guid", guid, "item", it.ItemID)
+			continue
+		}
 		before, _ := FieldsToJSON(fields)
 		obj := proto.Obj(it.WireClass, uint32(it.TypeID), fields...)
-		rowChanged := false
+		rowChanged := leaderChanged
 		var rodCreated proto.Field
 		hasRodCreated := false
 		// 与 ItemToTree 的字段修复保持一致：状态零值和缺失子件必须写回数据库。
@@ -98,6 +114,13 @@ func (s *Server) RepairItemPhysics(ctx context.Context) error {
 			if hasRodCreated {
 				if idx := fieldIdxByCS(it.WireClass, csCreated); idx >= 0 && idx < len(fields) {
 					fields[idx] = rodCreated
+				}
+			}
+			// 挂饵方式可选项缺失时补默认掩码：f9=0 会让「选择安装方式」
+			// 弹窗全空、鱼饵被判定为不适配（2026-11-04 实测）。
+			if idx := fieldIdxByCS(it.WireClass, csRigObject); idx >= 0 && idx < len(fields) && fields[idx].Val != nil {
+				if _, avail := rigBaitMountsOf(fields[idx].Val); avail == 0 {
+					setRigBaitMountAvail(fields[idx].Val, defaultBaitMountAvail)
 				}
 			}
 		}
@@ -134,12 +157,13 @@ func (s *Server) RepairItemPhysics(ctx context.Context) error {
 		}
 	}
 
-	marker := fmt.Sprintf("done;version=%s;scanned=%d;changed=%d;rods=%d",
-		itemPhysicsRepairVersion, len(guids), changed, rigsRepaired)
+	marker := fmt.Sprintf("done;version=%s;scanned=%d;changed=%d;rods=%d;quarantined=%d",
+		itemPhysicsRepairVersion, len(guids), changed, rigsRepaired, quarantined)
 	if err := s.DB.KVSet(ctx, itemPhysicsRepairKey, marker); err != nil {
 		return fmt.Errorf("物品物理状态修复：写完成标记: %w", err)
 	}
 	s.log.Info("物品物理状态修复完成", "version", itemPhysicsRepairVersion,
-		"items_changed", changed, "rods_repaired", rigsRepaired, "total", len(guids))
+		"items_changed", changed, "rods_repaired", rigsRepaired,
+		"quarantined", quarantined, "total", len(guids))
 	return nil
 }

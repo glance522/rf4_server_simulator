@@ -111,12 +111,32 @@ func hItemMove(ctx *Ctx) ([]byte, bool) {
 }
 
 // hItemRemove 4/7：删除物品 → 回快照。
+// 载荷为 args("524")[容器枚举, GuidArr]。容器=5（鱼护）时目标是 keepnet
+// 表的回显 GUID（扔回水里），不在 item 表——按原路径静默无操作会让鱼护
+// 里的鱼扔不出去，需要分流到 KeepnetDelete。
 func hItemRemove(ctx *Ctx) ([]byte, bool) {
 	srv := ctx.Sess.Srv
 	if !srv.requireDB(ctx) {
 		return nil, false
 	}
 	guids := deepGUIDs(ctx.Tree)
+	ints := treeIntsDeep(ctx.Tree)
+	if len(ints) > 0 && ints[0] == containerKeepnet {
+		removed := make([]string, 0, len(guids))
+		for _, g := range guids {
+			if e, err := srv.DB.KeepnetGet(ctx.Sess.pushCtx(), ctx.Sess.Userid, g); err == nil && e != nil {
+				removed = append(removed, g)
+			}
+		}
+		if len(removed) > 0 {
+			if err := srv.DB.KeepnetDelete(ctx.Sess.pushCtx(), ctx.Sess.Userid, removed); err == nil {
+				ctx.Sess.Push4_21(removed)
+			} else {
+				ctx.Log.Warn("4/7 鱼护删除失败", "err", err, "count", len(removed))
+			}
+		}
+		return srv.rigSnapshot800(ctx), true
+	}
 	owned := make([]string, 0, len(guids))
 	for _, g := range guids {
 		row, err := srv.DB.GetItemByGUID(ctx.Sess.pushCtx(), g)
@@ -197,6 +217,8 @@ func hPlaceBuyoutTx(ctx *Ctx) ([]byte, bool) {
 		return nil, false
 	}
 	uid := ctx.Sess.Userid
+	// bundleGrant 标记本次买断是否落在捆绑包价位，提交后再发附赠物品。
+	bundleGrant := false
 	cctx := ctx.Sess.pushCtx()
 	place, packet, price := parsePlaceBuyoutArgs(ctx.Tree)
 	tier := placeBuyoutPrice(place, packet)
@@ -232,6 +254,7 @@ func hPlaceBuyoutTx(ctx *Ctx) ([]byte, bool) {
 			ctx.Log.Info("3/37 金币买断地图", "place", place, "tier", packet,
 				"gold", -tier, "gold_yuan", float64(tier)/100.0)
 		}
+		bundleGrant = true
 	} else if owned == 0 {
 		tiers, _ := placeBuyoutTiers[place]
 		ctx.Log.Info("3/37 价格与静态表不符或未授权，不扣款", "place", place,
@@ -240,6 +263,9 @@ func hPlaceBuyoutTx(ctx *Ctx) ([]byte, bool) {
 	if err := tx.Commit(); err != nil {
 		ctx.Log.Warn("3/37 事务提交失败", "err", err)
 		return nil, false
+	}
+	if bundleGrant {
+		srv.grantPremiumBundle(cctx, ctx, uid, place, tier)
 	}
 	p, err := srv.BuildProfile307(cctx, uid)
 	if err != nil {

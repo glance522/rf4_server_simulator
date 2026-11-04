@@ -104,6 +104,29 @@ func buildMail11062(m *store.MailRow) *proto.Value {
 	})
 }
 
+// notifyMail 在邮件事务提交后向收件人的全部在线会话发送完整邮件快照。
+// 空参数不会给客户端提供新条目；附件仍须通过领取接口进入背包。
+func (s *Server) notifyMail(ctx context.Context, uid, id int64) {
+	mail, err := s.DB.MailGet(ctx, uid, id)
+	if err != nil {
+		s.log.Warn("邮件在线通知读取失败", "uid", uid, "mail_id", id, "err", err)
+		return
+	}
+	if mail.Read != 0 {
+		return
+	}
+	body := proto.Args524(buildMail11062(mail))
+	var sent int
+	for _, sess := range s.sessionsForUID(uid) {
+		if sess.Push(19, 10, body) != 0 {
+			sent++
+		} else {
+			s.log.Warn("邮件在线通知发送失败", "uid", uid, "mail_id", id, "sid", sess.ID)
+		}
+	}
+	s.log.Info("邮件在线通知", "uid", uid, "mail_id", id, "sessions", sent)
+}
+
 // hMailGet 19/7：args("524")[11062...]。
 func hMailGet(ctx *Ctx) ([]byte, bool) {
 	if !ctx.Sess.Srv.requireDB(ctx) {
@@ -145,17 +168,24 @@ func hMailSendMessage(ctx *Ctx) ([]byte, bool) {
 	if toUID > 0 && toUID != ctx.Sess.Userid {
 		cctx := ctx.Sess.pushCtx()
 		tx, err := beginEconomyTx(cctx, srv.DB)
+		var mailID int64
 		if err == nil {
 			defer func() { _ = tx.Rollback() }()
-			_, err = tx.ExecContext(cctx, `
+			var result sql.Result
+			result, err = tx.ExecContext(cctx, `
 				INSERT INTO mail(uid, sender, kind, text, items_json, created_ts, read)
 				VALUES(?,?,0,?,NULL,?,0)`, toUID, ctx.Sess.Userid, text, float64(time.Now().Unix()))
+			if err == nil {
+				mailID, err = result.LastInsertId()
+			}
 			if err == nil {
 				err = tx.Commit()
 			}
 		}
 		if err != nil {
 			ctx.Log.Warn("19/1 发送文本邮件失败", "to", toUID, "err", err)
+		} else {
+			srv.notifyMail(cctx, toUID, mailID)
 		}
 	}
 	return []byte{0x00}, true
@@ -382,17 +412,23 @@ func hMailSendItem(ctx *Ctx) ([]byte, bool) {
 	if err != nil {
 		return []byte{0x0F}, true
 	}
-	_, err = tx.ExecContext(cctx, `
+	result, err := tx.ExecContext(cctx, `
 		INSERT INTO mail(uid, sender, kind, text, items_json, attachment_snapshot_version, created_ts, read)
 		VALUES(?,?,1,'',?,?,?,0)`, toUID, uid, string(raw), mailItemSnapshotVersion, float64(time.Now().Unix()))
 	if err != nil {
 		ctx.Log.Warn("19/2 创建附件邮件失败", "to", toUID, "err", err)
 		return []byte{0x0F}, true
 	}
+	mailID, err := result.LastInsertId()
+	if err != nil {
+		ctx.Log.Warn("19/2 读取邮件编号失败", "err", err)
+		return []byte{0x0F}, true
+	}
 	if err := tx.Commit(); err != nil {
 		ctx.Log.Warn("19/2 事务提交失败", "err", err)
 		return []byte{0x0F}, true
 	}
+	srv.notifyMail(cctx, toUID, mailID)
 	if locked.Qty == 0 {
 		ctx.Sess.Push4_21([]string{locked.GUID})
 	}
@@ -659,7 +695,10 @@ type AdminCommand struct {
 	KeepnetGUIDs []string            `json:"keepnet_guids,omitempty"`
 	Species      string              `json:"species,omitempty"`  // arm_fish：鱼种（空=默认池随机）
 	WeightG      int64               `json:"weight_g,omitempty"` // arm_fish：克重（空=默认池范围内）
-	Grade        int64               `json:"grade,omitempty"`    // arm_fish：档位 1..4（空=重量定档）
+	Grade        int64               `json:"grade,omitempty"`    // 兼容旧指令；实际档位按结算尺和重量计算。
+	Channel      int64               `json:"channel,omitempty"`  // fish_tv_test：聊天推送通道 24..31
+	Kind         int64               `json:"kind,omitempty"`     // fish_tv_test：401.f0 消息类型；负值为参数位探测
+	KVShape      int64               `json:"kv_shape,omitempty"` // fish_tv_test：401.f4 模板 KV 形状或外层参数探测编号
 }
 
 // StartAdminSubscriber 轮询共享 SQLite 队列，每 2 秒处理一批管理指令。
@@ -746,6 +785,7 @@ func (s *Server) execAdminCmd(cmd *AdminCommand) {
 		}
 		entry := *cmd.Keepnet
 		entry.UID = cmd.UID
+		entry.Cat = s.rollGradeDB(ctx, entry.Species, entry.WeightG)
 		if entry.EchoGUID == "" {
 			entry.EchoGUID = newFishGUID()
 		}
@@ -772,8 +812,10 @@ func (s *Server) execAdminCmd(cmd *AdminCommand) {
 			s.log.Info("管理指令：删除护网鱼", "uid", cmd.UID, "count", len(cmd.KeepnetGUIDs))
 		}
 	case "send_mail":
-		if _, err := s.DB.MailInsert(ctx, cmd.UID, 0, 0, cmd.Text, cmd.Items); err != nil {
+		if id, err := s.DB.MailInsert(ctx, cmd.UID, 0, 0, cmd.Text, cmd.Items); err != nil {
 			s.log.Warn("管理指令：发邮件失败", "uid", cmd.UID, "err", err)
+		} else {
+			s.notifyMail(ctx, cmd.UID, id)
 		}
 	case "arm_fish":
 		st := s.stateFor(cmd.UID)
@@ -788,16 +830,11 @@ func (s *Server) execAdminCmd(cmd *AdminCommand) {
 			if f.WeightG == 0 {
 				f.WeightG = r.WeightG
 			}
-			if f.Grade == 0 {
-				f.Grade = r.Grade
-			}
 		}
 		if f.WeightG == 0 {
 			f.WeightG = 500
 		}
-		if f.Grade == 0 {
-			f.Grade = 2
-		}
+		f.Grade = s.rollGradeDB(ctx, f.Species, f.WeightG)
 		if f.LengthM == 0 {
 			lp := lengthSeed[f.Species]
 			if lp[0] == 0 {
@@ -816,6 +853,40 @@ func (s *Server) execAdminCmd(cmd *AdminCommand) {
 		s.tunCache = nil // 强制下次读取刷新
 		s.tunMu.Unlock()
 		s.log.Info("管理指令：运行参数已刷新")
+	case "fish_tv_test":
+		// 鱼汛通道探测：向指定玩家（0=全部在线会话）推送一条测试消息。
+		var targets []*Session
+		if cmd.UID != 0 {
+			targets = s.sessionsForUID(cmd.UID)
+		} else {
+			s.mu.Lock()
+			for _, sess := range s.sessions {
+				if sess != nil && !sess.Closed() {
+					targets = append(targets, sess)
+				}
+			}
+			s.mu.Unlock()
+		}
+		text := cmd.Text
+		if text == "" {
+			text = fmt.Sprintf("鱼汛通道测试 ch=%d kind=%d", cmd.Channel, cmd.Kind)
+		}
+		kv := fishTVKvShape(cmd.KVShape, cmd.Species, cmd.WeightG)
+		if cmd.KVShape >= 100 {
+			// 外层参数探测：绕过推送形状守卫。
+			rawVariant := int(cmd.KVShape)
+			for _, sess := range targets {
+				sess.pushChatRaw(rawVariant, int(cmd.Kind), text)
+			}
+			s.log.Info("管理指令：鱼汛外层参数探测", "uid", cmd.UID,
+				"variant", rawVariant, "kind", cmd.Kind, "targets", len(targets))
+			return
+		}
+		for _, sess := range targets {
+			sess.pushChatProbe(int(cmd.Channel), int(cmd.Kind), text, kv)
+		}
+		s.log.Info("管理指令：鱼汛通道测试", "uid", cmd.UID,
+			"channel", cmd.Channel, "kind", cmd.Kind, "kv_shape", cmd.KVShape, "targets", len(targets))
 	case "refresh_player":
 		for _, sess := range s.sessionsForUID(cmd.UID) {
 			sess.Push2_1()
@@ -823,7 +894,7 @@ func (s *Server) execAdminCmd(cmd *AdminCommand) {
 		s.log.Info("管理指令：刷新玩家档案", "uid", cmd.UID)
 	case "refresh_skills":
 		for _, sess := range s.sessionsForUID(cmd.UID) {
-			sess.Push2_6(0)
+			sess.Push2_4SkillTree("admin refresh")
 		}
 		s.log.Info("管理指令：刷新技能面板", "uid", cmd.UID)
 	default:

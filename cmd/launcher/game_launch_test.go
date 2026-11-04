@@ -42,6 +42,37 @@ func TestNormalizeGameExecutable(t *testing.T) {
 	}
 }
 
+// 从聊天窗口/资源管理器粘贴路径时常混入方向标记、零宽字符或全角冒号，
+// 这些不可见字符会让 filepath.IsAbs 判成相对路径，必须自动清理。
+func TestNormalizeGameExecutableStripsInvisibleChars(t *testing.T) {
+	dir := t.TempDir()
+	game := filepath.Join(dir, "rf4_x64.exe")
+	if err := os.WriteFile(game, []byte("stub"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// filepath.Join 在 Windows 下用反斜杠，实测路径形如 C:\...\rf4_x64.exe。
+	raw := game
+	half := len(raw) / 2
+	noisy := []string{
+		"\u202a" + raw,                            // LTR 嵌入标记
+		"\u200b" + raw + "\u200b",                 // 零宽空格
+		"\uFEFF" + raw,                            // BOM
+		"\"" + raw + "\"",                         // 复制为路径带引号
+		"  " + raw + " \r\n",                      // 首尾空白
+		raw[:half] + "\u202c" + raw[half:],        // 路径中间的格式字符
+		strings.Replace(raw, ":", "：", 1),         // 全角冒号
+	}
+	for _, in := range noisy {
+		got, err := normalizeGameExecutable(in)
+		if err != nil {
+			t.Fatalf("input=%q err=%v", in, err)
+		}
+		if got != game {
+			t.Fatalf("input=%q got=%q, want %q", in, got, game)
+		}
+	}
+}
+
 func TestBuildGameCommand(t *testing.T) {
 	dir := t.TempDir()
 	game := filepath.Join(dir, "rf4_x64.exe")

@@ -47,16 +47,66 @@ type corpusRecord struct {
 	X string `json:"x"` // hex
 }
 
-// TestCorpusRoundtrip 语料回环门（不变量：decode→encode 逐字节一致）：
-//
-//	decode(bytes).encode(bytes) == bytes  —— 逐字节一致
-//
-// 数据：本地导出的明文信封与顶层值（不入库）。
+// TestCorpusRoundtrip 验证 decode→encode 逐字节一致。
+// 公开仓库不含抓包语料时仍运行内置值和信封用例；存在私有语料时再执行全量回环。
 func TestCorpusRoundtrip(t *testing.T) {
-	if !corpusAvailable {
-		t.Skip("未嵌入测试语料，跳过回环测试")
-	}
 	table := Table()
+	runBuiltInRoundtrip(t, table)
+	if !corpusAvailable {
+		t.Log("未嵌入私有语料，已通过内置回环用例")
+		return
+	}
+	runCorpusGZRoundtrip(t, table)
+}
+
+func runBuiltInRoundtrip(t *testing.T, table *proto.OpsTable) {
+	t.Helper()
+	value := proto.Args(proto.S("524"), proto.U32(42), proto.StrVal("smoke"))
+	raw, err := proto.EncodeValue(value, table)
+	if err != nil {
+		t.Fatalf("内置值编码: %v", err)
+	}
+	decoded, pos, err := proto.DecodeValue(raw, 0, table)
+	if err != nil {
+		t.Fatalf("内置值解码: %v", err)
+	}
+	if pos != len(raw) {
+		t.Fatalf("内置值解码消费 %d/%d 字节", pos, len(raw))
+	}
+	reencoded, err := proto.EncodeValue(decoded, table)
+	if err != nil {
+		t.Fatalf("内置值重编码: %v", err)
+	}
+	if !bytes.Equal(reencoded, raw) {
+		t.Fatalf("内置值回环不一致: got=%x want=%x", reencoded, raw)
+	}
+
+	requestPayload := append(append([]byte{}, raw...), 1)
+	request := proto.BuildRequestEnvelope(7, 3, 1, requestPayload)
+	env, ok := proto.ParseEnvelope(request)
+	if !ok || env.Marker != -1 || env.CallID != 7 || env.Main != 3 || env.Sub != 1 || !env.HasTail || env.Expect == nil || *env.Expect != 1 {
+		t.Fatalf("内置请求信封解析异常: %+v ok=%v", env, ok)
+	}
+	if !bytes.Equal(env.Body, raw) {
+		t.Fatalf("内置请求 body 不一致: got=%x want=%x", env.Body, raw)
+	}
+	requestBody := append(append([]byte{}, env.Body...), *env.Expect)
+	if rebuilt := proto.BuildRequestEnvelope(env.CallID, env.Main, env.Sub, requestBody); !bytes.Equal(rebuilt, request) {
+		t.Fatalf("内置请求信封回环不一致: got=%x want=%x", rebuilt, request)
+	}
+
+	response := proto.BuildResponseEnvelope(7, raw)
+	env, ok = proto.ParseEnvelope(response)
+	if !ok || env.Marker != -2 || env.CallID != 7 || env.HasTail {
+		t.Fatalf("内置响应信封解析异常: %+v ok=%v", env, ok)
+	}
+	if rebuilt := proto.BuildResponseEnvelope(env.CallID, env.Body); !bytes.Equal(rebuilt, response) {
+		t.Fatalf("内置响应信封回环不一致: got=%x want=%x", rebuilt, response)
+	}
+}
+
+func runCorpusGZRoundtrip(t *testing.T, table *proto.OpsTable) {
+	t.Helper()
 	gz, err := gzip.NewReader(bytes.NewReader(corpusGZ))
 	if err != nil {
 		t.Fatalf("打开语料: %v", err)

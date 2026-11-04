@@ -305,12 +305,20 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 	uid := ctx.Sess.Userid
 	demands := parseDemands(recipe.MaterialsJSON)
 	isBaitCraft := strings.HasPrefix(recipe.RecipeID, "craft_bait_")
+	isLeaderCraft := strings.HasPrefix(recipe.RecipeID, "craft_leader_")
 
 	// 先在事务外构造物品；构造失败时尚未扣材料。
 	producedRow, err := srv.prepareNewItem(cctx, uid, outputID, "backpack", times, "")
 	if err != nil {
 		ctx.Log.Warn("9/1 产出物不可构造", "output", outputID, "err", err)
 		return srv.replyCraftResult(ctx, false, nil, nil, nil)
+	}
+	if isLeaderCraft {
+		// 必须在经济事务开启前加载静态目录；SQLite 单连接事务内再查会阻塞。
+		if _, err := srv.leaderWireCatalog(cctx); err != nil {
+			ctx.Log.Warn("9/1 前导线目录加载失败", "err", err)
+			return srv.replyCraftResult(ctx, false, nil, nil, nil)
+		}
 	}
 
 	tx, err := beginEconomyTx(cctx, srv.DB)
@@ -321,12 +329,20 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 	defer func() { _ = tx.Rollback() }()
 
 	touched := []string{}
+	var leaderMaterials craftedLeaderMaterials
 	fail := func(reason string, args ...any) ([]byte, bool) {
 		ctx.Log.Warn("9/1 制作失败："+reason, args...)
 		return srv.replyCraftResult(ctx, false, nil, nil, nil)
 	}
 
-	if len(demands) > 0 && allDemandsExplicit(demands) {
+	if isLeaderCraft {
+		var materialErr error
+		touched, leaderMaterials, materialErr = srv.consumeLeaderCraftMaterialsTx(
+			cctx, tx, uid, req.Materials, demands, times)
+		if materialErr != nil {
+			return fail("引线材料扣除失败", "err", materialErr)
+		}
+	} else if len(demands) > 0 && allDemandsExplicit(demands) {
 		need := scaleDemands(demands, times)
 		rows, lerr := listItemsTx(cctx, tx, uid, []string{"backpack", "rig"})
 		if lerr != nil {
@@ -440,6 +456,12 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 		}
 	}
 
+	if isLeaderCraft {
+		if err := srv.materializeCraftedLeaderTx(cctx, tx, producedRow, leaderMaterials); err != nil {
+			return fail("引线成品物化失败", "err", err)
+		}
+	}
+
 	// 鱼饵和作者现有可堆叠物品一样并入同编号背包堆，避免每做一次多出一个 30 个的独立堆。
 	row, merged, err := grantPreparedItemTx(cctx, tx, producedRow, isBaitCraft)
 	if err != nil {
@@ -487,6 +509,9 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 	ctx.AfterResponse(func() {
 		if masteryGain > 0 {
 			ctx.Sess.Push2_4SkillTree("制作鱼饵 " + outputID)
+		}
+		if len(produced) > 0 {
+			ctx.Sess.Push(4, 22, proto.Args(proto.S("61"), produced...))
 		}
 	})
 	return srv.replyCraftResultWithMastery(ctx, true, produced, upsert, removed, captureBaitSkillID, masteryGain)
@@ -1025,7 +1050,7 @@ func craftDemandObjs(recipe *store.Recipe) []*proto.Value {
 // ---- 803 构造 ----
 
 // replyCraftResult 构造 803 制作/分解结果：
-// f0 成败、f1 产出物品、f6 背包增量、f8 被移除的 GUID。可选字段为空时不写入。
+// f1 是制作结果预览，f6 是背包增量（产出 + 剩余材料），f8 是耗尽移除的 GUID。
 func (s *Server) replyCraftResult(ctx *Ctx, ok bool, produced, upsert []*proto.Value, removed []string) ([]byte, bool) {
 	return s.replyCraftResultWithSkill(ctx, ok, produced, upsert, removed, nil, nil)
 }
@@ -1055,11 +1080,11 @@ func (s *Server) replyCraftResultWithSkill(ctx *Ctx, ok bool, produced, upsert [
 		obj.Fields[3].Val = skillTree
 	}
 	if len(upsert) > 0 {
-		// f6 iingicaldbk 使用 args("61") 包装背包增量。
+		// f6 是客户端背包增量，必须同步产出和仍有剩余的消耗材料。
 		obj.Fields[6].Val = proto.Args(proto.S("61"), upsert...)
 	}
 	if len(removed) > 0 {
-		// f8 iaimladeglm 是裸 Guid[]，必须使用 0x06 guidarr，不能套 args 外壳。
+		// f8 是耗尽材料的移除列表。
 		obj.Fields[8].Val = proto.GuidArr(removed)
 	}
 	body, err := proto.EncodeValue(obj, ctx.Sess.Table())

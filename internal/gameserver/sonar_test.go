@@ -1,6 +1,7 @@
 package gameserver
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -16,7 +17,8 @@ import (
 const sonarAssetSHA256 = "19b44b49f001e1e59723b9a7ed659770acdf9ffdf0fdc35359e340dc8803fa5e"
 
 func TestSonarGridAsset(t *testing.T) {
-	gotHash := fmt.Sprintf("%x", sha256.Sum256(sonarGridsJSON))
+	normalized := bytes.ReplaceAll(sonarGridsJSON, []byte("\r\n"), []byte("\n"))
+	gotHash := fmt.Sprintf("%x", sha256.Sum256(normalized))
 	if gotHash != sonarAssetSHA256 {
 		t.Fatalf("声呐网格资产被改写: %s, 期望 %s", gotHash, sonarAssetSHA256)
 	}
@@ -152,8 +154,9 @@ func TestSonarUnknownWaterReturnsEmptyGrid(t *testing.T) {
 		t.Fatalf("未知水域 f0=%q", got)
 	}
 	cells := obj.Field(1).Val
-	if cells == nil || cells.Kind != proto.KindArgs || cells.ArgCodeStr() != sonarCellArgCode || cells.ArgCount() != 0 {
-		t.Fatalf("未知水域应回空 args(15004): %#v", cells)
+	if cells == nil || cells.Kind != proto.KindNull {
+		// 客户端 4.0.25034 不认识 15004，空网格也必须是 null 而不是 args(15004)。
+		t.Fatalf("未知水域应回 f1=null: %#v", cells)
 	}
 
 	body, err := proto.EncodeValue(obj, wiregen.Table())
@@ -190,6 +193,11 @@ func TestSonarEchoSamplingRanges(t *testing.T) {
 
 func TestSonarHandlerReturnsEmbeddedGrid(t *testing.T) {
 	srv, _ := newRigTestServer(t)
+	// 默认 sonar_echo=0 只回空网格（客户端不认识 15004 会断线），这里显式打开
+	// 回声以验证网格生成逻辑本身。
+	if err := srv.DB.TunableSet(context.Background(), "sonar_echo", "1", "test"); err != nil {
+		t.Fatal(err)
+	}
 	registerDynamicProtocolHandlers(srv.dispatch)
 	body, ok := hDynamicSonar(dynamicTestCtx(srv, rigRequestTree(t, proto.StrVal("loc12_01"))))
 	if !ok {

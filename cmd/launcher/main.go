@@ -56,6 +56,13 @@ type app struct {
 
 	gameMu    sync.RWMutex
 	startGame func(*exec.Cmd) error
+
+	// 托盘状态：systray 在 Run 之前内部句柄为 nil，提前调用 SetIcon/
+	// SetTooltip 会 panic。这里先记录期望状态，托盘就绪后再应用。
+	trayMu    sync.Mutex
+	trayReady bool
+	trayColor int
+	trayTip   string
 }
 
 type logger interface {
@@ -101,7 +108,10 @@ func main() {
 		_ = os.Setenv("RF4_SQLITE_STATIC_PATH", *staticDB)
 	}
 	appCtx, appCancel := context.WithCancel(context.Background())
-	app := &app{cfg: cfg, cfgPath: *configPath, log: panelLogger{}, ctx: appCtx, cancel: appCancel}
+	app := &app{
+		cfg: cfg, cfgPath: *configPath, log: panelLogger{}, ctx: appCtx, cancel: appCancel,
+		trayColor: 3, trayTip: "fish-localserver 本地服务器", // 3=灰（初始化中）
+	}
 	defer app.closeAdmin()
 
 	// ---- Web 控制面板（先于首跑 seed 起来：GUI 无控制台，seed 可能耗时
@@ -164,7 +174,16 @@ func main() {
 	// ---- 监督器 ----
 	binDir := filepath.Dir(mustExePath())
 	app.sup = supervisor.New(binDir, *configPath, "logs")
-	app.sup.SetStateCallback(func() { updateTrayIcon(app) })
+	// 状态回调可能在托盘初始化之前（甚至并发）触发，必须自吞异常，
+	// 否则一次托盘调用失败就会带走整个 launcher 及其子进程管理。
+	app.sup.SetStateCallback(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				app.log.Error(fmt.Sprintf("托盘状态刷新异常: %v", r))
+			}
+		}()
+		updateTrayIcon(app)
+	})
 
 	// 上次异常退出可能遗留 launcher 管理的 hosts 行；先按归属状态恢复官方解析。
 	if err := hostsRestore(hostsFilePath()); err != nil {
@@ -259,7 +278,11 @@ func (a *app) onTrayReady() {
 		}
 	}()
 
-	updateTrayIcon(a)
+	// 托盘句柄此时才可用：标记就绪并补应用初始化期间记录的状态。
+	a.trayMu.Lock()
+	a.trayReady = true
+	applyTrayLocked(a.trayColor, a.trayTip)
+	a.trayMu.Unlock()
 }
 
 // updateTrayIcon 按运行中进程数切换托盘颜色（绿=全部 / 黄=部分 / 红=无）。
@@ -278,15 +301,30 @@ func updateTrayIcon(a *app) {
 	a.adminMu.RUnlock()
 	switch {
 	case running == 2 && adminReady:
-		systray.SetIcon(iconColor(0)) // 绿
-		systray.SetTooltip("fish-localserver：全部就绪")
+		a.setTray(0, "fish-localserver：全部就绪") // 绿
 	case running > 0 || adminReady:
-		systray.SetIcon(iconColor(1)) // 黄
-		systray.SetTooltip(fmt.Sprintf("fish-localserver：%d/2 游戏服务，管理后台=%v", running, adminReady))
+		a.setTray(1, fmt.Sprintf("fish-localserver：%d/2 游戏服务，管理后台=%v", running, adminReady)) // 黄
 	default:
-		systray.SetIcon(iconColor(2)) // 红
-		systray.SetTooltip("fish-localserver：已停止")
+		a.setTray(2, "fish-localserver：已停止") // 红
 	}
+}
+
+// setTray 记录并应用托盘图标/提示。systray 未就绪时只记录状态，
+// 避免在 systray.Run 初始化前访问 nil 的 Win32 托盘句柄导致 panic。
+func (a *app) setTray(color int, tip string) {
+	a.trayMu.Lock()
+	defer a.trayMu.Unlock()
+	a.trayColor, a.trayTip = color, tip
+	if !a.trayReady {
+		return
+	}
+	applyTrayLocked(color, tip)
+}
+
+// applyTrayLocked 实际写入托盘（调用方须持有 trayMu）。
+func applyTrayLocked(color int, tip string) {
+	systray.SetIcon(iconColor(color))
+	systray.SetTooltip(tip)
 }
 
 // ---- Web 面板 API ----

@@ -14,6 +14,29 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 export CGO_ENABLED=0
 
+# Optional offline tools must be either complete or absent.
+OFFLINE_COUNT=0
+for command in import-character local-membership local-launcher; do
+  if [[ -f "cmd/${command}/main.go" ]]; then
+    OFFLINE_COUNT=$((OFFLINE_COUNT + 1))
+  fi
+done
+if [[ "${OFFLINE_COUNT}" != "0" && "${OFFLINE_COUNT}" != "3" ]]; then
+  echo "incomplete offline tools: expected all three commands" >&2
+  exit 2
+fi
+if [[ -z "${WITH_OFFLINE_TOOLS:-}" ]]; then
+  if [[ "${OFFLINE_COUNT}" == "3" ]]; then
+    WITH_OFFLINE_TOOLS=1
+  else
+    WITH_OFFLINE_TOOLS=0
+  fi
+fi
+if [[ "${WITH_OFFLINE_TOOLS}" == "1" && "${OFFLINE_COUNT}" != "3" ]]; then
+  echo "offline build requested but offline commands are missing" >&2
+  exit 2
+fi
+
 DIST="${ROOT}/dist/preview/${VERSION}"
 PACKAGE_NAME="rf4_server_simulator-${VERSION}-windows-amd64"
 STAGE="${DIST}/${PACKAGE_NAME}"
@@ -33,6 +56,15 @@ done
 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "${LDFLAGS} -H=windowsgui" \
   -o "${STAGE}/bin/launcher.exe" ./cmd/launcher
 
+if [[ "${WITH_OFFLINE_TOOLS:-0}" == "1" ]]; then
+  for command in import-character local-membership; do
+    GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "${LDFLAGS}" \
+      -o "${STAGE}/bin/${command}.exe" "./cmd/${command}"
+  done
+  GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "${LDFLAGS} -H=windowsgui" \
+    -o "${STAGE}/启动游戏.exe" ./cmd/local-launcher
+fi
+
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -sha256 -nodes \
   -keyout "${STAGE}/certs/server.key" -out "${STAGE}/certs/server.crt" \
   -days 3650 -subj "/CN=api.rf4game.ru" \
@@ -45,8 +77,7 @@ sed \
   -e 's/replace-with-strong-password/admin123/g' \
   config.example.yaml > "${STAGE}/config.yaml"
 
-cp README.md LICENSE config.example.yaml "${STAGE}/"
-cp -R docs server_data "${STAGE}/"
+python3 tools/stage_preview.py "${STAGE}"
 
 cat > "${STAGE}/快速开始.txt" <<EOF
 rf4_server_simulator ${VERSION} 快速开始

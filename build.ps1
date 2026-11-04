@@ -1,3 +1,4 @@
+param([switch]$OfflineTools)
 # 构建 Windows 服务端程序和 launcher，输出到 bin/。
 $ErrorActionPreference = "Stop"
 
@@ -19,3 +20,8 @@ Write-Host "build bin/launcher.exe ok"
 # 新架构不再生成 admin.exe；清理旧版本遗留，避免误启动独立管理端口。
 Remove-Item -LiteralPath "bin/admin.exe" -Force -ErrorAction SilentlyContinue
 Write-Host "done -> bin/"
+
+if ($OfflineTools) {
+    go build -trimpath -ldflags "$ldflags -H=windowsgui" -o "启动游戏.exe" ./cmd/local-launcher
+    if ($LASTEXITCODE -ne 0) { throw "build local-launcher failed" }
+}

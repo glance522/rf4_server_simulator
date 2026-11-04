@@ -15,6 +15,8 @@ var fishBaitRuleText string
 
 type fishBaitRule struct {
 	allow, deny []string
+	bottomOnly  []string
+	condition   string
 }
 
 var fishBaitRules = parseFishBaitRules(fishBaitRuleText)
@@ -49,16 +51,20 @@ func parseFishBaitRules(raw string) map[string]fishBaitRule {
 		if !ok {
 			continue
 		}
-		bait, _, ok := strings.Cut(tail, "  前置条件 ")
+		bait, condition, ok := strings.Cut(tail, "  前置条件 ")
 		if !ok {
 			continue
 		}
 		bait = strings.NewReplacer("（", "(", "）", ")").Replace(bait)
 		allowed, extra, _ := strings.Cut(bait, "(")
-		r := fishBaitRule{allow: strings.Split(strings.TrimSpace(allowed), "/")}
+		r := fishBaitRule{allow: strings.Split(strings.TrimSpace(allowed), "/"), condition: strings.TrimSpace(condition)}
 		if _, denied, ok := strings.Cut(extra, "不吃"); ok {
 			denied = strings.FieldsFunc(denied, func(c rune) bool { return c == ')' || c == '；' || c == ';' })[0]
 			r.deny = strings.Split(denied, "/")
+		}
+		if _, only, ok := strings.Cut(extra, "底钓只吃"); ok {
+			only = strings.TrimRight(only, ") \r\t")
+			r.bottomOnly = strings.Split(only, "/")
 		}
 		out[ruleName(name)] = r
 	}
@@ -78,6 +84,7 @@ func (b ruleBait) matches(term string) bool {
 		"dough_sweet": {"甜的面团"},
 		"caddisfly":   {"毛翅目幼虫"},
 		"baitfrog":    {"青蛙"},
+		"fish_flesh":  {"鱼肉块"},
 	}
 	for _, alias := range aliases[b.id] {
 		if t == ruleName(alias) {
@@ -93,7 +100,7 @@ func (b ruleBait) matches(term string) bool {
 	if t == "活饵类" {
 		return b.category == 27 && b.baitType == 4
 	}
-	if t == "饵鱼类" || t == "饵鱼" {
+	if t == "饵鱼类" || t == "饵鱼" || t == "各类饵鱼" {
 		return b.category == 27 && (b.baitType == 4 || b.baitType == 15)
 	}
 	if b.category == 27 {
@@ -147,7 +154,7 @@ func (s *Server) filterFishBaits(loc, bait string, keys []string, weights []floa
 	return s.filterFishBaitSet(loc, []string{bait}, keys, weights, time.Now())
 }
 
-func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weights []float64, now time.Time) ([]string, []float64) {
+func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weights []float64, now time.Time, contexts ...fishRollContext) ([]string, []float64) {
 	if s.DB == nil {
 		return nil, nil
 	}
@@ -223,6 +230,7 @@ func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weig
 	}
 	outKeys := make([]string, 0, len(keys))
 	outWeights := make([]float64, 0, len(keys))
+	c := rollContext(contexts)
 	period := (now.Unix() - worldDayEpochUnix) / (4 * realSecPerGameHour)
 	for i, key := range keys {
 		if weights[i] <= 0 {
@@ -233,6 +241,10 @@ func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weig
 		best := 0.0
 		preferred := 0
 		for j, b := range baits {
+			if bottomRigTypes[c.rigType] && len(r.bottomOnly) > 0 && !b.matchesAny(r.bottomOnly) {
+				denied = true
+				break
+			}
 			for _, term := range r.deny {
 				if b.matches(term) {
 					denied = true
@@ -254,9 +266,8 @@ func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weig
 			if allowed || evidence[j][key] > 0 || localEvidence[j][key] {
 				preferred++
 				score = 1.0 + 0.5*variation
-			} else if b.category == 27 && len(r.allow) > 0 {
-				// 未列出的天然饵保留低概率；无证据的拟饵不跨食性放行。
-				score = 0.08 + 0.04*variation
+			} else if b.legalAlternative(r) {
+				score = maxBaitPreference * 0.05
 			}
 			best = math.Max(best, score)
 		}
@@ -270,4 +281,82 @@ func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weig
 		outWeights = append(outWeights, weights[i]*best)
 	}
 	return outKeys, outWeights
+}
+
+func (b ruleBait) matchesAny(terms []string) bool {
+	for _, term := range terms {
+		if b.matches(term) {
+			return true
+		}
+	}
+	return false
+}
+
+// 非偏好只在已识别食性族内保留杂口，不把所有天然饵视为通用食物。
+func (b ruleBait) legalAlternative(r fishBaitRule) bool {
+	if b.category != 27 {
+		return false
+	}
+	var diet string
+	switch b.baitType {
+	case 2, 6, 7:
+		diet = "虫"
+	case 8:
+		diet = "煮饵"
+	case 9:
+		diet = "颗粒"
+	case 10:
+		diet = "玉米"
+	case 11, 13:
+		diet = "植物"
+	case 4, 15:
+		diet = "饵鱼"
+	case 14:
+		diet = "鱼肉"
+	}
+	if b.id == "fish_flesh" {
+		diet = "鱼肉"
+	}
+	terms := strings.Join(r.allow, "/")
+	switch diet {
+	case "虫":
+		for _, term := range []string{"蠕虫", "蚯蚓", "红虫", "苍蝇", "蛆虫", "毛翅", "树皮甲虫", "昆虫", "地龙", "土蚕", "水蛭", "蜉蝣", "襀翅", "牛虻", "草蜢", "蟋蟀", "蜣螂", "金龟", "龙虱", "蝼蛄"} {
+			if strings.Contains(terms, term) {
+				return true
+			}
+		}
+	case "植物":
+		for _, term := range []string{"面包", "面团", "粥", "玉米", "豌豆", "坚果", "奶酪", "水果", "蜂蜜", "奶油", "椰子", "中立", "自然风味"} {
+			if strings.Contains(terms, term) {
+				return true
+			}
+		}
+	case "煮饵":
+		return strings.Contains(terms, "煮饵") || strings.Contains(terms, "煮成饵") || strings.Contains(strings.ToLower(terms), "boilie") || strings.Contains(strings.ToLower(terms), "popup") || strings.Contains(strings.ToLower(terms), "pop up")
+	case "颗粒":
+		return strings.Contains(terms, "颗粒") || strings.Contains(strings.ToLower(terms), "pellet")
+	case "玉米":
+		return strings.Contains(terms, "玉米")
+	case "饵鱼":
+		return strings.Contains(terms, "饵鱼") || strings.Contains(terms, "活饵")
+	case "鱼肉":
+		return strings.Contains(terms, "鱼肉") || strings.Contains(terms, "鱼片")
+	}
+	return false
+}
+
+// 技能只提高已有的正兴趣，不能放行禁饵或不适用的拟饵。
+func fishingBaitInterest(interest float64, bonus fishingSkillBonus) float64 {
+	if interest <= 0 {
+		return 0
+	}
+	multiplier := 1.0
+	if bonus.BiteSpeed > 0 && !math.IsNaN(bonus.BiteSpeed) && !math.IsInf(bonus.BiteSpeed, 0) {
+		multiplier = clampFloat(1/bonus.BiteSpeed, 1, 2)
+	}
+	limit := 1.0
+	if interest <= .1 {
+		limit = .1
+	}
+	return math.Min(limit, interest*multiplier)
 }

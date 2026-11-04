@@ -36,7 +36,7 @@ func findShopPrice(t *testing.T, rows []*ShopPrice, itemID string) *ShopPrice {
 
 func TestEmbeddedShopCatalogMatchesEvidenceAndCoversAllStores(t *testing.T) {
 	sum := sha256.Sum256(embeddedShopKindDefs)
-	const wantHash = "ce050b6f5bfbe76449cbca9ef2a998419a3440d04b494323f1bb18412878a522"
+	const wantHash = "cbf7494f46f9f0768bd38a282e3780389b02b1b95a649d179f2d457c2b15f72d"
 	if got := hex.EncodeToString(sum[:]); got != wantHash {
 		t.Fatalf("商店目录 hash=%s want=%s", got, wantHash)
 	}
@@ -47,8 +47,8 @@ func TestEmbeddedShopCatalogMatchesEvidenceAndCoversAllStores(t *testing.T) {
 	if len(catalog.Stores) != 205 {
 		t.Fatalf("商店目录 stores=%d want=205", len(catalog.Stores))
 	}
-	if len(catalog.Kinds) != 7 {
-		t.Fatalf("商店目录 kinds=%d want=7", len(catalog.Kinds))
+	if len(catalog.Kinds) != 8 {
+		t.Fatalf("商店目录 kinds=%d want=8", len(catalog.Kinds))
 	}
 
 	db := openShopCatalogTestDB(t)
@@ -76,7 +76,7 @@ func TestEmbeddedShopCatalogMatchesEvidenceAndCoversAllStores(t *testing.T) {
 			t.Fatalf("缺证据商店来源=%q want=%q", view.ShelfSource, shopShelfSourceMissing)
 		}
 	}
-	if nonempty != 184 || missingEvidence != 21 {
+	if nonempty != 187 || missingEvidence != 18 {
 		t.Fatalf("205 店覆盖异常: nonempty=%d missing=%d", nonempty, missingEvidence)
 	}
 }
@@ -208,5 +208,65 @@ func TestShopCatalogUnknownStoreDoesNotFabricateShelf(t *testing.T) {
 	if err := db.SetAdminShopOverride(ctx, "not_a_catalog_store", "global_only", 100, 1, 99, "test"); err == nil ||
 		!strings.Contains(err.Error(), "生效货架") {
 		t.Fatalf("未知店覆盖应被拒绝，得到 %v", err)
+	}
+}
+
+func TestShopSupplementPricesRestockAndAdminStayAligned(t *testing.T) {
+	db := openShopCatalogTestDB(t)
+	ctx := context.Background()
+	if _, err := db.SQL.Exec(`INSERT INTO item_def(numeric_id,item_id,category,kind,brand,attrs_json) VALUES
+ (991001,'base_line',11,'line','brand_test','{}'),(991002,'gold_line',11,'line','brand_test','{}'),
+ (991003,'silver_line',11,'line','brand_test','{}'),(991004,'unpriced_line',11,'line','brand_test','{}'),
+ (991005,'foreign_food',26,'food','','{}');
+ INSERT INTO shop_item(store_id,item_id,silver,gold,stock) VALUES('fishingstore_009','base_line',100,2,0);
+ INSERT INTO item_price(item_id,silver,gold,stock) VALUES('gold_line',0,15,0),('silver_line',200,0,0),('foreign_food',20,0,0);`); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.ShopItems(ctx, "fishingstore_009")
+	if err != nil || len(rows) != 4 {
+		t.Fatalf("incomplete or cross-category shelf: %+v %v", rows, err)
+	}
+	for _, row := range rows {
+		if row.Stock <= 0 {
+			t.Fatal("shelf not restocked")
+		}
+	}
+	gold := findShopPrice(t, rows, "gold_line")
+	if gold.Gold != 15 || gold.Silver != 0 {
+		t.Fatal("currency changed during supplementation")
+	}
+	if findShopPrice(t, rows, "unpriced_line").Silver <= 0 {
+		t.Fatal("upstream estimate missing")
+	}
+	if err := db.SetAdminShopOverride(ctx, "fishingstore_009", "gold_line", 0, 23, 0, "test"); err != nil {
+		t.Fatal(err)
+	}
+	bought, err := db.ShopItemGet(ctx, "fishingstore_009", "gold_line")
+	if err != nil || bought.Gold != 23 || bought.Stock != 1000 {
+		t.Fatalf("override/restock inconsistent: %+v %v", bought, err)
+	}
+	admin, err := db.ListAdminStoreItems(ctx, "fishingstore_009", "gold_line", 10)
+	if err != nil || len(admin) != 1 || admin[0].Gold != bought.Gold || admin[0].Stock != bought.Stock || !admin[0].HasOverride {
+		t.Fatalf("admin differs: %+v %v", admin, err)
+	}
+	stores, err := db.ListAdminStores(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, v := range stores {
+		if v.StoreID == "fishingstore_009" {
+			found = v.ItemCount == 4 && v.TotalStock == 4000 && v.OverrideCount == 1
+		}
+	}
+	if !found {
+		t.Fatal("admin summary omits augmented shelf")
+	}
+	if err := db.ResetAdminShopOverride(ctx, "fishingstore_009", "gold_line"); err != nil {
+		t.Fatal(err)
+	}
+	restored, _ := db.ShopItemGet(ctx, "fishingstore_009", "gold_line")
+	if restored.Gold != 15 || restored.Stock <= 0 {
+		t.Fatal("reset broke supplement/restock")
 	}
 }

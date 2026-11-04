@@ -26,6 +26,10 @@ const (
 	KindBytes       Kind = "bytes"
 	KindStr3        Kind = "str3"
 	KindKV          Kind = "kv"
+	KindKVList      Kind = "kvlist"  // 0x03：对象数组容器 + typed KV 元素（401.f4 候选形状）
+	KindKVArr       Kind = "kvarr"   // 裸类型化数组：[u16 n] + n×([键][值 marker+载荷])（401.f4 候选形状）
+	KindTypedArr    Kind = "typedarr" // 自定义类型名数组：[0x03][类型名][u16 n] + 元素（探测用）
+	KindKVEntry     Kind = "kventry" // KV 元素：[01][u32 typeid 400][键字节][值 marker+载荷]
 	KindDateTime    Kind = "datetime"
 	KindGuid        Kind = "guid"
 	KindU32         Kind = "u32"

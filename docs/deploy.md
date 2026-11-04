@@ -122,3 +122,25 @@ bin\gateway.exe -config config.yaml
 - 服务器到客户端的推送必须使用预期的顶层 value 结构，并通过响应契约检查。无效推送会被拒绝，而不会发送。
 - 世界时钟 keepalive 间隔必须小于客户端连接超时时间。默认为 5 秒；客户端在没有下行数据约 10 秒后断开连接。世界时钟使用 UTC。
 - 将 launcher、隧道和观测端口绑定到可信网络接口。替换所有默认凭据和密钥。
+
+## 智能体辅助部署 prompt
+
+以下 prompt 可按本机实际路径调整后，直接交给 Codex、Dsh、豆包、WorkBuddy 等智能体：
+
+```text
+请帮我在这台 Windows 电脑上部署并启动 <项目目录> 里的 rf4_server_simulator。
+
+请先检查：
+- Windows 版本，以及当前是否以管理员权限运行；
+- Go 是否已安装，版本是否不低于 1.27.3；
+- 443、9341、9401、9500-9502 端口是否可用。
+
+然后完成以下工作：
+1. 阅读 README.md、config.yaml 和 docs/deploy.md，说明你将执行的操作。
+2. 构建项目，确认 bin 下生成 gateway.exe、gameserver.exe、seed.exe 和 launcher.exe。
+3. 检查 config.yaml 中 gateway.tunnel.psk 与 game.tunnel.psk 一致，sqlite.static_path 指向 server_data/static.sqlite3。
+4. 备份 C:\Windows\System32\drivers\etc\hosts，然后把 api.rf4game.ru 和 api.rf4game.com 指向 127.0.0.1。
+5. 启动一次 gateway 生成 certs/server.crt 和 certs/server.key，并指导我把 server.crt 安装到“受信任的根证书颁发机构”。不要上传或分享私钥。
+6. 启动 bin\launcher.exe，检查 http://127.0.0.1:9500、http://127.0.0.1:9500/#admin 以及各服务健康检查。
+7. 只做构建和运行配置修复，不改变业务逻辑。每一步告诉我执行内容、结果和失败原因；需要管理员权限时先停下让我确认。
+```

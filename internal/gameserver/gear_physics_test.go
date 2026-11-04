@@ -242,15 +242,18 @@ func TestBiteDelayConfigPrecedenceAndSkill(t *testing.T) {
 	}
 }
 
-func TestTrophyLuckRaisesAtMostOneGrade(t *testing.T) {
-	if got := applyTrophyLuck(3, 2.0); got != 4 {
-		t.Fatalf("luck 必中时应升到4，得到%d", got)
+func TestTrophyLuckSamplesRealWeight(t *testing.T) {
+	if got := applyTrophyLuck(300, 2, func() float64 { return 500 }); got != 500 {
+		t.Fatalf("幸运应采用抽到的较重个体，得到%g", got)
 	}
-	if got := applyTrophyLuck(4, 2.0); got != 4 {
-		t.Fatalf("grade4 不应继续升档，得到%d", got)
+	if got := applyTrophyLuck(500, 2, func() float64 { return 300 }); got != 500 {
+		t.Fatalf("额外采样不应减轻体重，得到%g", got)
 	}
-	if got := applyTrophyLuck(1, 0); got != 1 {
-		t.Fatalf("无技能不应改档，得到%d", got)
+	if got := applyTrophyLuck(300, 0, func() float64 {
+		t.Fatal("无技能不应额外抽样")
+		return 500
+	}); got != 300 {
+		t.Fatalf("无技能不应改体重，得到%g", got)
 	}
 }
 
@@ -288,14 +291,14 @@ func TestFishingBonusUsesActualRigSkillCategory(t *testing.T) {
 	srv := NewServerForGearTest(t, db)
 
 	bottom := srv.fishingBonus(ctx, uid, 12)
-	// effect = 10 * 0.15 + 2 * 1.0 = 3.5
-	if math.Abs(bottom.BiteSpeed-(1.0-3.5/10.0*0.03)) > 1e-9 {
+	// 未确认节点不叠加通用效果，effect = 10 * 0.15 = 1.5
+	if math.Abs(bottom.BiteSpeed-(1.0-1.5/10.0*0.03)) > 1e-9 {
 		t.Fatalf("bottom bite_speed=%f", bottom.BiteSpeed)
 	}
-	if math.Abs(bottom.TrophyLuck-(3.5/10.0*0.012)) > 1e-9 {
+	if math.Abs(bottom.TrophyLuck-(1.5/10.0*0.012)) > 1e-9 {
 		t.Fatalf("bottom trophy_luck=%f", bottom.TrophyLuck)
 	}
-	if math.Abs(bottom.FightTolerance-(3.5/10.0*0.06)) > 1e-9 {
+	if math.Abs(bottom.FightTolerance-(1.5/10.0*0.06)) > 1e-9 {
 		t.Fatalf("bottom fight_tolerance=%f", bottom.FightTolerance)
 	}
 	if lure := srv.fishingBonus(ctx, uid, 5); lure != neutralFishingSkillBonus() {

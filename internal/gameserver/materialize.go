@@ -25,8 +25,10 @@ var reelPartKeys = []string{
 // leaderPartKeys 保存前导子实例键：f1 钢丝、f2 配件；f3 没有嵌套配置。
 var leaderPartKeys = []string{"mbnambppbom", "lbadjgllglo", "baadhdmaonp"}
 
-// subUnbuildedKinds 列出暂不物化的子部件类型；当前包含 kind 81。
-var subUnbuildedKinds = map[float64]bool{81: true}
+// subUnbuildedKinds 列出暂不物化的子部件类型。当前为空：
+// 渔轮电机（kind 81）已确认是 kbpmmclfipg/1470，必须物化到轮 f14 扩展槽，
+// 客户端据此启用电动模式。
+var subUnbuildedKinds = map[float64]bool{}
 
 // subMountFlag 表示子部件已挂载到母物品。
 const subMountFlag = 1024
@@ -242,5 +244,26 @@ func stateFlagsZeroFill(class string, obj *proto.Value, def *store.ItemDef) {
 	}
 	if flags, ok := defAttrU64(def, "hgaijieklek"); ok && flags != 0 {
 		obj.Fields[idx].Num = ptrU64(flags)
+	}
+}
+
+// 客户端损坏位（bapnijnooje.akhnmdpbhnf）。
+// lcdihnabclk.cbhjcnkojgc 以 hgaijieklek 含 128 判定损坏（红框、“损坏”文案、
+// 场景折断渲染、修理铺列表）。
+// ⚠️ 不能动 dbgaheblmei（状态位）：追加 fhblahbelfd(16) 会让客户端把物品
+// 视为不可操作状态，删除/出售等动作选项被禁用（背包损坏道具无法删除的根因）。
+const brokenItemFlagBit uint64 = 128
+
+// applyBrokenItemState 把耐久耗尽的装备投影为客户端“损坏”态：
+// 只追加 hgaijieklek|=128。不落库，耐久修复后自动消失。
+func applyBrokenItemState(class string, obj *proto.Value, durability float64) {
+	if durability > 0 {
+		return
+	}
+	if fieldIdxByCS(class, csDurability) < 0 {
+		return
+	}
+	if idx := fieldIdxByCS(class, csStateEnum); idx >= 0 && idx < len(obj.Fields) {
+		obj.Fields[idx].Num = ptrU64(u64Of(obj.Fields[idx].Num) | brokenItemFlagBit)
 	}
 }

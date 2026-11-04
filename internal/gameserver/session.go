@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"rf4server/internal/proto"
+	"rf4server/internal/store"
 	"rf4server/internal/tunnel"
 )
 
@@ -23,10 +24,10 @@ type Session struct {
 	// startedAt 本会话登录时刻。客户端世界时钟从登录起按 24 倍速推进，
 	// 船票倒计时的"起始游戏时间"就是按它算的。
 	startedAt time.Time
-	ID     uint64 // 网关分配的会话号
-	Token  string
-	Userid int64
-	Srv    *Server
+	ID        uint64 // 网关分配的会话号
+	Token     string
+	Userid    int64
+	Srv       *Server
 
 	tunnel *tunnel.Conn
 	sendMu sync.Mutex
@@ -36,23 +37,34 @@ type Session struct {
 	stopCh   chan struct{} // 关闭信号（保活循环等监听）
 	stopOnce sync.Once
 
-	stateMu sync.Mutex
-	state   map[string]any // 会话级业务状态（选图、抛竿状态等）
+	// fishPushMu / fishPushGUID / fishPushAt 抑制同一尾鱼的重复 14/14 推送：
+	// 同一 GUID 短时间内推两次会让客户端重建鱼实体，模型与结算对不上。
+	fishPushMu   sync.Mutex
+	fishPushGUID string
+	fishPushAt   time.Time
+
+	stateMu      sync.Mutex
+	state        map[string]any // 会话级业务状态（选图、抛竿状态等）
+	weatherMu    sync.RWMutex
+	weatherPlans map[string]fishingWeatherPlan
+	happyMu      sync.RWMutex
+	happyOpMu    sync.Mutex
+	happyStatus  store.HappyHourStatus
 
 	log *slog.Logger
 }
 
 func newSession(srv *Server, id uint64, token string, userid int64, c *tunnel.Conn) *Session {
 	return &Session{
-		ID:     id,
-		Token:  token,
-		Userid: userid,
-		Srv:    srv,
-		tunnel: c,
-		state:  map[string]any{},
+		ID:        id,
+		Token:     token,
+		Userid:    userid,
+		Srv:       srv,
+		tunnel:    c,
+		state:     map[string]any{},
 		startedAt: time.Now(),
-		stopCh: make(chan struct{}),
-		log:    srv.log.With("userid", userid, "sid", id),
+		stopCh:    make(chan struct{}),
+		log:       srv.log.With("userid", userid, "sid", id),
 	}
 }
 
@@ -205,6 +217,7 @@ func (s *Session) startKeepalive() {
 				if s.closed.Load() {
 					return
 				}
+				s.updateHappyHour(time.Now(), false)
 				pushKeepalive(s)
 				// 每 6 拍（约 30 秒）刷新一次已租用船票的剩余分钟，
 				// 让客户端的到期提示随时间递减（客户端自身不会重算）。
@@ -223,6 +236,7 @@ func (s *Session) startKeepalive() {
 // Close 关闭会话（幂等）。
 func (s *Session) Close(reason string) {
 	if s.closed.CompareAndSwap(false, true) {
+		s.updateHappyHour(time.Now(), true)
 		s.log.Info("会话关闭", "reason", reason)
 		s.stopOnce.Do(func() { close(s.stopCh) })
 		s.Srv.removeSession(s)

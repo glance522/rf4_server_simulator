@@ -101,22 +101,13 @@ func hDynamicRigSnapshot(ctx *Ctx) ([]byte, bool) {
 // 请求参数顺序为 [竿 GUID, 断件 GUID, 物理模型]；没有断件时回退到当前竿。
 func hDynamicRodBreak(ctx *Ctx) ([]byte, bool) {
 	srv := ctx.Sess.Srv
-	var guids []string
-	for _, g := range deepGUIDs(ctx.Tree) {
-		if n := normalizeDynamicGUID(g); n != "" && n != zeroGUID {
-			guids = append(guids, n)
-		}
-	}
-	rodGUID := ""
-	if len(guids) > 0 {
-		rodGUID = guids[0]
-	}
-	brokenGUID := ""
-	if len(guids) > 1 {
-		brokenGUID = guids[1]
+	rodGUID := normalizeDynamicGUID(ctx.Tree.ArgItem(0).GuidHex())
+	brokenGUID := normalizeDynamicGUID(ctx.Tree.ArgItem(1).GuidHex())
+	if brokenGUID == zeroGUID {
+		brokenGUID = ""
 	}
 	st := srv.stateFor(ctx.Sess.Userid)
-	if rodGUID == "" {
+	if rodGUID == "" || rodGUID == zeroGUID {
 		st.mu.Lock()
 		rodGUID = normalizeDynamicGUID(st.GearGuid)
 		st.mu.Unlock()
@@ -125,13 +116,14 @@ func hDynamicRodBreak(ctx *Ctx) ([]byte, bool) {
 		rodGUID = zeroGUID
 	}
 
-	if srv.DB != nil && rodGUID != zeroGUID {
+	if srv.DB != nil && rodGUID != zeroGUID && ctx.DecodeOK {
 		outcome, err := srv.breakLineOrRod(ctx.Sess.pushCtx(), ctx.Sess.Userid, rodGUID, brokenGUID)
 		if err == nil {
 			st.mu.Lock()
 			if st.biteTimer != nil {
 				st.biteTimer.Stop()
 			}
+			pending := st.Pending
 			st.Pending = nil
 			st.CastActive = false
 			st.Hooked = false
@@ -163,12 +155,31 @@ func hDynamicRodBreak(ctx *Ctx) ([]byte, bool) {
 				"broken", shortGUID(outcome.BrokenGUID), "line", outcome.LineBroken,
 				"comp", outcome.ComponentBroken,
 				"line_loss_m", outcome.LineLossM, "removed", len(outcome.RemovedGUIDs))
+			// 断件会改变竿耐久和装配状态，全量同步强制刷新客户端物品模型。
+			ctx.Sess.Push4_22Full()
+			// 断件必丢鱼：11028 只表达装备损坏，另经聊天频道提示跑鱼。
+			reason := "断竿"
+			switch {
+			case outcome.ComponentBroken:
+				reason = "钓组组件断裂"
+			case outcome.ReelDamaged:
+				reason = "渔线轮超载"
+			case outcome.LineBroken && outcome.BreakPart == "leader":
+				reason = "断子线"
+			case outcome.LineBroken:
+				reason = "断主线"
+			}
+			srv.notifyFishEscape(ctx.Sess, pending, reason)
 			return body, true
 		}
-		ctx.Log.Warn("17/9 断件写库失败，回退兼容响应", "rod", shortGUID(rodGUID), "err", err)
+		ctx.Log.Warn("17/9 断件处理失败", "rod", shortGUID(rodGUID), "err", err)
+	}
+	if srv.DB != nil {
+		ctx.ReplyFailure("System.InvalidOperationException", "断件处理失败，请重新取竿后重试")
+		return nil, true
 	}
 
-	// 数据异常时保持旧协议兼容，避免客户端等待超时。
+	// 无存储时保留原有兼容响应。
 	fallbackGUID := brokenGUID
 	if fallbackGUID == "" {
 		fallbackGUID = rodGUID

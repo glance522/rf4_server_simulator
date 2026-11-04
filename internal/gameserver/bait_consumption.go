@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,6 +17,262 @@ import (
 type baitChange struct {
 	Updated []string `json:"updated,omitempty"`
 	Removed []string `json:"removed,omitempty"`
+}
+
+type baitedHookSet struct {
+	ordinal   int64
+	hookGUID  string
+	baits     []string
+	baitGUIDs []string
+}
+
+type rebaitRequest struct {
+	ItemID   string `json:"item"`
+	HookGUID string `json:"hook"`
+}
+
+// 单钩双饵保留组合，多钩按组件 ordinal 各自判鱼和消耗。
+func (s *Server) baitedHookSets(ctx context.Context, rod string) []baitedHookSet {
+	if s == nil || s.DB == nil || rod == "" {
+		return nil
+	}
+	comps := s.storedRigComponents(ctx, rod)
+	rigType := s.rigTypeForWrite(ctx, rod)
+	count := max(len(slotIndicesFor(rigType, catHook)), len(slotIndicesFor(rigType, catLure)))
+	assignments, err := s.baitHookAssignments(ctx, rod, comps, count <= 1)
+	if err != nil {
+		return nil
+	}
+	groups := map[int64]*baitedHookSet{}
+	for _, category := range []int64{catBait, catLure} {
+		for _, key := range rigCompKeysOfCategory(comps, category) {
+			comp := comps[key]
+			row, err := s.DB.GetItemByGUID(ctx, comp.GUID)
+			if err != nil || row == nil || s.itemBrokenForMount(ctx, row) || category == catBait && baitQuantity(row) <= 0 {
+				continue
+			}
+			ordinal := rigCompOrdinal(key)
+			if count <= 1 {
+				ordinal = 0
+			} else {
+				hook := assignments[row.GUID]
+				found := false
+				for _, hk := range rigCompKeysOfCategory(comps, catHook) {
+					if comps[hk].GUID == hook {
+						ordinal, found = rigCompOrdinal(hk), true
+						break
+					}
+				}
+				if !found && category == catLure && s.lureActiveHookGUID(ctx, row.GUID) == hook && hook != "" {
+					found = true
+				}
+				if !found {
+					continue
+				}
+			}
+			group := groups[ordinal]
+			if group == nil {
+				group = &baitedHookSet{ordinal: ordinal}
+				groups[ordinal] = group
+			}
+			id := row.ItemID
+			if id == "" {
+				if def, err := s.itemDefForRow(ctx, row); err == nil && def != nil {
+					id = def.ItemID
+				}
+			}
+			if id == "" {
+				continue
+			}
+			group.baits = append(group.baits, id)
+			group.baitGUIDs = append(group.baitGUIDs, row.GUID)
+			group.hookGUID = assignments[row.GUID]
+			if group.hookGUID == "" && category == catLure {
+				group.hookGUID = s.lureActiveHookGUID(ctx, row.GUID)
+			}
+		}
+	}
+	var out []baitedHookSet
+	for _, group := range groups {
+		if len(group.baits) > 0 && group.hookGUID != "" {
+			out = append(out, *group)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ordinal < out[j].ordinal })
+	return out
+}
+
+// 组件数组删除后会紧缩，用实例关联保留原钩位；稀疏旧链不按数组猜配对。
+func (s *Server) baitHookAssignments(ctx context.Context, rod string, comps map[int64]rigComp, single bool) (map[string]string, error) {
+	assigned := map[string]string{}
+	hooks := rigCompKeysOfCategory(comps, catHook)
+	mounted, validHook := map[string]bool{}, map[string]bool{}
+	for _, key := range hooks {
+		validHook[comps[key].GUID] = true
+	}
+	for _, cat := range []int64{catBait, catLure} {
+		for _, key := range rigCompKeysOfCategory(comps, cat) {
+			mounted[comps[key].GUID] = true
+			if cat == catLure {
+				if hook := s.lureActiveHookGUID(ctx, comps[key].GUID); hook != "" {
+					validHook[hook] = true
+				}
+			}
+		}
+	}
+	rows, err := s.DB.SQL.QueryContext(ctx, `SELECT key,value FROM rod_setting WHERE guid=? AND key LIKE 'bait_hook:%'`, rod)
+	if err != nil {
+		return nil, err
+	}
+	var obsolete []string
+	for rows.Next() {
+		var key, hook string
+		if err := rows.Scan(&key, &hook); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		bait := strings.TrimPrefix(key, "bait_hook:")
+		if !mounted[bait] || !validHook[hook] {
+			obsolete = append(obsolete, key)
+		} else {
+			assigned[bait] = hook
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range obsolete {
+		if _, err := s.DB.SQL.ExecContext(ctx, `DELETE FROM rod_setting WHERE guid=? AND key=?`, rod, key); err != nil {
+			return nil, err
+		}
+	}
+	for _, cat := range []int64{catBait, catLure} {
+		keys := rigCompKeysOfCategory(comps, cat)
+		used := map[string]bool{}
+		for _, key := range keys {
+			if hook := assigned[comps[key].GUID]; hook != "" {
+				used[hook] = true
+			}
+		}
+		for _, key := range keys {
+			bait := comps[key].GUID
+			if assigned[bait] != "" {
+				continue
+			}
+			hook := ""
+			if single && len(hooks) > 0 {
+				hook = comps[hooks[0]].GUID
+			} else if len(keys) == len(hooks) {
+				var free []string
+				for _, hk := range hooks {
+					if !used[comps[hk].GUID] {
+						free = append(free, comps[hk].GUID)
+					}
+				}
+				if len(free) == 1 {
+					hook = free[0]
+				} else if hk, exists := comps[rigCompKey(catHook, rigCompOrdinal(key))]; exists && !used[hk.GUID] {
+					hook = hk.GUID
+				}
+			} else if cat == catLure {
+				hook = s.lureActiveHookGUID(ctx, bait)
+			}
+			if hook == "" {
+				continue
+			}
+			if err := s.DB.UpsertRodSetting(ctx, rod, "bait_hook:"+bait, hook); err != nil {
+				return nil, err
+			}
+			assigned[bait], used[hook] = hook, true
+		}
+	}
+	return assigned, nil
+}
+
+// 新装配时已有明确钩位，记录实例关联；旧稀疏数组不据此补猜。
+func (s *Server) rememberMountedBaitHook(ctx context.Context, rod, bait, previousHook string, category, ordinal int64) error {
+	comps := s.storedRigComponents(ctx, rod)
+	hook := ""
+	hooks := rigCompKeysOfCategory(comps, catHook)
+	for _, key := range hooks {
+		if comps[key].GUID == previousHook {
+			hook = previousHook
+			break
+		}
+	}
+	if hook == "" {
+		rigType := s.rigTypeForWrite(ctx, rod)
+		if max(len(slotIndicesFor(rigType, catHook)), len(slotIndicesFor(rigType, catLure))) <= 1 && len(hooks) > 0 {
+			hook = comps[hooks[0]].GUID
+		} else if row, ok := comps[rigCompKey(catHook, ordinal)]; ok {
+			hook = row.GUID
+		}
+	}
+	if hook == "" && category == catLure {
+		hook = s.lureActiveHookGUID(ctx, bait)
+	}
+	if hook == "" {
+		return nil
+	}
+	return s.DB.UpsertRodSetting(ctx, rod, "bait_hook:"+bait, hook)
+}
+
+func (s *Server) applyBaitedHookSpec(ctx context.Context, group baitedHookSet, spec *gearPhysicsSpec) bool {
+	if spec == nil || group.hookGUID == "" || s == nil || s.DB == nil {
+		return false
+	}
+	def, durability := s.baitedHookDef(ctx, group)
+	if def == nil || def.Category != catHook || durability <= 0 {
+		return false
+	}
+	spec.HookPresent = true
+	spec.HookSize = itemDefInt(def, gearAttrHookSize)
+	spec.HookLengthMM = itemDefF32(def, gearAttrHookLen)
+	spec.HookStrengthKg = itemDefF32(def, gearAttrMaxLoad) * clampFloat(durability, 0, 1)
+	return true
+}
+
+func (s *Server) baitedHookDef(ctx context.Context, group baitedHookSet) (*store.ItemDef, float64) {
+	if row, err := s.DB.GetItemByGUID(ctx, group.hookGUID); err == nil && row != nil {
+		def, _ := s.itemDefForRow(ctx, row)
+		return def, row.Durability
+	}
+	for _, bait := range group.baitGUIDs {
+		row, err := s.DB.GetItemByGUID(ctx, bait)
+		if err != nil || row == nil {
+			continue
+		}
+		tree, err := s.ItemToTree(ctx, row)
+		if err != nil || tree == nil || len(tree.Fields) == 0 || tree.Fields[0].Val == nil {
+			continue
+		}
+		for _, hook := range tree.Fields[0].Val.Items {
+			if hook == nil {
+				continue
+			}
+			for _, field := range hook.Fields {
+				if field.Op != "GUID16" || !strings.EqualFold(field.Hex, group.hookGUID) {
+					continue
+				}
+				idx := fieldIdxByCS(hook.Class, csNumericID)
+				if idx < 0 || idx >= len(hook.Fields) {
+					continue
+				}
+				def, err := s.DB.GetItemDef(ctx, int64(hook.Fields[idx].U32()))
+				if err != nil {
+					return nil, 0
+				}
+				durability := 1.0
+				if idx := fieldIdxByCS(hook.Class, csDurability); idx >= 0 && idx < len(hook.Fields) && hook.Fields[idx].Num != nil {
+					durability = float64(proto.F32FromBits(uint32(u64Of(hook.Fields[idx].Num))))
+				}
+				return def, durability
+			}
+		}
+	}
+	return nil, 0
 }
 
 func (s *Server) canFishWithBait(ctx context.Context, uid int64, gearGUID string) bool {
@@ -105,6 +362,11 @@ func (s *Server) consumeBaitEvent(ctx context.Context, uid int64, rod, event str
 	if err := addTxnTx(ctx, tx, uid, kind, "", event, 0, 0, "饵料使用"); err != nil {
 		return out, err
 	}
+	fields, err := FieldsFromJSON(parent.FieldsJSON)
+	if err != nil {
+		return out, err
+	}
+	originalSlots := rigCompsOf(protoFieldAt(fields, parent.WireClass, csRigObject))
 	seen := map[string]bool{}
 	for _, guid := range ids {
 		if seen[guid] {
@@ -174,15 +436,29 @@ func (s *Server) consumeBaitEvent(ctx context.Context, uid int64, rod, event str
 			continue
 		}
 		if !cast && def.Category == 27 {
-			fields, err := FieldsFromJSON(parent.FieldsJSON)
-			if err != nil {
-				return out, err
-			}
-			if idx := fieldIdxByCS(parent.WireClass, csRigObject); idx >= 0 && idx < len(fields) {
-				if key, _, ok := rigCompKeyForGUID(rigCompsOf(fields[idx].Val), guid); ok {
-					if _, err := tx.ExecContext(ctx, `INSERT INTO rod_setting(guid,key,value,updated_ts) VALUES(?,?,?,?) ON CONFLICT(guid,key) DO UPDATE SET value=excluded.value,updated_ts=excluded.updated_ts`, rod, fmt.Sprintf("rebait:%d", rigCompOrdinal(key)), def.ItemID, float64(time.Now().Unix())); err != nil {
-						return out, err
+			if key, _, ok := rigCompKeyForGUID(originalSlots, guid); ok {
+				ordinal, value := rigCompOrdinal(key), def.ItemID
+				var hook string
+				if err := tx.QueryRowContext(ctx, `SELECT value FROM rod_setting WHERE guid=? AND key=?`, rod, "bait_hook:"+guid).Scan(&hook); err != nil && err != sql.ErrNoRows {
+					return out, err
+				}
+				if hook != "" {
+					if len(rigCompKeysOfCategory(originalSlots, catHook)) > 1 {
+						for _, hk := range rigCompKeysOfCategory(originalSlots, catHook) {
+							if originalSlots[hk].GUID == hook {
+								ordinal = rigCompOrdinal(hk)
+								break
+							}
+						}
 					}
+					encoded, _ := json.Marshal(rebaitRequest{ItemID: def.ItemID, HookGUID: hook})
+					value = string(encoded)
+				}
+				if _, err := tx.ExecContext(ctx, `INSERT INTO rod_setting(guid,key,value,updated_ts) VALUES(?,?,?,?) ON CONFLICT(guid,key) DO UPDATE SET value=excluded.value,updated_ts=excluded.updated_ts`, rod, fmt.Sprintf("rebait:%d", ordinal), value, float64(time.Now().Unix())); err != nil {
+					return out, err
+				}
+				if _, err := tx.ExecContext(ctx, `DELETE FROM rod_setting WHERE guid=? AND key=?`, rod, "bait_hook:"+guid); err != nil {
+					return out, err
 				}
 			}
 		}
@@ -229,7 +505,7 @@ func removeConsumedRigReferenceTx(ctx context.Context, db *store.DB, tx *sql.Tx,
 	}
 	delete(comps, key)
 	name, rt, _ := rigIdentity(f5)
-	fields[idx].Val = buildRig153WithClip(name, rt, comps, rigDepthOf(f5, 100), rigClipOf(f5))
+	fields[idx].Val = buildRig153Like(f5, name, rt, comps, rigDepthOf(f5, 100), rigClipOf(f5))
 	return updateItemFieldsTx(ctx, db, tx, parent, fields)
 }
 
@@ -256,19 +532,28 @@ func (s *Session) pushBaitChange(change baitChange) {
 }
 
 func (s *Server) pushBaitedFish(sess *Session, f *RolledFish, rod string) {
-	hook := s.mountedHookGuid(s.dbCtx(), rod)
-	var change baitChange
-	if f.BaitsKnown {
-		var err error
-		change, err = s.consumeBaitEvent(sess.pushCtx(), sess.Userid, rod, f.FishGUID, strings.Fields(f.BaitGUIDs), false)
-		if err != nil {
-			s.log.Warn("鱼饵扣减失败，稍后重试", "uid", sess.Userid, "err", err)
-			time.AfterFunc(6*time.Second, func() { s.repushPending14_14(sess.Userid) })
-			return
-		}
+	hook := f.HookGUID
+	if hook == "" {
+		hook = s.mountedHookGuid(s.dbCtx(), rod)
 	}
+	// 14/14 只是把鱼放进客户端水下行为系统，此时鱼还没有真正咬钩。
+	// 若在这里删除钩饵并推 4/21、4/22，客户端会立即看到空钩，随后让鱼以
+	// 14/12 f0=1 离场。饵必须保留到客户端用 14/11 确认中鱼后再扣除。
 	sess.Push14_14(f, hook, rod)
+}
+
+// consumeHookedBait 在客户端确认中鱼后扣除本次咬口使用的饵。
+// FishGUID 作为事务幂等键，重复 14/11 不会重复扣除。
+func (s *Server) consumeHookedBait(sess *Session, f *RolledFish, rod string) error {
+	if sess == nil || f == nil || !f.BaitsKnown {
+		return nil
+	}
+	change, err := s.consumeBaitEvent(sess.pushCtx(), sess.Userid, rod, f.FishGUID, strings.Fields(f.BaitGUIDs), false)
+	if err != nil {
+		return err
+	}
 	sess.pushBaitChange(change)
+	return nil
 }
 
 func (s *Server) consumeCastBait(sess *Session, st *FishState) error {
@@ -317,7 +602,9 @@ func (s *Server) reloadBaitForCast(ctx context.Context, uid int64, rod string) (
 	if parent.UID != uid {
 		return out, fmt.Errorf("不能为其他玩家的钓组补饵")
 	}
-	for ordinal := int64(0); ordinal < 2; ordinal++ {
+	rigType := s.rigTypeForWrite(ctx, rod)
+	multi := max(len(slotIndicesFor(rigType, catHook)), len(slotIndicesFor(rigType, catLure))) > 1
+	for ordinal := int64(0); ordinal < int64(baitSlotCount(rigType)); ordinal++ {
 		key := fmt.Sprintf("rebait:%d", ordinal)
 		id, err := s.DB.GetRodSetting(ctx, rod, key)
 		if err == sql.ErrNoRows {
@@ -329,8 +616,38 @@ func (s *Server) reloadBaitForCast(ctx context.Context, uid int64, rod string) (
 		if id == "" {
 			continue
 		}
+		request := rebaitRequest{ItemID: id}
+		if strings.HasPrefix(id, "{") {
+			if err := json.Unmarshal([]byte(id), &request); err != nil || request.ItemID == "" {
+				return out, fmt.Errorf("自动补饵记录无效")
+			}
+			id = request.ItemID
+		}
 		comps := s.storedRigComponents(ctx, rod)
-		if _, ok := comps[rigCompKey(27, ordinal)]; ok {
+		occupied := false
+		mountOrdinal := ordinal
+		if multi && request.HookGUID != "" {
+			if _, _, present := rigCompKeyForGUID(comps, request.HookGUID); !present {
+				if _, err := s.DB.SQL.ExecContext(ctx, `DELETE FROM rod_setting WHERE guid=? AND key=?`, rod, key); err != nil {
+					return out, err
+				}
+				continue
+			}
+			assignments, err := s.baitHookAssignments(ctx, rod, comps, false)
+			if err != nil {
+				return out, err
+			}
+			for _, bk := range rigCompKeysOfCategory(comps, catBait) {
+				if assignments[comps[bk].GUID] == request.HookGUID {
+					occupied = true
+					break
+				}
+			}
+			mountOrdinal = int64(len(rigCompKeysOfCategory(comps, catBait)))
+		} else {
+			_, occupied = comps[rigCompKey(catBait, ordinal)]
+		}
+		if occupied {
 			if _, err := s.DB.SQL.ExecContext(ctx, `DELETE FROM rod_setting WHERE guid=? AND key=?`, rod, key); err != nil {
 				return out, err
 			}
@@ -362,9 +679,22 @@ func (s *Server) reloadBaitForCast(ctx context.Context, uid int64, rod string) (
 			if baitQuantity(row) <= 0 {
 				continue
 			}
-			result := s.rigSetComponent(ctx, uid, rod, 27, guid, 350+ordinal, rigSetOpts{ParentType: familyRod, EnforceCategory: true, SplitStack: true})
+			result := s.rigSetComponent(ctx, uid, rod, 27, guid, 350+mountOrdinal, rigSetOpts{ParentType: familyRod, EnforceCategory: true, SplitStack: true, KeepRebait: true})
 			if result.Rejected || result.MountedGUID == "" {
 				return out, fmt.Errorf("自动补饵失败")
+			}
+			if request.HookGUID != "" {
+				if err := s.DB.UpsertRodSetting(ctx, rod, "bait_hook:"+result.MountedGUID, request.HookGUID); err != nil {
+					return out, err
+				}
+				if multi {
+					if err := s.orderBaitsByHook(ctx, uid, rod); err != nil {
+						return out, err
+					}
+				}
+			}
+			if _, err := s.DB.SQL.ExecContext(ctx, `DELETE FROM rod_setting WHERE guid=? AND key=?`, rod, key); err != nil {
+				return out, err
 			}
 			out.Updated = append(out.Updated, rod, guid, result.MountedGUID)
 			out.Removed = append(out.Removed, result.RemovedGUIDs...)
@@ -372,6 +702,69 @@ func (s *Server) reloadBaitForCast(ctx context.Context, uid int64, rod string) (
 		}
 	}
 	return out, nil
+}
+
+func (s *Server) orderBaitsByHook(ctx context.Context, uid int64, rod string) error {
+	comps := s.storedRigComponents(ctx, rod)
+	assignments, err := s.baitHookAssignments(ctx, rod, comps, false)
+	if err != nil {
+		return err
+	}
+	hookOrder := map[string]int64{}
+	for _, key := range rigCompKeysOfCategory(comps, catHook) {
+		hookOrder[comps[key].GUID] = rigCompOrdinal(key)
+	}
+	keys := rigCompKeysOfCategory(comps, catBait)
+	for _, key := range keys {
+		if _, ok := hookOrder[assignments[comps[key].GUID]]; !ok {
+			return nil
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return hookOrder[assignments[comps[keys[i]].GUID]] < hookOrder[assignments[comps[keys[j]].GUID]]
+	})
+	var baits []rigComp
+	for _, key := range keys {
+		baits = append(baits, comps[key])
+		delete(comps, key)
+	}
+	for i, bait := range baits {
+		bait.Ordinal = int64(i)
+		comps[rigCompKey(catBait, int64(i))] = bait
+	}
+	tx, err := beginEconomyTx(ctx, s.DB)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	parent, err := getOwnedItemTx(ctx, tx, uid, rod)
+	if err != nil {
+		return err
+	}
+	fields, err := FieldsFromJSON(parent.FieldsJSON)
+	if err != nil {
+		return err
+	}
+	idx := fieldIdxByCS(parent.WireClass, csRigObject)
+	if idx < 0 || idx >= len(fields) || fields[idx].Val == nil {
+		return fmt.Errorf("钓组字段无效")
+	}
+	f5 := fields[idx].Val
+	name, rt, _ := rigIdentity(f5)
+	fields[idx].Val = buildRig153Like(f5, name, rt, comps, rigDepthOf(f5, 100), rigClipOf(f5))
+	if err := updateItemFieldsTx(ctx, s.DB, tx, parent, fields); err != nil {
+		return err
+	}
+	components := make([]store.RigComponent, 0, len(comps))
+	for _, comp := range comps {
+		components = append(components, store.RigComponent{
+			Slot: comp.Category, Ordinal: comp.Ordinal, GUID: comp.GUID, Extra: comp.Extra,
+		})
+	}
+	if err := s.DB.ReplaceRigComponentsTx(ctx, tx, rod, components); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Session) prepareBaitForCast(st *FishState, rod string) error {

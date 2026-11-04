@@ -74,6 +74,11 @@ func main() {
 	} else {
 		log.Info("渔线轮零件重建完成", "reels", n)
 	}
+	if n, err := srv.RepairReelEnginePower(ctx); err != nil {
+		log.Warn("渔线轮电机参数补写失败", "reels", n, "err", err)
+	} else if n > 0 {
+		log.Info("渔线轮电机参数已补写", "reels", n)
+	}
 	if n, err := srv.RebuildReelPerformance(ctx); err != nil {
 		log.Warn("渔线轮物理参数重建失败", "reels", n, "err", err)
 	} else {

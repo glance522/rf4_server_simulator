@@ -224,79 +224,6 @@ func irFieldInt(n *irNode, idx int) (int64, bool) {
 	return v, true
 }
 
-// reanchorWeather 将逐日预报和逐小时天气计划平移到当前游戏时间。
-func reanchorWeather(root *irNode, nowUnix int64) {
-	day, hour := worldDayAndHour(nowUnix)
-
-	// 逐日预报：8 条覆盖 [今天−1 .. 今天+6]，以最小日号为锚整体平移。
-	var fDays []*irField
-	irWalkObj(root, func(n *irNode) {
-		if n.Class != forecastClass {
-			return
-		}
-		if v, ok := irFieldInt(n, 0); ok && len(n.Fields) > 0 {
-			_ = v
-			fDays = append(fDays, &n.Fields[0])
-		}
-	})
-	if len(fDays) > 0 {
-		minD := int64(1 << 62)
-		for _, f := range fDays {
-			var v int64
-			_ = json.Unmarshal(f.V, &v)
-			if v < minD {
-				minD = v
-			}
-		}
-		delta := (day - 1) - minD
-		if delta != 0 {
-			for _, f := range fDays {
-				var v int64
-				_ = json.Unmarshal(f.V, &v)
-				b, _ := json.Marshal(v + delta)
-				f.V = b
-			}
-		}
-	}
-
-	// 逐小时计划：24 小时连续窗口，以最小绝对小时为锚平移到 (当前日, 当前时)。
-	var hEntries [][2]*irField
-	irWalkObj(root, func(n *irNode) {
-		if n.Class != hourPlanClass || len(n.Fields) < 2 {
-			return
-		}
-		d, ok1 := irFieldInt(n, 0)
-		h, ok2 := irFieldInt(n, 1)
-		if ok1 && ok2 {
-			hEntries = append(hEntries, [2]*irField{&n.Fields[0], &n.Fields[1]})
-			_ = d
-			_ = h
-		}
-	})
-	if len(hEntries) > 0 {
-		minAbs := int64(1 << 62)
-		abs := make([]int64, len(hEntries))
-		for i, e := range hEntries {
-			var d, h int64
-			_ = json.Unmarshal(e[0].V, &d)
-			_ = json.Unmarshal(e[1].V, &h)
-			abs[i] = d*24 + h
-			if abs[i] < minAbs {
-				minAbs = abs[i]
-			}
-		}
-		delta := (day*24 + hour) - minAbs
-		if delta != 0 {
-			for i, e := range hEntries {
-				nb, _ := json.Marshal((abs[i] + delta) / 24)
-				hb, _ := json.Marshal((abs[i] + delta) % 24)
-				e[0].V = nb
-				e[1].V = hb
-			}
-		}
-	}
-}
-
 // buildSpawnLocatorBody 1/13 响应体：206 cgbaffjpbkg{dob, scene}。
 // levelKey 是玩家上次所在地图；scene 为空时按地图选择已知默认场景。
 func (s *Server) buildSpawnLocatorBody(levelKey, scene string, nowUnix int64) ([]byte, error) {
@@ -360,7 +287,11 @@ func (s *Server) buildMapDobBody(key string, nowUnix int64) ([]byte, error) {
 // vallist[205 地图树, 800 护网快照, 307 玩家档案, null]。
 // 外层容器是 vallist，不是 args。
 func (s *Server) buildTravelBody(sess *Session, key string) ([]byte, error) {
-	dobBody, err := s.buildMapDobBody(key, time.Now().Unix())
+	return s.buildTravelBodyAt(sess, key, time.Now().Unix())
+}
+
+func (s *Server) buildTravelBodyAt(sess *Session, key string, nowUnix int64) ([]byte, error) {
+	dobBody, err := s.buildMapDobBody(key, nowUnix)
 	if err != nil {
 		return nil, err
 	}

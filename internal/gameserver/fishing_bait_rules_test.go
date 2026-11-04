@@ -52,7 +52,7 @@ func seedBaitRuleTest(t *testing.T) (*Server, *store.DB) {
 	for _, q := range []string{
 		`INSERT INTO loc_alias(alias,loc) VALUES('level_900_rules','rules-test')`,
 		`INSERT INTO loc_wiki_fish(loc,fish_key,fish_zh) VALUES('rules-test','c.roach','常见拟鲤'),('rules-test','frog','青蛙')`,
-		`INSERT INTO item_def(numeric_id,item_id,category,attrs_json) VALUES(999801,'rule_worm',27,'{"fopbhlmkcpe":6}'),(999802,'rule_lure',17,'{"mbemakijdeh":4}'),(999803,'rule_other',27,'{}')`,
+		`INSERT INTO item_def(numeric_id,item_id,category,attrs_json) VALUES(999801,'rule_worm',27,'{"fopbhlmkcpe":6}'),(999802,'rule_lure',17,'{"mbemakijdeh":4}'),(999803,'rule_other',27,'{"fopbhlmkcpe":6}')`,
 		`INSERT INTO item_catalog(item_id,name_zh) VALUES('rule_worm','蚯蚓'),('rule_lure','Hunter 1-001'),('rule_other','补充饵')`,
 	} {
 		if _, err := db.SQL.Exec(q); err != nil {

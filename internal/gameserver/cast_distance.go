@@ -478,7 +478,7 @@ func (s *Server) castDistanceForRig(ctx context.Context, uid int64, rodGUID stri
 	// “重量饵”是否来自同一个 f5 装配。饵 ID 本身不做距离乘数，真正
 	// 进入物理计算的是上方汇总出的真实重量。
 	p.BaitItemID = s.currentBait(ctx, rodGUID)
-	p.SkillCategory, p.SkillMastery, p.SkillNodeEffect = s.castSkillStats(ctx, uid, rigType)
+	p.SkillCategory, p.SkillMastery, p.SkillNodeEffect = s.castSkillStats(ctx, uid, rigType, rodGUID)
 	p.PlayerPrimary, p.PlayerSecondary = s.castPlayerCondition(ctx, uid)
 	p.ReelType, p.SpoolSize, p.SpoolCapacityM = s.castReelSpoolStats(ctx, reel, ids.Line)
 	if p.SpoolCapacityM > 0 && p.LineLengthM > 0 {
