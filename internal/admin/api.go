@@ -12,6 +12,8 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -65,6 +67,8 @@ func NewServer(cfg config.Admin, db *store.DB, log logger, webFS fs.FS) *Server 
 	mux.HandleFunc("GET /api/players", auth(s.handlePlayers))
 	mux.HandleFunc("GET /api/players/detail", auth(s.handlePlayerDetail))
 	mux.HandleFunc("POST /api/players/update", auth(s.handlePlayerUpdate))
+	mux.HandleFunc("POST /api/players/avatar", auth(s.handlePlayerAvatarUpload))
+	mux.HandleFunc("GET /avatars/", s.handleAvatarFile)
 	mux.HandleFunc("POST /api/players/membership", auth(s.handlePlayerMembership))
 	mux.HandleFunc("POST /api/players/grant", auth(s.handleGrantItem))
 	mux.HandleFunc("POST /api/players/items/delete", auth(s.handlePlayerItemDelete))
@@ -330,7 +334,7 @@ func (s *Server) handlePlayerDetail(w http.ResponseWriter, r *http.Request) {
 		"silver": p.Silver, "gold": p.Gold, "bank": p.Bank,
 		"membership": p.Membership, "membership_exp": p.MembershipExp,
 		"membership_active": store.MembershipAt(p.Membership, p.MembershipExp, time.Now().Unix()).Active,
-		"stars":             p.Stars, "email": p.Email,
+		"stars":             p.Stars, "email": p.Email, "avatar": p.Avatar,
 		"role": p.Role, "banned": p.Banned,
 		"item_count": len(items), "keepnet_count": len(keepnet), "mail_count": len(mails),
 		"items": items, "keepnet": keepnet, "mails": mailRows, "skills": skills,
@@ -351,6 +355,7 @@ func (s *Server) handlePlayerUpdate(w http.ResponseWriter, r *http.Request) {
 		Bank          *int64  `json:"bank"`
 		Membership    *int64  `json:"membership"`
 		MembershipExp *int64  `json:"membership_exp"`
+		Avatar        *string `json:"avatar"`
 	}
 	if err := readJSON(r, &req); err != nil || req.UID == 0 {
 		httpError(w, 400, "参数错误")
@@ -388,13 +393,23 @@ func (s *Server) handlePlayerUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	avatar := p.Avatar
+	if req.Avatar != nil {
+		avatar = strings.TrimSpace(*req.Avatar)
+	}
+	avatarSet := ""
+	args := []any{name, lvl, xpAfter,
+		apply(p.Silver, req.Silver), apply(p.Gold, req.Gold), apply(p.Bank, req.Bank),
+		membership, exp}
+	if s.db.HasAvatarColumn() {
+		avatarSet = ", avatar=?"
+		args = append(args, avatar)
+	}
+	args = append(args, float64(time.Now().Unix()), req.UID)
 	_, err = s.db.SQL.ExecContext(ctx, `
 		UPDATE profile SET name=?, level=?, xp=?, silver=?, gold=?, bank=?,
-		 membership=?, membership_exp=?, updated_ts=?
-		WHERE uid=?`,
-		name, lvl, xpAfter,
-		apply(p.Silver, req.Silver), apply(p.Gold, req.Gold), apply(p.Bank, req.Bank),
-		membership, exp, float64(time.Now().Unix()), req.UID)
+		 membership=?, membership_exp=?`+avatarSet+`, updated_ts=?
+		WHERE uid=?`, args...)
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return
@@ -403,6 +418,116 @@ func (s *Server) handlePlayerUpdate(w http.ResponseWriter, r *http.Request) {
 	_ = s.db.AuditLogWrite(ctx, adminOf(r), "player_update", strconv.FormatInt(req.UID, 10), string(detail))
 	_ = s.db.QueuePush(ctx, mustJSON(map[string]any{"op": "refresh_player", "uid": req.UID}))
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// handlePlayerAvatarUpload 处理 POST /api/players/avatar（multipart 上传头像）。
+//
+// 图片保存到 <主库目录>/avatars/<uid><ext>，并把 profile.avatar 写成
+// /avatars/<uid><ext>（后台与游戏客户端同机时可经 127.0.0.1:<admin端口>
+// 直接拉取）。保存后投递 refresh_player，在线玩家档案立即刷新。
+func (s *Server) handlePlayerAvatarUpload(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(8 << 20); err != nil { // 最大 8MB
+		httpError(w, 400, "请选择图片文件（最大 8MB）")
+		return
+	}
+	uid, _ := strconv.ParseInt(r.FormValue("uid"), 10, 64)
+	if uid == 0 {
+		httpError(w, 400, "参数错误")
+		return
+	}
+	file, hdr, err := r.FormFile("file")
+	if err != nil {
+		httpError(w, 400, "请选择图片文件")
+		return
+	}
+	defer file.Close()
+	ext := strings.ToLower(filepath.Ext(hdr.Filename))
+	switch ext {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp":
+	default:
+		switch strings.ToLower(hdr.Header.Get("Content-Type")) {
+		case "image/png":
+			ext = ".png"
+		case "image/jpeg":
+			ext = ".jpg"
+		case "image/gif":
+			ext = ".gif"
+		case "image/webp":
+			ext = ".webp"
+		default:
+			ext = ".png"
+		}
+	}
+	dir := s.avatarDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	rel := fmt.Sprintf("/avatars/%d%s", uid, ext)
+	dst, err := os.Create(filepath.Join(dir, fmt.Sprintf("%d%s", uid, ext)))
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	if _, err := io.Copy(dst, file); err != nil {
+		dst.Close()
+		httpError(w, 500, err.Error())
+		return
+	}
+	if err := dst.Close(); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	// 游戏客户端没有基准地址，必须存完整 URL 才能拉到图；
+	// 客户端与本机同机（gateway advertise 127.0.0.1），走 admin 端口托管。
+	url := rel
+	if base := s.publicBaseURL(); base != "" {
+		url = base + rel
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if _, err := s.db.SQL.ExecContext(ctx,
+		`UPDATE profile SET avatar=?, updated_ts=? WHERE uid=?`,
+		url, float64(time.Now().Unix()), uid); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	_ = s.db.AuditLogWrite(ctx, adminOf(r), "avatar_upload", strconv.FormatInt(uid, 10), url)
+	_ = s.db.QueuePush(ctx, mustJSON(map[string]any{"op": "refresh_player", "uid": uid}))
+	writeJSON(w, map[string]any{"ok": true, "avatar": url})
+}
+
+// publicBaseURL 由 admin 监听地址推导对外的 http://host:port 基址。
+func (s *Server) publicBaseURL() string {
+	addr := s.cfg.HTTPAddr
+	if addr == "" {
+		return ""
+	}
+	if i := strings.LastIndex(addr, ":"); i >= 0 && strings.Trim(addr[i+1:], "") != "" {
+		host := addr[:i]
+		if host == "" || host == "0.0.0.0" || host == "[::]" {
+			host = "127.0.0.1"
+		}
+		return "http://" + host + addr[i:]
+	}
+	return ""
+}
+
+// avatarDir 头像文件目录：与主库同级的 avatars/。
+func (s *Server) avatarDir() string {
+	return filepath.Join(filepath.Dir(s.db.Path), "avatars")
+}
+
+// handleAvatarFile 处理 GET /avatars/<name>：无鉴权静态托管，游戏客户端
+// 拉取头像走这条路径。
+func (s *Server) handleAvatarFile(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/avatars/")
+	if name == "" || strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeFile(w, r, filepath.Join(s.avatarDir(), name))
 }
 
 // handleGrantItem 将发物品指令写入共享队列，由主服务器执行以保持在线状态一致。

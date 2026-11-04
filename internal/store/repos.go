@@ -8,22 +8,23 @@ import (
 
 // Profile 玩家档案（profile 表行）。
 type Profile struct {
-	UID        int64
-	Name       string
-	Level      int64
-	XP         int64
-	Silver     int64
-	Gold       int64
-	Region     string
-	Membership int64
+	UID           int64
+	Name          string
+	Level         int64
+	XP            int64
+	Silver        int64
+	Gold          int64
+	Region        string
+	Membership    int64
 	MembershipExp int64
-	Stars      int64
-	Bank       int64
-	Email      string
-	Role       int64
-	Banned     bool
-	CreatedTS  float64
-	UpdatedTS  float64
+	Stars         int64
+	Bank          int64
+	Email         string
+	Role          int64
+	Avatar        string
+	Banned        bool
+	CreatedTS     float64
+	UpdatedTS     float64
 }
 
 // EnsureProfile 无档案时创建默认档案。默认昵称为 "player"；不要生成
@@ -40,21 +41,31 @@ func (d *DB) EnsureProfile(ctx context.Context, uid int64) (*Profile, error) {
 	return d.GetProfile(ctx, uid)
 }
 
-// GetProfile 取档案。
+// GetProfile 取档案。avatar 列在极旧的库快照里可能不存在，降级为空串。
 func (d *DB) GetProfile(ctx context.Context, uid int64) (*Profile, error) {
+	avatarSel := ""
+	if d.HasAvatarColumn() {
+		avatarSel = "COALESCE(avatar,''), "
+	}
 	row := d.SQL.QueryRowContext(ctx, `
 		SELECT uid, name, level, xp, silver, gold, COALESCE(region,'CN'),
 		       membership, COALESCE(membership_exp,0), stars, bank, COALESCE(email,''), role,
-		       COALESCE(banned,0), COALESCE(created_ts,0), COALESCE(updated_ts,0)
+		       `+avatarSel+`COALESCE(banned,0), COALESCE(created_ts,0), COALESCE(updated_ts,0)
 		FROM profile WHERE uid=?`, uid)
 	var p Profile
 	var banned int64
-	err := row.Scan(&p.UID, &p.Name, &p.Level, &p.XP, &p.Silver, &p.Gold,
-		&p.Region, &p.Membership, &p.MembershipExp, &p.Stars, &p.Bank, &p.Email, &p.Role,
-		&banned, &p.CreatedTS, &p.UpdatedTS)
+	var avatar sql.NullString
+	var dest []any = []any{&p.UID, &p.Name, &p.Level, &p.XP, &p.Silver, &p.Gold,
+		&p.Region, &p.Membership, &p.MembershipExp, &p.Stars, &p.Bank, &p.Email, &p.Role}
+	if avatarSel != "" {
+		dest = append(dest, &avatar)
+	}
+	dest = append(dest, &banned, &p.CreatedTS, &p.UpdatedTS)
+	err := row.Scan(dest...)
 	if err != nil {
 		return nil, err
 	}
+	p.Avatar = avatar.String
 	p.Banned = banned != 0
 	return &p, nil
 }
