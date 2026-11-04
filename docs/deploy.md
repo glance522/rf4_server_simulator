@@ -92,6 +92,14 @@ bin\gateway.exe -config config.yaml
 
 默认本地开发凭据为 `admin` / `admin123`。对于任何未与本地计算机隔离的环境，请在 `config.yaml` 中替换这些凭据。
 
+### 本地托管游戏进程
+
+运行 `python local-service/local_server.py --managed-backend` 可启用托管模式，启动并检查自有 `gameserver` 和管理入口；退出时关闭父进程输入管道，再限时清理仍未退出的自有子进程。`gameserver -parent-stdin` 在父输入关闭后退出。运行时需要 `bin/gameserver.exe`、支持 `-managed-admin` 的 `bin/launcher.exe` 和静态配置库。
+
+角色只在显式指定 `--character-dir` 时通过 `bin/import-character.exe` 导入；未指定时沿用存档及既有账号 UID 绑定，不创建默认角色或修改调试参数。`RF4_LOCAL_ADMIN_PASSWORD` 设置新管理员的初始口令，已有管理员密码保留；`/api/health` 的 `adminURL` 提供原管理登录入口。
+
+Windows 启动入口 `启动游戏.exe` 需要本机 Python 3.12，按需启动本地登录服务并检查其协议身份后启动用户自行安装的游戏客户端。
+
 ## 客户端接入
 
 客户端必须将登录主机名解析到网关，并信任生成的 HTTPS 证书。对于使用默认登录主机的客户端，请在 hosts 文件中添加以下条目：
@@ -144,3 +152,6 @@ bin\gateway.exe -config config.yaml
 6. 启动 bin\launcher.exe，检查 http://127.0.0.1:9500、http://127.0.0.1:9500/#admin 以及各服务健康检查。
 7. 只做构建和运行配置修复，不改变业务逻辑。每一步告诉我执行内容、结果和失败原因；需要管理员权限时先停下让我确认。
 ```
+
+
+本地服务的 `/api/health` 返回当前 `saveRoot` 和每次启动独立的 `control`。仅本机同源 JSON 请求可用该凭据调用 `POST /api/shutdown`，关闭当前服务及其自有游戏、管理子进程；不影响其他实例或删除存档。

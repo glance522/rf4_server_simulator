@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -23,6 +24,7 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "配置文件路径")
+	parentStdin := flag.Bool("parent-stdin", false, "父进程关闭输入时退出")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
@@ -37,6 +39,12 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if *parentStdin {
+		go func() {
+			_, _ = io.Copy(io.Discard, os.Stdin)
+			stop()
+		}()
+	}
 
 	obs := metrics.NewServer(cfg.Game.ObsAddr, "gameserver")
 	obsErrCh := obs.Start()

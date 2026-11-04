@@ -33,3 +33,8 @@ tools/*
 !tools/*.ps1
 !tools/*.py
 !tools/genwire/
+
+# 本地账户、会话与私有协议快照
+/local-service/data/
+__pycache__/
+*.pyc

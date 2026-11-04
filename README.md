@@ -161,3 +161,15 @@ make corpus    # 语料回环测试（语料文件不在仓库中时自动跳过
 ## 许可
 
 项目采用 **MIT 协议**（见 [LICENSE](LICENSE)）。本 README 中的项目定位与使用边界用于说明维护者立场，不改变许可证本身授予的权利与义务。
+
+## 可选本地登录与协议转发
+
+`local-service` 为客户端 `4.0.25034` 提供本机账号、登录会话、记住登录和游戏协议转发，需要 Python 3.12 或更新版本。
+
+运行 `python -B local-service/local_server.py`，默认 HTTP 入口为 `127.0.0.1:19214`，游戏协议入口为 `127.0.0.1:19213`。账号通过 `/api/accounts/register` 创建、`/api/session` 登录或退出。账号、会话和客户端状态保存在 `local-service/data/local.sqlite3`；可用 `--data-dir` 指定独立目录。
+
+连接已经启动的 Go 游戏服务时，传入 `--backend-address 127.0.0.1:9401`，并通过 `RF4_BACKEND_PSK` 提供与 Go 隧道配置一致的密钥。转发只接受环回地址，游戏身份由已认证的本地账号决定。已有导入账号从同一数据目录下的 `gameplay.sqlite3` 读取原 UID 绑定，快照与存档绑定冲突时会停止启动。
+
+客户端、目录资料和脱敏角色快照由使用者自行提供；本地数据目录已加入忽略规则。
+
+回归命令为 `python -B -m unittest discover -s local-service/tests -v`。真实 Go 互通测试通过 `RF4_TEST_GAMESERVER` 指定当前源码重建的 gameserver；静态库默认读取 `server_data/static.sqlite3`，也可用 `RF4_TEST_STATIC_DATABASE` 指定只读资料库。测试使用临时账号和数据库。
