@@ -709,6 +709,25 @@ func (d *DB) UpdateItemContainer(ctx context.Context, guid, container string) er
 	return err
 }
 
+// NextFreeSlot 取某容器内下一个可用槽位（空容器从 0 开始）。
+// 新建物品默认 slot=0，多件同槽时客户端只会显示一件，发放多件必须逐件分配。
+func (d *DB) NextFreeSlot(ctx context.Context, uid int64, container string) (int64, error) {
+	var next int64
+	err := d.SQL.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(slot),-1)+1 FROM item WHERE uid=? AND container=?`,
+		uid, container).Scan(&next)
+	if err != nil {
+		return 0, err
+	}
+	return next, nil
+}
+
+// SetItemSlot 更新物品在容器内的槽位。
+func (d *DB) SetItemSlot(ctx context.Context, guid string, slot int64) error {
+	_, err := d.SQL.ExecContext(ctx, `UPDATE item SET slot=? WHERE guid=?`, slot, guid)
+	return err
+}
+
 // ---- 钓组装配 ----
 
 // GetRigType 读 rig 表行的 rig_type（行不存在返回 (0,false)）。

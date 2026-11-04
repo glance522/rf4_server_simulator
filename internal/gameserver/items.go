@@ -70,6 +70,7 @@ var categoryWireClass = map[int64]wireClassEntry{
 	59: {"iknkgeomkip", 3200},  // Cobra 打窝器
 	60: {"ifnaghdaolg", 3201},  // Slingshot 弹弓
 	79: {"abmokghdbhf", 11500}, // 竿架（rod pod），客户端模型 pphmpibfgea
+	80: {"ipdakkbfoja", 13301}, // 技能书（wrapper，载荷是 13300 书目配置）
 	81: {"kbpmmclfipg", 1470},  // 渔轮电机（装在轮 f14 扩展槽，DTO odlknjlbooh）
 }
 

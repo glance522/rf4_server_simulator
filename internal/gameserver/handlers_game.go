@@ -1181,4 +1181,66 @@ func netTicksFromUnix(unixSec float64) int64 {
 	return int64(unixSec)*10_000_000 + 621_355_968_000_000_000
 }
 
+// ---- 捆绑包（premium bundle）发放 ----
+
+// premiumBundleItem 捆绑包里的单件物品与数量。
+type premiumBundleItem struct {
+	ItemID string
+	Qty    int64
+}
+
+// premiumBundleItems 捆绑包附赠物品：三个价位（32.90 / 159.90 / 179.90）在客户端
+// 展示的清单相同。id 全部来自本地物品目录（Saltmaster/Venga 是 Steinbithavn 定制版，
+// 目录里带 _sbtn 后缀）；技能书 category 80 必须按 wrapper ipdakkbfoja/13301 发。
+var premiumBundleItems = []premiumBundleItem{
+	{ItemID: "pilkr_10208_fu88_sbtn", Qty: 1}, // Saltmaster SBH 88 鱼竿
+	{ItemID: "spin_5140_sbtn", Qty: 1},        // Venga SBH 10000 渔轮
+	{ItemID: "seafish_book", Qty: 1},          // 书「海钓入门技能书」
+	{ItemID: "fb_lf_makrel", Qty: 1},          // 一套海鱼饵（box_sea_baits 盒内清单）
+	{ItemID: "fb_lf_saida", Qty: 1},
+	{ItemID: "fb_lf_seld", Qty: 1},
+	{ItemID: "fb_bf_makrel", Qty: 1},
+	{ItemID: "fb_bf_saida", Qty: 1},
+	{ItemID: "fb_bf_seld", Qty: 1},
+	{ItemID: "fb_shrimp", Qty: 1},
+	{ItemID: "fb_nereis", Qty: 1},
+	{ItemID: "ticket_boat_norw_sea_a_120", Qty: 10}, // 10 张 5 天租船票（120 小时）
+}
+
+// premiumBundlePrices 识别捆绑包的金币价（百分位）。
+var premiumBundlePrices = map[int64]string{
+	3290:  "基本捆绑包",
+	15990: "扩展捆绑包",
+	17990: "全捆绑包",
+}
+
+// grantPremiumBundle 在 3/37 买断成功后按价位发放捆绑包附赠物品；
+// 不是捆绑包价格就跳过。背包槽位逐个分配，否则多件会挤在 0 号格只显示一件。
+func (s *Server) grantPremiumBundle(ctx context.Context, c *Ctx, uid, price int64) {
+	name, ok := premiumBundlePrices[price]
+	if !ok {
+		return
+	}
+	slot, err := s.DB.NextFreeSlot(ctx, uid, "backpack")
+	if err != nil {
+		c.Log.Warn("捆绑包发放取空槽失败", "bundle", name, "err", err)
+		return
+	}
+	granted := 0
+	for _, it := range premiumBundleItems {
+		row, gerr := s.CreateItem(ctx, uid, it.ItemID, "backpack", it.Qty)
+		if gerr != nil || row == nil {
+			c.Log.Warn("捆绑包物品发放失败", "bundle", name, "item", it.ItemID, "err", gerr)
+			continue
+		}
+		if serr := s.DB.SetItemSlot(ctx, row.GUID, slot); serr != nil {
+			c.Log.Warn("捆绑包物品槽位设置失败", "item", it.ItemID, "slot", slot, "err", serr)
+		}
+		slot++
+		granted++
+	}
+	c.Log.Info("捆绑包附赠物品已发放", "bundle", name, "price", price,
+		"granted", granted, "total", len(premiumBundleItems))
+}
+
 var _ = context.Background
