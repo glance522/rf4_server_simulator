@@ -257,6 +257,8 @@ func (s *Server) fishingKeep(ctx *Ctx) ([]byte, bool) {
 	}
 	cctx := ctx.Sess.pushCtx()
 	st := s.stateFor(uid)
+	st.finishMu.Lock()
+	defer st.finishMu.Unlock()
 
 	st.mu.Lock()
 	pending := st.Pending
@@ -354,37 +356,36 @@ func (s *Server) fishingRelease(ctx *Ctx) ([]byte, bool) {
 	}
 	uid := ctx.Sess.Userid
 	st := s.stateFor(uid)
+	st.finishMu.Lock()
+	defer st.finishMu.Unlock()
 	st.mu.Lock()
 	pending := st.Pending
-	st.Pending = nil
+	loc := st.Loc
 	st.mu.Unlock()
 
 	if pending != nil {
+		requestFish := ""
+		guids := make([]string, 0, 2)
+		for _, guid := range deepGUIDs(ctx.Tree) {
+			if guid != "" && guid != zeroGUID {
+				guids = append(guids, guid)
+			}
+		}
+		if len(guids) >= 2 {
+			requestFish = guids[1]
+		} else if len(guids) == 1 {
+			requestFish = guids[0]
+		}
+		if requestFish == "" {
+			ctx.ReplyFailure("System.ArgumentException", "放生请求缺少鱼标识")
+			return nil, true
+		}
+		if !strings.EqualFold(requestFish, pending.FishGUID) {
+			ctx.ReplyFailure("System.ArgumentException", "放生的鱼与本次钓获不一致")
+			return nil, true
+		}
+
 		cctx := ctx.Sess.pushCtx()
-		// 只有蓝冠鱼可以命名，已命名的鱼不能改名。
-		// 命名条件不满足时按普通放生处理，并记录日志。
-		if name := releaseFishName(ctx.Tree); name != "" {
-			fid := pending.NamedID
-			if fid == "" {
-				fid = pending.FishGUID
-			}
-			if ok, why := canNameFish(cctx, s.DB, pending.Grade, fid); ok {
-				if ok2, why2 := s.insertNamedFish(cctx, uid, pending, fid, name, st.Loc); ok2 {
-					pending.Name = strings.TrimSpace(name)
-					pending.NamedID = fid
-					ctx.Log.Info("蓝冠命名成功", "鱼种", pending.Species, "重量", pending.WeightG, "名字", pending.Name)
-				} else {
-					ctx.Log.Warn("蓝冠命名被拒", "原因", why2, "鱼种", pending.Species, "名字", name)
-				}
-			} else {
-				ctx.Log.Warn("蓝冠命名被拒", "原因", why, "鱼种", pending.Species, "名字", name)
-			}
-		}
-		// 被命名鱼又被钓到/放生一次 → 计数 +1（note_recatch；含刚命名的这条）
-		if pending.NamedID != "" {
-			s.DB.NamedFishNoteRecatch(cctx, pending.NamedID)
-		}
-		// 放生奖励：base × release_xp_ratio（默认 0.5）
 		base := pending.XP
 		if base == 0 {
 			b, _ := catchValue(pending.Species, pending.Grade, pending.WeightG)
@@ -392,15 +393,50 @@ func (s *Server) fishingRelease(ctx *Ctx) ([]byte, bool) {
 		}
 		ratio := s.tunableF("release_xp_ratio", 0.5)
 		bonus := int64(math.Round(float64(base) * ratio))
-		if bonus > 0 {
-			newLevel, _, gained := s.grantXp(cctx, uid, bonus)
-			ctx.Sess.Push2_9(100, uint64(bonus))
-			ctx.Sess.Push2_1()
-			if gained > 0 {
-				ctx.Sess.Push2_6(max64(1, newLevel-1))
-			}
+		result, replayed, err := s.releaseCatchOnce(cctx, uid, pending.FishGUID, bonus)
+		if err != nil {
+			ctx.Log.Warn("放生保存失败", "err", err)
+			ctx.ReplyFailure("System.IO.IOException", "放生未能保存，请重试")
+			return nil, true
 		}
-		s.notifyFishReleased(ctx.Sess, pending)
+
+		st.mu.Lock()
+		st.Pending = nil
+		st.CastActive = false
+		st.Hooked = false
+		st.Resolved = true
+		st.mu.Unlock()
+
+		if !replayed {
+			if name := releaseFishName(ctx.Tree); name != "" {
+				fid := pending.NamedID
+				if fid == "" {
+					fid = pending.FishGUID
+				}
+				if ok, why := canNameFish(cctx, s.DB, pending.Grade, fid); ok {
+					if ok2, why2 := s.insertNamedFish(cctx, uid, pending, fid, name, loc); ok2 {
+						pending.Name = strings.TrimSpace(name)
+						pending.NamedID = fid
+						ctx.Log.Info("蓝冠命名成功", "鱼种", pending.Species, "重量", pending.WeightG, "名字", pending.Name)
+					} else {
+						ctx.Log.Warn("蓝冠命名被拒", "原因", why2, "鱼种", pending.Species, "名字", name)
+					}
+				} else {
+					ctx.Log.Warn("蓝冠命名被拒", "原因", why, "鱼种", pending.Species, "名字", name)
+				}
+			}
+			if pending.NamedID != "" {
+				s.DB.NamedFishNoteRecatch(cctx, pending.NamedID)
+			}
+			if result.Bonus > 0 {
+				ctx.Sess.Push2_9(100, uint64(result.Bonus))
+				ctx.Sess.Push2_1()
+				if result.LevelsGained > 0 {
+					ctx.Sess.Push2_6(max64(1, result.Level-1))
+				}
+			}
+			s.notifyFishReleased(ctx.Sess, pending)
+		}
 	}
 	// 响应 807：{null, null, 307, null, null, null}
 	profileTree, err := s.BuildProfile307(ctx.Sess.pushCtx(), uid)
