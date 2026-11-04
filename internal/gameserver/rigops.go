@@ -2155,6 +2155,9 @@ func hRodTake(ctx *Ctx) ([]byte, bool) {
 		rod = guids[0]
 	}
 	st := srv.stateFor(ctx.Sess.Userid)
+	if !srv.pendingCatchAllowsCast(ctx, st) {
+		return nil, true
+	}
 	st.mu.Lock()
 	if rod != "" {
 		st.GearGuid = rod

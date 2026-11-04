@@ -54,6 +54,7 @@ func hItemCount(ctx *Ctx) ([]byte, bool) {
 	case containerBackpack:
 		used, _ = srv.DB.CountItemsByContainers(cctx, ctx.Sess.Userid, []string{"backpack", "rig"})
 	case containerKeepnet:
+		srv.retryCompletedCatchRecovery(ctx.Sess)
 		n, err := srv.DB.KeepnetList(cctx, ctx.Sess.Userid)
 		if err == nil {
 			used = int64(len(n))
@@ -86,6 +87,7 @@ func hItemGUIDs(ctx *Ctx) ([]byte, bool) {
 	case containerBackpack:
 		guids, _ = srv.DB.ItemGUIDsByContainers(cctx, ctx.Sess.Userid, []string{"backpack", "rig"})
 	case containerKeepnet:
+		srv.retryCompletedCatchRecovery(ctx.Sess)
 		list, err := srv.DB.KeepnetList(cctx, ctx.Sess.Userid)
 		if err == nil {
 			for _, e := range list {
@@ -112,6 +114,7 @@ func hItemDetails(ctx *Ctx) ([]byte, bool) {
 	cctx := ctx.Sess.pushCtx()
 	out := proto.Args(proto.S("61"))
 	if container == containerKeepnet {
+		srv.retryCompletedCatchRecovery(ctx.Sess)
 		for _, g := range guids {
 			e, err := srv.DB.KeepnetGet(cctx, ctx.Sess.Userid, g)
 			if err != nil || e == nil {
@@ -611,6 +614,9 @@ func hCastPrepare(ctx *Ctx) ([]byte, bool) {
 		gear = guids[0]
 	}
 	st := srv.stateFor(ctx.Sess.Userid)
+	if !srv.pendingCatchAllowsCast(ctx, st) {
+		return nil, true
+	}
 	st.mu.Lock()
 	st.GearGuid = gear
 	depthCM := st.DepthCM
@@ -651,6 +657,9 @@ func hCast(ctx *Ctx) ([]byte, bool) {
 		gear = guids[len(guids)-1]
 	}
 	st := srv.stateFor(ctx.Sess.Userid)
+	if !srv.pendingCatchAllowsCast(ctx, st) {
+		return nil, true
+	}
 	if ctx.Tree != nil {
 		if loc := findObjStr(ctx.Tree, "olieodeoaof"); loc != "" {
 			st.Loc = loc
@@ -960,12 +969,10 @@ func hFishingLeft(ctx *Ctx) ([]byte, bool) {
 		st.Hooked = false
 		pending := st.Pending
 		castActive := st.CastActive
-		st.mu.Unlock()
 		if castActive && pending != nil {
-			uid := ctx.Sess.Userid
-			fishGUID := pending.FishGUID
-			time.AfterFunc(6*time.Second, func() { srv.repushPending14_14(uid, fishGUID) })
+			srv.armPendingRepushLocked(ctx.Sess.Userid, st, 6*time.Second)
 		}
+		st.mu.Unlock()
 		return nil, true
 	}
 	if f0 == 1 || f0 == 2 || f0 == 8 {

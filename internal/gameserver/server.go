@@ -192,6 +192,7 @@ func (s *Server) openSession(c *tunnel.Conn, sid uint64, payload []byte) {
 		if err := s.EnsurePlayer(context.Background(), userid); err != nil {
 			sess.log.Warn("玩家初始化失败", "err", err)
 		}
+		s.recoverCompletedCatchOnLogin(sess)
 		sess.Push(0, 1, proto.Args524())
 	}
 	sess.startKeepalive()
