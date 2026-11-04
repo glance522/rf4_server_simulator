@@ -145,7 +145,7 @@ func (s *Server) BuildProfile307(ctx context.Context, uid int64) (*proto.Value, 
 		6:  proto.U32(uint32(totalPts)),
 		7:  proto.U64(uint64(p.Silver)),
 		8:  proto.U64(uint64(p.Gold)),
-		9:  proto.StrVal(""),
+		9:  proto.StrVal(p.Avatar), // 头像 URL（后台可上传/修改，客户端 GET 该 URL 拉图）
 		10: proto.U32(membershipKind),
 		11: proto.U64(membershipExp),
 		12: s.buildPose308(ctx, uid),
