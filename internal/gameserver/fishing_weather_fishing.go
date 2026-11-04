@@ -86,10 +86,7 @@ func (s *Server) emptyWeatherBiteLocked(sess *Session, st *FishState, now time.T
 	}
 	st.Resolved = false
 	delay := s.biteDelayInWeather(st, sess.weatherAt(st.Loc, now), now, st.Bonus)
-	st.BiteAt = now.Add(time.Duration(delay * float64(time.Second)))
-	st.BiteGen++
-	gen := st.BiteGen
-	st.biteTimer = time.AfterFunc(time.Until(st.BiteAt), func() { s.onBiteTimer(sess.Userid, gen) })
+	s.armBiteTimerLocked(sess.Userid, st, now.Add(time.Duration(delay*float64(time.Second))))
 }
 
 // 共同部件损坏或已知钩（含拟饵内置活性钩）全部损坏时停口；缺少资料保持原行为。

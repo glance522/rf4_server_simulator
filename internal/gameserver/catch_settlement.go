@@ -185,6 +185,11 @@ func (s *Server) settleCatchOnce(ctx context.Context, uid int64, f *RolledFish, 
 		return nil, fmt.Errorf("钓获经验超出范围")
 	}
 	totalXP := xp + premiumXP
+	if bonus, err := s.drinkXPBonusTx(ctx, tx, uid, xp, time.Now()); err != nil {
+		return nil, err
+	} else if bonus != nil {
+		bonuses = append(bonuses, *bonus)
+	}
 	for _, bonus := range bonuses {
 		if bonus.XP > math.MaxInt64-totalXP {
 			return nil, fmt.Errorf("钓获经验超出范围")

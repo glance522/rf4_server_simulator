@@ -274,9 +274,8 @@ func TestBaitConsumptionThroughBiteAndReplay(t *testing.T) {
 	timer := time.NewTimer(time.Hour)
 	defer timer.Stop()
 	st.biteTimer = timer
-	gen := st.BiteGen
 	st.mu.Unlock()
-	s.onBiteTimer(1000001, gen)
+	s.onBiteTimer(1000001)
 	st.mu.Lock()
 	pending := st.Pending
 	st.mu.Unlock()

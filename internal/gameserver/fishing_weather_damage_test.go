@@ -7,19 +7,16 @@ import (
 )
 
 func stopWeatherDamageTimer(st *FishState) {
-	if st.biteTimer != nil {
-		st.biteTimer.Stop()
-		st.biteTimer = nil
-	}
+	st.cancelBiteTimerLocked()
 }
-func fireWeatherDamageBite(s *Server, uid int64, st *FishState, gen uint64) {
+func fireWeatherDamageBite(s *Server, uid int64, st *FishState, ticket fishingTimerTicket) {
 	st.mu.Lock()
 	placeholder := time.NewTimer(time.Hour)
 	if st.biteTimer == nil {
 		st.biteTimer = placeholder
 	}
 	st.mu.Unlock()
-	s.onBiteTimer(uid, gen)
+	s.onBiteTimerTicket(uid, ticket)
 	placeholder.Stop()
 }
 func TestWeatherBrokenHookDoesNotStopOtherHealthyHooks(t *testing.T) {
@@ -57,9 +54,9 @@ func TestWeatherBrokenHookDoesNotStopOtherHealthyHooks(t *testing.T) {
 		st.CastActive, st.InWater, st.Resolved, st.PushSent, st.Hooked = true, true, false, false, false
 		st.CastTs, st.RigType = time.Now().Add(-time.Minute), 59
 		st.GearGuid = rod.GUID
-		gen := st.BiteGen
+		ticket := fishingTimerTicket{st.castGeneration, st.biteTicket}
 		st.mu.Unlock()
-		fireWeatherDamageBite(s, uid, st, gen)
+		fireWeatherDamageBite(s, uid, st, ticket)
 		st.mu.Lock()
 		retried := !st.Resolved && st.biteTimer != nil
 		stopWeatherDamageTimer(st)
@@ -155,18 +152,18 @@ func TestWeatherRetryDoesNotResurrectInactiveCastOrReuseOldGeneration(t *testing
 	st.CastActive, st.InWater, st.Hooked = true, true, false
 	st.CastTs = time.Now().Add(-time.Minute)
 	st.RigType = 12
-	oldGeneration := st.BiteGen
+	oldTicket := fishingTimerTicket{st.castGeneration, st.biteTicket}
 	s.emptyWeatherBiteLocked(sess, st, time.Now())
-	nextGeneration := st.BiteGen
+	nextTicket := fishingTimerTicket{st.castGeneration, st.biteTicket}
 	timer, due := st.biteTimer, st.BiteAt
-	if timer == nil || nextGeneration <= oldGeneration {
+	if timer == nil || nextTicket.generation != oldTicket.generation || nextTicket.sequence <= oldTicket.sequence {
 		st.mu.Unlock()
 		t.Fatal("retry reused stale timer generation")
 	}
 	st.mu.Unlock()
-	s.onBiteTimer(uid, oldGeneration)
+	s.onBiteTimerTicket(uid, oldTicket)
 	st.mu.Lock()
-	if st.biteTimer != timer || !st.BiteAt.Equal(due) || st.BiteGen != nextGeneration {
+	if st.biteTimer != timer || !st.BiteAt.Equal(due) || st.castGeneration != nextTicket.generation || st.biteTicket != nextTicket.sequence {
 		stopWeatherDamageTimer(st)
 		st.mu.Unlock()
 		t.Fatal("stale callback replaced retry")

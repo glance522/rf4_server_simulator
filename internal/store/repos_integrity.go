@@ -23,6 +23,7 @@ var PlayerTables = []string{
 	"catch_log", "competition", "competition_member", "competition_result", "named_fish", "place_access",
 	"fishing_state", "item_damage_log", "membership_order", "reel_performance", "cafe_order", "cafe_order_completion",
 	"player_condition", "campfire_state", "happy_hour_state",
+	"drink_bonus_clock", "drink_bonus_effect",
 }
 
 // RuntimeTables 是运营/运行时/迁移元数据表，不属于静态资料或玩家存档。

@@ -19,43 +19,78 @@ import (
 
 // FishState 保存单个玩家的钓鱼状态，重连后继续使用。
 type FishState struct {
-	mu           fishStateMutex
-	finishMu     sync.Mutex
-	GearGuid     string
-	RigType      int64 // jppmjnahbpo 钓组种类（on_cast 记录；路亚族单独节奏）
-	Loc          string
-	Spot         uint64
-	DepthCM      int64 // 玩家设钓深（17/12 记入；14/1 的 158.f2 透传用）
-	CastActive   bool
-	BiteGen      uint64 // 咬钩定时器代号：每次重排递增，过期定时器自动作废
-	InWater      bool   // 14/7 动画位出现 0x400（钓组在水中）
-	NeedBite     bool   // 到点时还没入水，挂起等 0x400 再派鱼
-	CastTs       time.Time
-	FallTs       time.Time
-	FallSeen     bool
-	RigSettled   bool
-	TickSeen     bool
-	TickSeq      uint64 // 14/7 f14 客户端 tick 序号（诊断/恢复）
-	LastAnim     uint32 // 14/7 f5 上一次的动画位（仅在变更时打日志）
-	PushSent     bool
-	Hooked       bool
-	Resolved     bool
-	Pending      *RolledFish
-	biteTimer    *time.Timer
-	pendingTimer *time.Timer
-	BiteAt       time.Time     // 原定咬钩绝对时刻；硬重启后据此恢复 timer
-	Keepnet      []*RolledFish // 回退缓存（DB 权威）
-	Bait         string
-	PosX         float64 // 3/9 位置同步：世界坐标 X
-	PosZ         float64 // 3/9 位置同步：世界坐标 Z
-	HasPos       bool
-	CastPosX     float64 // 14/2 实际抛竿落点 X
-	CastPosZ     float64 // 14/2 实际抛竿落点 Z
-	HasCastPos   bool
-	LastSkill    int64       // 本次钓鱼大类（1 浮钓 / 2 纺车 / 3 底钓 / 11 海钓）
-	Armed        *RolledFish // GM 武装"下一杆必上"（唯一绕过重量上限的路径）
-	Bonus        fishingSkillBonus
-	persist      fishPersistMeta
+	mu             fishStateMutex
+	finishMu       sync.Mutex
+	GearGuid       string
+	RigType        int64 // jppmjnahbpo 钓组种类（on_cast 记录；路亚族单独节奏）
+	Loc            string
+	Spot           uint64
+	DepthCM        int64 // 玩家设钓深（17/12 记入；14/1 的 158.f2 透传用）
+	CastActive     bool
+	InWater        bool
+	NeedBite       bool
+	PosX           float64
+	PosZ           float64
+	HasPos         bool
+	CastPosX       float64
+	CastPosZ       float64
+	HasCastPos     bool
+	CastTs         time.Time
+	FallTs         time.Time
+	FallSeen       bool
+	RigSettled     bool
+	TickSeen       bool
+	TickSeq        uint64 // 14/7 f14 客户端 tick 序号（诊断/恢复）
+	LastAnim       uint32 // 14/7 f5 上一次的动画位（仅在变更时打日志）
+	PushSent       bool
+	pushing        *RolledFish // 仅进程内：防止同一尾鱼并发重推
+	Hooked         bool
+	Resolved       bool
+	Pending        *RolledFish
+	biteTimer      *time.Timer
+	pendingTimer   *time.Timer
+	castGeneration uint64
+	biteTicket     uint64
+	pendingTicket  uint64
+	BiteAt         time.Time     // 原定咬钩绝对时刻；硬重启后据此恢复 timer
+	Keepnet        []*RolledFish // 回退缓存（DB 权威）
+	Bait           string
+	LastSkill      int64       // 本次钓鱼大类（1 浮钓 / 2 纺车）
+	Armed          *RolledFish // GM 武装"下一杆必上"（唯一绕过重量上限的路径）
+	Bonus          fishingSkillBonus
+	persist        fishPersistMeta
+}
+
+type fishingTimerTicket struct{ generation, sequence uint64 }
+
+func (st *FishState) cancelBiteTimerLocked() {
+	if st.biteTimer != nil {
+		st.biteTimer.Stop()
+		st.biteTimer = nil
+	}
+	st.biteTicket++
+}
+
+func (st *FishState) cancelPendingTimerLocked() {
+	if st.pendingTimer != nil {
+		st.pendingTimer.Stop()
+		st.pendingTimer = nil
+	}
+	st.pendingTicket++
+}
+
+func (s *Server) armBiteTimerLocked(uid int64, st *FishState, due time.Time) {
+	st.cancelBiteTimerLocked()
+	st.BiteAt = due
+	ticket := fishingTimerTicket{st.castGeneration, st.biteTicket}
+	st.biteTimer = time.AfterFunc(time.Until(due), func() { s.onBiteTimerTicket(uid, ticket) })
+}
+
+func (s *Server) armPendingTimerLocked(uid int64, st *FishState, delay time.Duration) {
+	st.cancelPendingTimerLocked()
+	ticket := fishingTimerTicket{st.castGeneration, st.pendingTicket}
+	fish := st.Pending
+	st.pendingTimer = time.AfterFunc(delay, func() { s.repushPendingTicket(uid, ticket, fish) })
 }
 
 // RolledFish 待结算/已结算的鱼。
@@ -1205,14 +1240,14 @@ func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string) *proto.Va
 // ---- 搏鱼曲线（fight_curves_sets.json）----
 
 // Push14_14 发判鱼推送：args("524")[guid(钓组), 27]。
-func (s *Session) Push14_14(f *RolledFish, hookGUID, gearGuid string) {
+func (s *Session) Push14_14(f *RolledFish, hookGUID, gearGuid string) bool {
 	if f == nil {
-		return
+		return false
 	}
 	// 同一尾鱼短时间内重复推送会让客户端重建鱼实体，出现"溜的是一条、结算是另一条"。
 	if !s.claimFishPush(f.FishGUID) {
 		s.log.Info("忽略重复的 14/14 推送", "guid", shortGUID(f.FishGUID))
-		return
+		return false
 	}
 	if gearGuid == "" {
 		gearGuid = "00000000000000000000000000000000"
@@ -1229,10 +1264,10 @@ func (s *Session) Push14_14(f *RolledFish, hookGUID, gearGuid string) {
 	s.log.Info("14/14 发鱼",
 		"鱼种", f.Species, "重量_g", f.WeightG, "体力池", stamina,
 		"初始体力", initialStamina, "拉力", force)
-	s.Push(14, 14, proto.Args524(
+	return s.Push(14, 14, proto.Args524(
 		proto.Guid(gearGuid),
 		s.Srv.buildFish27(f, hookGUID, gearGuid),
-	))
+	)) != 0
 }
 
 // fishPushDedupeWindow 同一尾鱼重复推送的抑制窗口。
@@ -1254,8 +1289,8 @@ func (s *Session) claimFishPush(guid string) bool {
 }
 
 // scheduleBite 排咬钩定时器（重抛作废上一杆）。
-func (s *Server) scheduleBite(sess *Session, st *FishState) {
-	s.scheduleBiteState(sess, st, false, true)
+func (s *Server) scheduleBite(sess *Session, st *FishState) bool {
+	return s.scheduleBiteState(sess, st, false, true)
 }
 
 // scheduleBiteForHooked 在 14/14 尚未到达时补排判鱼，保留 Hooked 和原 CastTs，
@@ -1264,23 +1299,26 @@ func (s *Server) scheduleBiteForHooked(sess *Session, st *FishState) {
 	s.scheduleBiteState(sess, st, true, false)
 }
 
-func (s *Server) scheduleBiteState(sess *Session, st *FishState, preserveHooked, resetCast bool) {
+func (s *Server) scheduleBiteState(sess *Session, st *FishState, preserveHooked, resetCast bool) bool {
+	st.finishMu.Lock()
+	defer st.finishMu.Unlock()
 	now := time.Now()
 	bonus := s.fishingBonus(sess.pushCtx(), sess.Userid, st.RigType)
 	st.mu.Lock()
-	if st.biteTimer != nil {
-		st.biteTimer.Stop()
+	if completedCatchPending(st) {
+		st.mu.Unlock()
+		return false
 	}
+	st.cancelBiteTimerLocked()
+	st.cancelPendingTimerLocked()
+	st.castGeneration++
+	st.pushing = nil
+	st.persist.recoverCompleted = false
 	st.CastActive = true
 	st.Resolved = false
-	// 已经推给客户端、且玩家刺中正在溜的鱼不能被新排程清掉：
-	// 否则客户端还在溜旧鱼，服务端却按新鱼结算（青蛙→其他鱼就是这么来的）。
-	fighting := st.PushSent && st.Hooked && st.Pending != nil
-	if !fighting {
-		st.Pending = nil
-		if !preserveHooked {
-			st.Hooked = false
-		}
+	st.Pending = nil
+	if !preserveHooked {
+		st.Hooked = false
 	}
 	st.PushSent = false
 	st.FallSeen = false
@@ -1295,47 +1333,47 @@ func (s *Server) scheduleBiteState(sess *Session, st *FishState, preserveHooked,
 		st.NeedBite = false
 	}
 	st.Bonus = bonus
-	st.BiteGen++
-	gen := st.BiteGen
 	delay := s.biteDelayInWeather(st, sess.weatherAt(st.Loc, now), now, bonus)
-	st.BiteAt = now.Add(time.Duration(delay * float64(time.Second)))
-	uid := sess.Userid
-	timer := time.AfterFunc(time.Until(st.BiteAt), func() {
-		s.onBiteTimer(uid, gen)
-	})
-	st.biteTimer = timer
+	s.armBiteTimerLocked(sess.Userid, st, now.Add(time.Duration(delay*float64(time.Second))))
 	st.mu.Unlock()
+	return true
 }
 
 // onBiteTimer 到点：顺延保护检查 → 判鱼 → 推 14/14。
-func (s *Server) onBiteTimer(uid int64, gen uint64) {
+func (s *Server) onBiteTimer(uid int64) {
+	st := s.fishingState(uid)
+	st.mu.Lock()
+	ticket := fishingTimerTicket{st.castGeneration, st.biteTicket}
+	st.mu.Unlock()
+	s.onBiteTimerTicket(uid, ticket)
+}
+
+func (s *Server) onBiteTimerTicket(uid int64, ticket fishingTimerTicket) {
 	sess := s.liveSessionByUID(uid)
 	if sess != nil {
 		sess.updateHappyHour(time.Now(), false)
 	}
 	st := s.fishingState(uid)
 	st.mu.Lock()
-	if gen != st.BiteGen {
-		// 被重排替换掉的旧定时器：既不能清指针，也不能判鱼。否则会把新
-		// 定时器的指针清空，它就成了“没人管但仍在跑”的第二条鱼。
+	if ticket.generation != st.castGeneration || ticket.sequence != st.biteTicket {
 		st.mu.Unlock()
 		return
 	}
-	st.biteTimer = nil
+	st.cancelBiteTimerLocked()
 	if sess == nil {
 		// 进程仍活着但玩家断开：保留 CastActive/Pending/BiteAt，下一次
 		// stateFor（重连首个业务请求）会按过期时刻立即恢复 timer。
 		st.mu.Unlock()
 		return
 	}
-	if !st.CastActive || st.Resolved || st.PushSent {
+	if !st.CastActive || st.Resolved || st.PushSent || st.pushing != nil {
 		st.mu.Unlock()
 		return
 	}
 	if st.Pending != nil {
-		// 钩上已经有鱼（或刚要结算），不能再判一条：否则会把 Pending 覆盖掉，
-		// 客户端还在溜旧鱼，结算却按新鱼算。
+		f, gear, generation := st.Pending, st.GearGuid, st.castGeneration
 		st.mu.Unlock()
+		s.pushPendingBite(sess, st, f, gear, generation)
 		return
 	}
 	if !st.InWater {
@@ -1363,9 +1401,7 @@ func (s *Server) onBiteTimer(uid int64, gen uint64) {
 		if wait < minWait {
 			wait = minWait
 		}
-		st.BiteAt = now.Add(wait)
-		t := time.AfterFunc(wait, func() { s.onBiteTimer(uid, gen) })
-		st.biteTimer = t
+		s.armBiteTimerLocked(uid, st, now.Add(wait))
 		st.mu.Unlock()
 		return
 	}
@@ -1374,13 +1410,10 @@ func (s *Server) onBiteTimer(uid int64, gen uint64) {
 	// 路亚都顺延到 +12s（14/14 全部错过收线窗口）。
 	if !lure && now.Sub(st.CastTs) < 12*time.Second && st.TickSeen && !st.RigSettled {
 		// 顺延 1s 轮询（12s 兜底）
-		st.BiteAt = now.Add(time.Second)
-		t := time.AfterFunc(time.Second, func() { s.onBiteTimer(uid, gen) })
-		st.biteTimer = t
+		s.armBiteTimerLocked(uid, st, now.Add(time.Second))
 		st.mu.Unlock()
 		return
 	}
-	st.PushSent = true
 	if st.Armed != nil {
 		// GM 武装的"下一杆必上"优先，且绕过两道重量上限（arm_next_fish）
 		f := st.Armed
@@ -1388,10 +1421,9 @@ func (s *Server) onBiteTimer(uid int64, gen uint64) {
 		st.Armed = nil
 		f.LocLevel = s.currentLevel(uid)
 		st.Pending = f
-		gear := st.GearGuid
+		gear, generation := st.GearGuid, st.castGeneration
 		st.mu.Unlock()
-		hookGUID := s.mountedHookGuid(s.dbCtx(), gear)
-		sess.Push14_14(f, hookGUID, gear)
+		s.pushPendingBite(sess, st, f, gear, generation)
 		sess.pushChatProbe(27, 17, "", nil)
 		return
 	}
@@ -1427,11 +1459,10 @@ func (s *Server) onBiteTimer(uid int64, gen uint64) {
 	f.HappyHour, f.HappyHourKnown = sess.currentHappyHour().Active, true
 	f.LocLevel = s.currentLevel(uid)
 	st.Pending = f
-	gear := st.GearGuid
+	gear, generation := st.GearGuid, st.castGeneration
 	st.mu.Unlock()
 
-	// f23 = 线末端钩 guid（槽 12 钩 → 路亚拟饵出厂钩回退；送错=鱼秒弃咬 f0=5）
-	s.pushBaitedFish(sess, f, gear)
+	s.pushPendingBite(sess, st, f, gear, generation)
 	// 官方聊天模板播报咬钩（k17"player 鱼咬钩了"）。
 	sess.pushChatProbe(27, 17, "", nil)
 }
@@ -1439,12 +1470,27 @@ func (s *Server) onBiteTimer(uid int64, gen uint64) {
 // repushPending14_14 在 14/12 f0=3 时于 6 秒后重推同一尾 pending 鱼，
 // 不重新判定，以保持 GUID、重量和曲线不变。
 func (s *Server) repushPending14_14(uid int64, expectedFishGUID ...string) {
-	st := s.stateFor(uid)
+	st := s.fishingState(uid)
+	st.mu.Lock()
+	ticket := fishingTimerTicket{st.castGeneration, st.pendingTicket}
+	fish := st.Pending
+	if len(expectedFishGUID) > 0 && expectedFishGUID[0] != "" && (fish == nil || fish.FishGUID != expectedFishGUID[0]) {
+		st.mu.Unlock()
+		return
+	}
+	st.mu.Unlock()
+	s.repushPendingTicket(uid, ticket, fish)
+}
+
+func (s *Server) repushPendingTicket(uid int64, ticket fishingTimerTicket, fish *RolledFish) {
+	st := s.fishingState(uid)
 	sess := s.liveSessionByUID(uid)
 	st.mu.Lock()
-	if st.pendingTimer != nil {
-		st.pendingTimer = nil
+	if ticket.generation != st.castGeneration || ticket.sequence != st.pendingTicket || st.Pending != fish {
+		st.mu.Unlock()
+		return
 	}
+	st.cancelPendingTimerLocked()
 	if sess == nil {
 		st.mu.Unlock()
 		return
@@ -1454,15 +1500,42 @@ func (s *Server) repushPending14_14(uid int64, expectedFishGUID ...string) {
 		return
 	}
 	f := st.Pending
-	if len(expectedFishGUID) > 0 && expectedFishGUID[0] != "" && f.FishGUID != expectedFishGUID[0] {
+	gear, generation := st.GearGuid, st.castGeneration
+	st.mu.Unlock()
+	s.pushPendingBite(sess, st, f, gear, generation)
+}
+
+// pushPendingBite 只在隧道写成功后记为已推送，失败保留原鱼等待重推。
+func (s *Server) pushPendingBite(sess *Session, st *FishState, f *RolledFish, gear string, generation uint64) {
+	st.mu.Lock()
+	if generation != st.castGeneration || !st.CastActive || st.Resolved || st.Pending != f || st.GearGuid != gear || st.pushing != nil {
 		st.mu.Unlock()
 		return
 	}
-	gear := st.GearGuid
-	st.PushSent = true
+	st.pushing = f
 	st.persist.recoverPending = false
 	st.mu.Unlock()
-	s.pushBaitedFish(sess, f, gear)
+	sent := s.pushBaitedFish(sess, f, gear)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if generation != st.castGeneration {
+		return
+	}
+	st.pushing = nil
+	if !st.CastActive || st.Resolved || st.Pending != f || st.GearGuid != gear {
+		return // 发送期间已收竿或重抛，不能覆盖新状态。
+	}
+	st.PushSent = sent
+	if sent {
+		if st.persist.sessionID == sess.ID {
+			st.persist.recoverPending = false
+		}
+		return
+	}
+	st.persist.recoverPending = true
+	if !sess.Closed() && st.pendingTimer == nil {
+		s.armPendingTimerLocked(sess.Userid, st, 6*time.Second)
+	}
 }
 
 // speciesZhName 返回鱼种中文名（loc_wiki_fish.fish_zh）；缺名回退 key。

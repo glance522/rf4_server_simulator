@@ -314,6 +314,11 @@ func TestLureBiteGating(t *testing.T) {
 		t.Fatalf("14/2 应回 800: %x", resp.Body)
 	}
 
+	waterBody, err := proto.EncodeValue(proto.Args524(wiregen.MustMakeObj("lobemkloehp", map[int]*proto.Value{5: proto.U32(0x600)})), wiregen.Table())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc.SendRequest(402, 14, 7, waterBody...)
 	// 路亚应在 6 秒窗口内咬钩，额外等待落水时间。
 	fish14 := waitPushCmd(t, fc, 14, 14, 15*time.Second)
 	if fish14 == nil {
@@ -331,7 +336,12 @@ func TestLureBiteGating(t *testing.T) {
 		t.Fatalf("14/14 f23 应=落库出厂钩 %s，实得 %s", wantStoredHook, got.Hex)
 	}
 
-	// ---- 未挂载时没有部件钩，f23 回退到鱼自身 GUID ----
+	fc.SendRequest(403, 14, 6)
+	if response := fc.WaitResponse(3 * time.Second); response == nil {
+		t.Fatal("放生未完成")
+	}
+
+	// GM 指定鱼仍可在空钩时验证 f23 的鱼 GUID 回退。
 	if _, err := db.SQL.Exec(`DELETE FROM rig_component WHERE rig_guid=?`, rodGUID); err != nil {
 		t.Fatalf("清 rig_component: %v", err)
 	}
@@ -339,13 +349,17 @@ func TestLureBiteGating(t *testing.T) {
 	if hook := srv.mountedHookGuid(ctx, rodGUID); hook != "" {
 		t.Fatalf("未挂载拟饵时 f23 应回空（线末端不可解析），实得 %s", hook)
 	}
-	fc.SendRequest(402, 14, 2, bodyWithGUIDs(rodGUID)...)
+	st.mu.Lock()
+	st.Armed = &RolledFish{FishGUID: newFishGUID(), Species: "perch", WeightG: 100, LengthM: 0.12}
+	st.mu.Unlock()
+	fc.SendRequest(404, 14, 2, bodyWithGUIDs(rodGUID)...)
 	if resp := fc.WaitResponse(3 * time.Second); len(resp.Body) == 0 || resp.Body[0] != 0x01 {
 		t.Fatalf("14/2 应回 800: %x", resp.Body)
 	}
+	fc.SendRequest(405, 14, 7, waterBody...)
 	fish14b := waitPushCmd(t, fc, 14, 14, 15*time.Second)
 	if fish14b == nil {
-		t.Fatal("未挂载时 14/14 也应到达（服务端判鱼照常），此处校验其 f23 形态")
+		t.Fatal("GM 指定鱼未送达，无法校验 f23 回退")
 	}
 	dec, _, _ = proto.DecodeValue(fish14b.Body, 0, wiregen.Table())
 	fishObj = dec.ArgItem(1)

@@ -70,6 +70,9 @@ type Server struct {
 	// 技能定义缓存
 	skillDefs     map[int64][]skillNodeDef
 	skillDefsOnce sync.Once
+	drinkRunOnce  sync.Once
+	drinkKey      string
+	drinkMu       sync.Mutex
 
 	// 引线制作：普通主线 -> 前导线定义的静态映射缓存。
 	leaderWireMu     sync.Mutex
@@ -105,6 +108,13 @@ func (s *Server) Table() *proto.OpsTable { return s.table }
 
 // Serve 隧道服务循环（阻塞）。
 func (s *Server) Serve(ln net.Listener) error {
+	cleanupStop := make(chan struct{})
+	cleanupDone := make(chan struct{})
+	go s.runDrinkUseReceiptCleanup(cleanupStop, cleanupDone)
+	defer func() {
+		close(cleanupStop)
+		<-cleanupDone
+	}()
 	for {
 		nc, err := ln.Accept()
 		if err != nil {
@@ -125,7 +135,10 @@ func (s *Server) Serve(ln net.Listener) error {
 
 // handleTunnel 处理一条隧道连接（读循环）。
 func (s *Server) handleTunnel(c *tunnel.Conn) {
-	defer c.Close()
+	defer func() {
+		_ = c.Close()
+		s.closeTunnelSessions(c)
+	}()
 	for {
 		rt, sid, payload, err := c.ReadRecord()
 		if err != nil {
@@ -148,6 +161,21 @@ func (s *Server) handleTunnel(c *tunnel.Conn) {
 		case tunnel.TypePing:
 			_ = c.WriteRecord(tunnel.TypePong, 0, nil)
 		}
+	}
+}
+
+// closeTunnelSessions 停止断开隧道所属会话的保活，保留其他隧道会话。
+func (s *Server) closeTunnelSessions(c *tunnel.Conn) {
+	s.mu.Lock()
+	var owned []*Session
+	for _, sess := range s.sessions {
+		if sess.tunnel == c {
+			owned = append(owned, sess)
+		}
+	}
+	s.mu.Unlock()
+	for _, sess := range owned {
+		sess.Close("tunnel_closed")
 	}
 }
 
@@ -192,7 +220,10 @@ func (s *Server) openSession(c *tunnel.Conn, sid uint64, payload []byte) {
 		if err := s.EnsurePlayer(context.Background(), userid); err != nil {
 			sess.log.Warn("玩家初始化失败", "err", err)
 		}
+		s.recoverCompletedCatchOnLogin(sess)
 		sess.Push(0, 1, proto.Args524())
+	} else {
+		s.recoverCompletedCatchOnLogin(sess)
 	}
 	sess.startKeepalive()
 }

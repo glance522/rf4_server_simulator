@@ -124,7 +124,7 @@ func TestFishMarketFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	importFishStaticForProbe(t, db)
-	gsAddr, _ := startGameserverWithDB(t, db)
+	gsAddr, srv := startGameserverWithDB(t, db)
 	gw := testutil.StartGateway(t, gsAddr, testutil.TestPSK)
 
 	token, uid := gw.Login(t)
@@ -141,7 +141,7 @@ func TestFishMarketFlow(t *testing.T) {
 	if boot := fc.WaitPush(2 * time.Second); boot == nil || boot.Main != 0 {
 		t.Fatalf("boot 0/1 缺失: %+v", boot)
 	}
-	cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	cctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	p0, err := db.EnsureProfile(cctx, uid)
 	if err != nil {
@@ -163,6 +163,14 @@ func TestFishMarketFlow(t *testing.T) {
 	}
 	if rodGUID == "" {
 		t.Fatal("背包里没有竿（starter 播种失败？）")
+	}
+
+	bait, err := srv.CreateItem(cctx, uid, "worm_01", "backpack", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result := srv.rigSetComponent(cctx, uid, rodGUID, catBait, bait.GUID, 350, rigSetOpts{ParentType: familyRod, EnforceCategory: true, SplitStack: true}); result.Rejected || result.MountedGUID == "" {
+		t.Fatalf("failed to mount bait: %+v", result)
 	}
 
 	// 14/1 → 14/2

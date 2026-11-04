@@ -132,6 +132,9 @@ func (s *Session) Push(main, sub uint8, body *proto.Value) uint32 {
 
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
+	if s.closed.Load() {
+		return 0
+	}
 	callID := uint32(s.Srv.nextCallID(s.Token))
 	env := proto.BuildRequestEnvelope(callID, main, sub, append(bodyBytes, 0x01))
 	if traceCmds {
@@ -205,6 +208,7 @@ func (s *Server) nextCallID(token string) uint64 {
 // startKeepalive 启动 2/2 世界时钟保活循环，首包在 0.5 秒后发送。
 // 客户端根据 2/2 推算世界日号，长时间无下行会断开连接。
 func (s *Session) startKeepalive() {
+	s.updateDrinkBonuses(time.Now())
 	interval := s.Srv.cfg.KeepaliveInterval()
 	go func() {
 		timer := time.NewTimer(500 * time.Millisecond)
@@ -219,6 +223,7 @@ func (s *Session) startKeepalive() {
 				}
 				s.updateHappyHour(time.Now(), false)
 				pushKeepalive(s)
+				s.updateDrinkBonuses(time.Now())
 				// 每 6 拍（约 30 秒）刷新一次已租用船票的剩余分钟，
 				// 让客户端的到期提示随时间递减（客户端自身不会重算）。
 				// 每 6 拍（约 30 秒）清理一次已到期的租用船票。
@@ -237,6 +242,7 @@ func (s *Session) startKeepalive() {
 func (s *Session) Close(reason string) {
 	if s.closed.CompareAndSwap(false, true) {
 		s.updateHappyHour(time.Now(), true)
+		s.updateDrinkBonuses(time.Now())
 		s.log.Info("会话关闭", "reason", reason)
 		s.stopOnce.Do(func() { close(s.stopCh) })
 		s.Srv.removeSession(s)

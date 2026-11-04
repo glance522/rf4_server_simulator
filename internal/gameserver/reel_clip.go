@@ -11,6 +11,7 @@ import (
 // 基础实现：轮管卡默认关闭，按竿持久化卡米数。
 const (
 	reelClipSettingKey = "reel_clip_m"
+	reelDragSettingKey = "reel_drag_setting"
 	maxReelClipM       = 10000
 )
 

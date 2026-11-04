@@ -38,6 +38,7 @@ func registerEconMarket(d *Dispatch) {
 	d.Register(21, 4, hWorkshopOrder) // 官方金币通道同样是换件结构
 	d.Register(17, 12, hRodSetDepth)
 	d.Register(17, 13, hRodSetClip)
+	d.Register(17, 14, hRodSetDrag)
 }
 
 // ---------------------------------------------------------------------------
@@ -408,6 +409,7 @@ func hMarketSell(ctx *Ctx) ([]byte, bool) {
 		st.mu.Unlock()
 		ctx.Sess.Push2_1()
 		ctx.Sess.Push4_21(removed)
+		srv.retryCompletedCatchRecovery(ctx.Sess)
 		ctx.Log.Info("20/2 卖出", "条数", len(sold), "银分", total)
 	}
 	out := proto.Args(proto.S("112"))
@@ -1618,6 +1620,55 @@ func hRodSetDepth(ctx *Ctx) ([]byte, bool) {
 		ctx.Log.Info("17/12 竿实例无钓组字段，仅记会话深度", "竿", shortGUID(rodGUID))
 	}
 	return nil, true
+}
+
+// hRodSetDrag 17/14（fire-and-forget）：渔轮摩擦/转速设定值上报。
+//
+// 报文形状与 17/13（轮管卡）相同：args(52) + 竿 guid + u32。客户端每次启动都回到默认值，
+// 是因为服务端没有把设定值记下来回填；这里按竿保存并写回钓组桩的第 6 个字段。
+func hRodSetDrag(ctx *Ctx) ([]byte, bool) {
+	srv := ctx.Sess.Srv
+	rodGUID, value := parseRodGuidInt(ctx.Tree)
+	if rodGUID == "" {
+		return nil, true
+	}
+	ctx.Log.Info("17/14 设置摩擦/转速", "竿", shortGUID(rodGUID), "值", value)
+	if srv.DB != nil {
+		_ = srv.DB.UpsertRodSetting(ctx.Sess.pushCtx(), rodGUID, reelDragSettingKey,
+			strconv.FormatInt(value, 10))
+		srv.rodRigSetDrag(ctx.Sess.pushCtx(), rodGUID, value)
+	}
+	return nil, true
+}
+
+// rodRigSetDrag 把摩擦/转速值写回竿实例钓组桩的第 6 个字段，保留其他钓组状态。
+func (s *Server) rodRigSetDrag(ctx context.Context, rodGUID string, value int64) bool {
+	row, err := s.DB.GetItemByGUID(ctx, rodGUID)
+	if err != nil || row == nil {
+		return false
+	}
+	fields, err := FieldsFromJSON(row.FieldsJSON)
+	if err != nil {
+		return false
+	}
+	idx := fieldIdxByCS(row.WireClass, csRigObject)
+	if idx < 0 || idx >= len(fields) {
+		return false
+	}
+	stored := fields[idx].Val
+	if stored == nil || stored.Kind != proto.KindObj || len(stored.Fields) <= 6 {
+		return false
+	}
+	clone := *stored
+	clone.Fields = append([]proto.Field(nil), stored.Fields...)
+	if clone.Fields[6].Op != "VAL" {
+		clone.Fields[6].Op = "U32"
+	}
+	clone.Fields[6].Num = ptrU64(uint64(value))
+	fields[idx].Op = "VAL"
+	fields[idx].Val = &clone
+	s.saveItemFields(ctx, row, fields)
+	return true
 }
 
 // hRodSetClip 17/13（fire-and-forget）：记录轮管卡米数，0 表示关闭。

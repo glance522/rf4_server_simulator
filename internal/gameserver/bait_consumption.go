@@ -531,7 +531,7 @@ func (s *Session) pushBaitChange(change baitChange) {
 	}
 }
 
-func (s *Server) pushBaitedFish(sess *Session, f *RolledFish, rod string) {
+func (s *Server) pushBaitedFish(sess *Session, f *RolledFish, rod string) bool {
 	hook := f.HookGUID
 	if hook == "" {
 		hook = s.mountedHookGuid(s.dbCtx(), rod)
@@ -539,7 +539,7 @@ func (s *Server) pushBaitedFish(sess *Session, f *RolledFish, rod string) {
 	// 14/14 只是把鱼放进客户端水下行为系统，此时鱼还没有真正咬钩。
 	// 若在这里删除钩饵并推 4/21、4/22，客户端会立即看到空钩，随后让鱼以
 	// 14/12 f0=1 离场。饵必须保留到客户端用 14/11 确认中鱼后再扣除。
-	sess.Push14_14(f, hook, rod)
+	return sess.Push14_14(f, hook, rod)
 }
 
 // consumeHookedBait 在客户端确认中鱼后扣除本次咬口使用的饵。

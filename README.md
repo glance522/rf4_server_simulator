@@ -161,12 +161,3 @@ make corpus    # 语料回环测试（语料文件不在仓库中时自动跳过
 ## 许可
 
 项目采用 **MIT 协议**（见 [LICENSE](LICENSE)）。本 README 中的项目定位与使用边界用于说明维护者立场，不改变许可证本身授予的权利与义务。
-
-## 离线构建与发布
-
-先合入可选离线工具，再用 `./build.ps1 -OfflineTools`、`make OFFLINE_TOOLS=1` 或 `./tools/build.ps1 all -OfflineTools` 构建离线入口及辅助工具。预发布继续由 main 推送或手工触发，包含离线工具；不生成独立 admin.exe。
-
-发布资源仅从 Git 已跟踪文件中按白名单复制，唯一数据库例外是启动必需的 `server_data/static.sqlite3` 静态配置库。个人中心复用已有 `internal/portal/web/` 四个 CSS 的原路径，离线会员适配脚本随白名单打包，不复制主线页面或脚本。游戏客户端、玩家数据库、角色快照、日志和缓存不入包。可运行 `python -B -m unittest discover -s tools -p test_stage_preview.py` 验证排除规则。
-
-
-Preview 自动检查离线工具源码：三个工具完整时一并构建，全部缺省时只构建核心程序，部分缺失则报错。`WITH_OFFLINE_TOOLS=1` 显式要求离线构建，依赖不完整时失败；`0` 可选择只构建核心程序。

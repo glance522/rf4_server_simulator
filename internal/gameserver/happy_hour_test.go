@@ -176,7 +176,7 @@ func TestHappyHourBiteQualificationPersistsBeforeFailedPush(t *testing.T) {
 	st.CastTs = time.Now().Add(-time.Minute)
 	st.Armed = fish
 	st.mu.Unlock()
-	s.onBiteTimer(sess.Userid, st.BiteGen)
+	s.onBiteTimer(sess.Userid)
 	st.mu.Lock()
 	if st.Pending != fish || !fish.HappyHour || !fish.HappyHourKnown {
 		t.Errorf("bite qualification missing: %+v", st.Pending)

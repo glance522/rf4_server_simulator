@@ -86,19 +86,16 @@ func TestWeatherRetryPreservesCastAndStopsWhenDisabledOrHooked(t *testing.T) {
 		st.mu.Lock()
 		st.CastActive, st.InWater, st.Resolved, st.PushSent, st.Hooked = true, true, false, false, scenario.hooked
 		st.CastTs, st.RigType = time.Now().Add(-time.Minute), scenario.rig
-		castTs, gen := st.CastTs, st.BiteGen
+		castTs, generation := st.CastTs, st.castGeneration
+		ticket := fishingTimerTicket{st.castGeneration, st.biteTicket}
 		timer := time.NewTimer(time.Hour)
 		st.biteTimer = timer
 		st.mu.Unlock()
-		s.onBiteTimer(sess.Userid, gen)
+		s.onBiteTimerTicket(sess.Userid, ticket)
 		timer.Stop()
 		st.mu.Lock()
 		retry := st.biteTimer != nil
-		wantGeneration := gen
-		if scenario.retry {
-			wantGeneration++
-		}
-		if retry != scenario.retry || st.Pending != nil || st.PushSent || st.BiteGen != wantGeneration || !st.CastTs.Equal(castTs) {
+		if retry != scenario.retry || st.Pending != nil || st.PushSent || st.castGeneration != generation || !st.CastTs.Equal(castTs) {
 			t.Errorf("retry state for %+v: retry=%v pending=%v pushed=%v", scenario, retry, st.Pending, st.PushSent)
 		}
 		if st.biteTimer != nil {

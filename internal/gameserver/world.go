@@ -120,36 +120,29 @@ func hItemRemove(ctx *Ctx) ([]byte, bool) {
 		return nil, false
 	}
 	guids := deepGUIDs(ctx.Tree)
-	ints := treeIntsDeep(ctx.Tree)
-	if len(ints) > 0 && ints[0] == containerKeepnet {
-		removed := make([]string, 0, len(guids))
-		for _, g := range guids {
-			if e, err := srv.DB.KeepnetGet(ctx.Sess.pushCtx(), ctx.Sess.Userid, g); err == nil && e != nil {
-				removed = append(removed, g)
+	removed, fish, err := srv.DB.RemoveOwnedItems(ctx.Sess.pushCtx(), ctx.Sess.Userid, guids)
+	if err != nil {
+		ctx.Log.Warn("物品移除失败", "err", err)
+		ctx.ReplyFailure("System.IO.IOException", "物品未能移除，请重试")
+		return nil, true
+	}
+	if len(fish) > 0 {
+		st := srv.stateFor(ctx.Sess.Userid)
+		st.mu.Lock()
+		kept := st.Keepnet[:0]
+		for _, entry := range st.Keepnet {
+			if !containsGUID(fish, entry.FishGUID) {
+				kept = append(kept, entry)
 			}
 		}
-		if len(removed) > 0 {
-			if err := srv.DB.KeepnetDelete(ctx.Sess.pushCtx(), ctx.Sess.Userid, removed); err == nil {
-				ctx.Sess.Push4_21(removed)
-			} else {
-				ctx.Log.Warn("4/7 鱼护删除失败", "err", err, "count", len(removed))
-			}
-		}
-		return srv.rigSnapshot800(ctx), true
+		st.Keepnet = kept
+		st.mu.Unlock()
 	}
-	owned := make([]string, 0, len(guids))
-	for _, g := range guids {
-		row, err := srv.DB.GetItemByGUID(ctx.Sess.pushCtx(), g)
-		if err == nil && row != nil && row.UID == ctx.Sess.Userid {
-			owned = append(owned, g)
-		}
+	if len(removed) > 0 {
+		ctx.Sess.Push4_21(removed)
 	}
-	if len(owned) > 0 {
-		if err := srv.DB.DeleteItems(ctx.Sess.pushCtx(), owned); err == nil {
-			// 4/21 = “这些物品已移除”推送；商店/邮件删物品也用它。
-			// 不推的话库里删干净了，客户端背包还留着，再点丢弃就是删不存在的 GUID。
-			ctx.Sess.Push4_21(owned)
-		}
+	if len(fish) > 0 {
+		srv.retryCompletedCatchRecovery(ctx.Sess)
 	}
 	return srv.rigSnapshot800(ctx), true
 }
@@ -159,6 +152,9 @@ func hItemUse(ctx *Ctx) ([]byte, bool) {
 	srv := ctx.Sess.Srv
 	if !srv.requireDB(ctx) {
 		return nil, false
+	}
+	if body, handled := srv.useAlcoholDrink(ctx); handled {
+		return body, true
 	}
 	guids := deepGUIDs(ctx.Tree)
 	out := proto.Args(proto.S("61"))
