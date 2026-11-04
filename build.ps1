@@ -5,7 +5,7 @@ $version = Get-Date -Format "yyyyMMddHHmmss"
 $ldflags = "-s -w -X 'rf4server/internal/buildinfo.Version=$version'"
 New-Item -ItemType Directory -Force -Path "bin" | Out-Null
 
-foreach ($cmd in @("gateway", "gameserver", "seed")) {
+foreach ($cmd in @("gateway", "gameserver", "seed", "avatarserver", "launcher")) {
     go build -trimpath -ldflags $ldflags -o "bin/$cmd.exe" "./cmd/$cmd"
     if ($LASTEXITCODE -ne 0) { throw "build $cmd failed" }
     Write-Host "build bin/$cmd.exe ok"
