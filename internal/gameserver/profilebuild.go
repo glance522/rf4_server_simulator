@@ -110,13 +110,6 @@ func (s *Server) BuildProfile307(ctx context.Context, uid int64) (*proto.Value, 
 	for _, pl := range places {
 		placeItems = append(placeItems, proto.BytesOf([]byte(pl)))
 	}
-	// f20 携带已拥有房屋（实测 2026-11-05：客户端据此把已购房屋显示为
-	// "进入"；f22 房屋条目无效）。编码与 f22 一致，为地点/物品键的 hex。
-	houses, _ := s.DB.HouseAccessList(ctx, uid)
-	houseItems := make([]*proto.Value, 0, len(houses))
-	for _, h := range houses {
-		houseItems = append(houseItems, proto.BytesOf([]byte(h)))
-	}
 
 	membership := store.MembershipAt(p.Membership, p.MembershipExp, time.Now().Unix())
 	var membershipKind uint32
@@ -152,7 +145,7 @@ func (s *Server) BuildProfile307(ctx context.Context, uid int64) (*proto.Value, 
 		6:  proto.U32(uint32(totalPts)),
 		7:  proto.U64(uint64(p.Silver)),
 		8:  proto.U64(uint64(p.Gold)),
-		9:  proto.StrVal(""),
+		9:  proto.StrVal(s.cfg.AvatarURL),
 		10: proto.U32(membershipKind),
 		11: proto.U64(membershipExp),
 		12: s.buildPose308(ctx, uid),
@@ -163,7 +156,7 @@ func (s *Server) BuildProfile307(ctx context.Context, uid int64) (*proto.Value, 
 		17: proto.StrVal(p.Email),
 		18: proto.U32(uint32(p.Role)),
 		19: proto.U64(uint64(p.Bank)),
-		20: proto.ArrayOf(hexOf(houseItems)),
+		20: proto.ArrayOf(nil),
 		21: proto.Str(nil),
 		22: proto.ArrayOf(hexOf(placeItems)),
 		23: proto.Args(proto.S("181")),
@@ -338,67 +331,6 @@ func (s *Session) Push2_9(notifyType byte, extraXP uint64) {
 // Push4_21 物品移除推送：args("524")[guidarr]。
 func (s *Session) Push4_21(guids []string) {
 	s.Push(4, 21, proto.Args524(proto.GuidArr(guids)))
-}
-
-// Push4_22Items 搏鱼全量同步并附上指定物品的树。
-// 断竿会把配件摘回背包，而 11028 的移除清单会让客户端删掉这些本地物品，
-// 必须靠这条推送把它们按背包状态重新装回来。
-func (s *Session) Push4_22Items(extraGUIDs []string) {
-	pctx := s.pushCtx()
-	items, err := s.Srv.buildFightItems(pctx, s.Userid, true)
-	if err != nil {
-		return
-	}
-	seen := map[string]bool{}
-	for _, item := range items {
-		if idx := fieldIdxByCS(item.Class, csGUID); idx >= 0 && idx < len(item.Fields) {
-			seen[item.Fields[idx].GuidHex()] = true
-		}
-	}
-	for _, g := range extraGUIDs {
-		if g == "" || seen[g] {
-			continue
-		}
-		seen[g] = true
-		row, gerr := s.Srv.DB.GetItemByGUID(pctx, g)
-		if gerr != nil || row == nil || row.UID != s.Userid {
-			continue
-		}
-		tree, terr := s.Srv.ItemToTree(pctx, row)
-		if terr != nil || tree == nil {
-			continue
-		}
-		items = append(items, tree)
-	}
-	if len(items) == 0 {
-		return
-	}
-	s.Push(4, 22, proto.Args(proto.S("61"), items...))
-}
-
-// Push4_22ItemGUIDs 只推指定背包物品的最新树。
-// 吃饵、剪线等背包数量变化走这条通道；不要把竿/线混进背包更新。
-func (s *Session) Push4_22ItemGUIDs(guids []string) {
-	pctx := s.pushCtx()
-	var trees []*proto.Value
-	seen := map[string]bool{}
-	for _, g := range guids {
-		if g == "" || seen[g] {
-			continue
-		}
-		seen[g] = true
-		row, err := s.Srv.DB.GetItemByGUID(pctx, g)
-		if err != nil || row == nil || row.UID != s.Userid {
-			continue
-		}
-		tree, err := s.Srv.ItemToTree(pctx, row)
-		if err == nil && tree != nil {
-			trees = append(trees, tree)
-		}
-	}
-	if len(trees) > 0 {
-		s.Push(4, 22, proto.Args(proto.S("61"), trees...))
-	}
 }
 
 // Push4_22Full 搏鱼全量同步：args("61")[157竿, 140线]。

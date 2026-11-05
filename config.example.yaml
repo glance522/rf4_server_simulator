@@ -47,6 +47,7 @@ game:
   tunnel:
     addr: "127.0.0.1:9401"                          # 内部隧道监听地址。
     psk: "replace-with-shared-random-secret"        # 必须与 gateway.tunnel.psk 一致。
+  avatar_url: ""                       # 可选：客户端可访问的玩家头像 URL，由控制面板上传后自动设置。
   obs_addr: ":9502"                   # 健康检查、指标和性能分析监听地址。
   default_userid: 1000001             # seed 创建的玩家档案 user ID。
   keepalive_interval_sec: 5.0         # 世界时钟推送间隔（秒）。

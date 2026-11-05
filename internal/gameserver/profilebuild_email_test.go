@@ -8,6 +8,7 @@ import (
 func TestProfile307SuppressesEmailBindingPrompt(t *testing.T) {
 	db := connectTestDB(t)
 	srv := NewServerForGearTest(t, db)
+	srv.cfg.AvatarURL = "http://127.0.0.1:8090/avatars/avatar.png"
 	ctx := context.Background()
 	const uid = int64(1000001)
 	if _, err := db.EnsureProfile(ctx, uid); err != nil {
@@ -19,5 +20,8 @@ func TestProfile307SuppressesEmailBindingPrompt(t *testing.T) {
 	}
 	if flags := u32Of(p.Fields[15].Num); flags&0x100 == 0 {
 		t.Fatalf("307.f15 未跳过邮箱绑定提示: 0x%x", flags)
+	}
+	if p.Fields[9].Str == nil || *p.Fields[9].Str != srv.cfg.AvatarURL {
+		t.Fatalf("307.f9 avatar=%v, want %q", p.Fields[9].Str, srv.cfg.AvatarURL)
 	}
 }
