@@ -39,7 +39,7 @@ Copy-Item config.example.yaml config.yaml
 
 `config.yaml` 已被 `.gitignore` 排除。配置加载器支持 `config.example.yaml` 中说明的 `RF4_*` 覆盖项。
 
-YAML 文件中的管理员用户名和密码会在启动时应用。账户不存在时会创建账户；已有账户的密码不同时会重置为配置中的密码。
+普通启动时会应用 YAML 文件中的管理员用户名和密码。账户不存在时会创建账户；已有账户的密码不同时会重置为配置中的密码。
 
 ## 初始化数据
 
@@ -60,6 +60,12 @@ bin\launcher.exe
 ```
 
 首次使用时，launcher 会初始化数据库，启动 `gameserver` 和 `gateway`，执行健康检查，并重启已退出的进程。管理后台 handler 直接内嵌在 launcher 中，统一入口为 `http://127.0.0.1:9500`，不再监听独立的 8080 管理端口。
+
+### 托管管理入口
+
+本地父进程可运行 `bin\launcher.exe -config config.yaml -managed-admin -panel-addr 127.0.0.1:9500`，仅挂载现有 `/admin/` 和 `/api/status`。监听地址必须为回环 IP，管理操作沿用现有认证与存档。父进程保持标准输入管道，关闭管道后入口退出。
+
+托管模式只在没有管理员时创建配置账户，已有账户及密码始终保留。配置口令不匹配时，请在原管理入口使用原口令登录。
 
 ### 从控制中心启动游戏
 

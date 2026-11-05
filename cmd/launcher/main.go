@@ -81,6 +81,7 @@ func (l adminLogger) Error(msg string, args ...any) { l.l.Error(logMessage(msg, 
 func main() {
 	configPath := flag.String("config", "config.yaml", "配置文件路径")
 	panelAddr := flag.String("panel-addr", "127.0.0.1:9500", "控制面板监听地址（仅本机）")
+	managedAdmin := flag.Bool("managed-admin", false, "由本地服务管理后台，父进程关闭输入时退出")
 	adminUser := flag.String("admin-user", "admin", "初始管理员用户名（表空时生效）")
 	adminPass := flag.String("admin-pass", "admin123", "初始管理员密码（表空时生效）")
 	staticDB := flag.String("static-db", "", "静态配置库路径（默认取 sqlite.static_path）")
@@ -113,6 +114,13 @@ func main() {
 		trayColor: 3, trayTip: "fish-localserver 本地服务器", // 3=灰（初始化中）
 	}
 	defer app.closeAdmin()
+	if *managedAdmin {
+		if err := app.serveManagedAdmin(os.Stdin, *panelAddr); err != nil {
+			app.log.Error("本地管理入口启动失败: " + err.Error())
+			os.Exit(1)
+		}
+		return
+	}
 
 	// ---- Web 控制面板（先于首跑 seed 起来：GUI 无控制台，seed 可能耗时
 	// 一分钟，浏览器面板是唯一可视化入口，须立即出现）----
@@ -434,6 +442,10 @@ func (a *app) actionHandler(action string) http.HandlerFunc {
 }
 
 func (a *app) initAdmin(ctx context.Context) error {
+	return a.initAdminWithPolicy(ctx, false)
+}
+
+func (a *app) initAdminWithPolicy(ctx context.Context, preservePassword bool) error {
 	a.adminInitMu.Lock()
 	defer a.adminInitMu.Unlock()
 
@@ -458,7 +470,12 @@ func (a *app) initAdmin(ctx context.Context) error {
 	if user == "" {
 		user, pass = "admin", "admin123"
 	}
-	if _, err := db.UpsertAdminPassword(ctx, user, pass); err != nil {
+	if preservePassword {
+		err = db.EnsureAdmin(ctx, user, pass)
+	} else {
+		_, err = db.UpsertAdminPassword(ctx, user, pass)
+	}
+	if err != nil {
 		_ = db.Close()
 		a.setAdminError(err)
 		return err
