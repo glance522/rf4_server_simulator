@@ -70,12 +70,10 @@ type Gateway struct {
 }
 
 type Game struct {
-	Tunnel        Tunnel `yaml:"tunnel"` // 与 Gateway.Tunnel 相同配置
-	AvatarURL     string `yaml:"avatar_url"`
-	ObsAddr       string `yaml:"obs_addr"`
-	DefaultUserid int64  `yaml:"default_userid"` // 单账号模式下使用的固定 userid
-	AvatarURL     string `yaml:"avatar_url"`     // 玩家档案头像的客户端可访问 URL
-
+	Tunnel               Tunnel  `yaml:"tunnel"` // 与 Gateway.Tunnel 相同配置
+	ObsAddr              string  `yaml:"obs_addr"`
+	DefaultUserid        int64   `yaml:"default_userid"`         // 单账号模式下使用的固定 userid
+	AvatarURL            string  `yaml:"avatar_url"`             // 玩家档案头像的客户端可访问 URL
 	KeepaliveIntervalSec float64 `yaml:"keepalive_interval_sec"` // 2/2 世界时钟推送间隔（秒）
 }
 
