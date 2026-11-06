@@ -6,6 +6,7 @@ package gameserver
 // 相同命令，因此这里只负责补齐缺失的处理。
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -512,8 +513,10 @@ func (s *Session) pushChatRaw(variant, kind int, text string) {
 }
 
 // fishTVKv 构造 401.f4 的鱼名和重量参数。
-// 官方模板（面板 kv_shape=30 探测确认）是 KV 数组：键1=鱼种key、
-// 键2=重量克、键6=榜单类型（字符串）。缺键 6 时模板渲染出来是空档位。
+// 容器为 [0x03][1B len "135"][u16 count][元素...]，类型名是 wiregen typeid
+// 400 的十进制字符串 "135"；元素带 typed 对象头 [0x01][u32le 400]。
+// 键1 = 鱼种文本（0x14 短字符串）、键2 = 重量（0x0D u32，客户端按
+// /1000f 转千克）。客户端 4.0.25034 实机验证可渲染且连接稳定。
 func fishTVKv(fishKey string, weightG int64) *proto.Value {
 	if fishKey == "" {
 		fishKey = "g_tench"
@@ -521,11 +524,11 @@ func fishTVKv(fishKey string, weightG int64) *proto.Value {
 	if weightG < 0 {
 		weightG = 0
 	}
-	return proto.KVList(
-		proto.KVEntry{Key: 1, Val: proto.StrVal(fishKey)},
-		proto.KVEntry{Key: 2, Val: proto.U32(uint32(weightG))},
-		proto.KVEntry{Key: 6, Val: proto.StrVal("0")},
-	)
+	head := append([]byte{}, fishKVElem(1, 0, true)[:5]...) // [0x01][u32le 400] typed 头
+	k1 := append(head, 0x01, 0x14, byte(len(fishKey)))
+	k1 = append(k1, fishKey...)
+	k2 := fishKVElem(2, uint32(weightG), true)
+	return fishKVRaw(fishKVArr("135", 2, k1, k2))
 }
 
 // fishTVKvShape 按 shape 编号构造 401.f4 钓获模板 KV 参数（键1=鱼种key
@@ -613,11 +616,10 @@ func fishTVKvShape(shape int64, fishKey string, weightG int64) *proto.Value {
 			4: proto.U32(uint32(w)),
 		})
 	case 30:
-		// 官方 KV 数组，附加榜单类型键 6。
+		// 官方 KV 数组：直接返回生产 fishTVKv（typed 数组 "135" + 对象头
+		// 元素），保证面板探测的推送字节与生产一致。
 		w, _ := strconv.ParseInt(v2, 10, 64)
-		list := fishTVKv(v1, w)
-		return &proto.Value{Kind: proto.KindKVList, Items: append(list.Items,
-			&proto.Value{Kind: proto.KindKVEntry, Marker: 6, Items: []*proto.Value{proto.StrVal(v6)}})}
+		return fishTVKv(v1, w)
 	case 40:
 		return &proto.Value{Kind: proto.KindKVList}
 	case 41:
@@ -644,6 +646,38 @@ func fishTVKvShape(shape int64, fishKey string, weightG int64) *proto.Value {
 			proto.KVEntry{Key: 2, Val: proto.U32(uint32(w))})
 	}
 	return nil
+}
+
+// fishKVRaw 把原始字节包成直通值（KindRaw：Hex 原样上线）。
+func fishKVRaw(b []byte) *proto.Value {
+	return &proto.Value{Kind: proto.KindRaw, Hex: hex.EncodeToString(b)}
+}
+
+// fishKVArr 构造 0x03 对象数组容器：[0x03][1B len 类型名][u16 count][元素...]。
+// 类型名必须是数字字符串（wiregen typeid 的十进制形式），如 "400"→"135"。
+func fishKVArr(typeName string, count int, elems ...[]byte) []byte {
+	b := []byte{0x03, byte(len(typeName))}
+	b = append(b, typeName...)
+	b = append(b, proto.PackU16(uint32(count))...)
+	for _, e := range elems {
+		b = append(b, e...)
+	}
+	return b
+}
+
+// fishKVElem 构造单个 KV 元素字节：
+//
+//	typed=false：[键][int marker 0x0D][u32le 重量]（裸元素）
+//	typed=true ：[0x01][u32le 400][键][0x0D][u32le 重量]（typed 对象头元素）
+func fishKVElem(key byte, weight uint32, typed bool) []byte {
+	var b []byte
+	if typed {
+		b = append(b, 0x01)
+		b = append(b, proto.PackU32(400)...)
+	}
+	b = append(b, key, 0x0D)
+	b = append(b, proto.PackU32(weight)...)
+	return b
 }
 
 // hSocialCurrent 处理 24/3 social/current / 24/2 social/auto：

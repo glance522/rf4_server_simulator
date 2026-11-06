@@ -15,6 +15,10 @@ func EncodeValue(v *Value, table *OpsTable) ([]byte, error) {
 		return []byte{0x00}, nil
 	}
 	switch v.Kind {
+	case KindRaw:
+		// 探测直通：Hex 原样输出，不做任何包装。
+		return hexDecode(v.Hex)
+
 	case KindNull:
 		return []byte{0x00}, nil
 

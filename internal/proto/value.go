@@ -36,6 +36,7 @@ const (
 	KindU64         Kind = "u64"
 	KindBool        Kind = "bool"
 	KindStr         Kind = "str"
+	KindRaw         Kind = "raw" // 原始字节直通：Hex 字段原样输出，探测用
 	KindElemNull    Kind = "elem_null"
 )
 
