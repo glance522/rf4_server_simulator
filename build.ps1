@@ -6,7 +6,7 @@ $version = Get-Date -Format "yyyyMMddHHmmss"
 $ldflags = "-s -w -X 'rf4server/internal/buildinfo.Version=$version'"
 New-Item -ItemType Directory -Force -Path "bin" | Out-Null
 
-$commands = @("gateway", "gameserver", "seed")
+$commands = @("gateway", "gameserver", "seed", "avatarserver")
 if ($OfflineTools) { $commands += @("import-character", "local-membership") }
 foreach ($cmd in $commands) {
     go build -trimpath -ldflags $ldflags -o "bin/$cmd.exe" "./cmd/$cmd"

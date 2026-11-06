@@ -54,8 +54,12 @@ type app struct {
 	adminDB     *store.DB
 	adminErr    string
 
-	gameMu    sync.RWMutex
-	startGame func(*exec.Cmd) error
+	gameMu     sync.RWMutex
+	startGame  func(*exec.Cmd) error
+	avatarMu   sync.RWMutex
+	avatarDir  string
+	avatarPort int
+	avatarLn   net.Listener
 
 	// 托盘状态：systray 在 Run 之前内部句柄为 nil，提前调用 SetIcon/
 	// SetTooltip 会 panic。这里先记录期望状态，托盘就绪后再应用。
@@ -81,9 +85,10 @@ func (l adminLogger) Error(msg string, args ...any) { l.l.Error(logMessage(msg, 
 func main() {
 	configPath := flag.String("config", "config.yaml", "配置文件路径")
 	panelAddr := flag.String("panel-addr", "127.0.0.1:9500", "控制面板监听地址（仅本机）")
+	avatarAddr := flag.String("avatar-addr", ":8090", "头像图片服务监听地址（客户端需可访问）")
 	adminUser := flag.String("admin-user", "admin", "初始管理员用户名（表空时生效）")
 	adminPass := flag.String("admin-pass", "admin123", "初始管理员密码（表空时生效）")
-	staticDB := flag.String("static-db", "", "静态配置库路径（默认取 sqlite.static_path）")
+	staticDB := flag.String("static-db", "", "静态配置库路径（默认取 sqlite.static_path)")
 	flag.Parse()
 
 	// ---- 工作目录解析：依次在 CWD、exe 目录和 exe 上级目录寻找 config.yaml。
@@ -110,9 +115,27 @@ func main() {
 	appCtx, appCancel := context.WithCancel(context.Background())
 	app := &app{
 		cfg: cfg, cfgPath: *configPath, log: panelLogger{}, ctx: appCtx, cancel: appCancel,
+		avatarDir: "avatars",
 		trayColor: 3, trayTip: "fish-localserver 本地服务器", // 3=灰（初始化中）
 	}
 	defer app.closeAdmin()
+
+	avatarMux := http.NewServeMux()
+	avatarMux.HandleFunc(avatarPathPrefix, app.handleAvatarImage)
+	avatarLn, err := net.Listen("tcp", *avatarAddr)
+	if err != nil {
+		showFatal("头像服务监听失败", err)
+		return
+	}
+	app.avatarLn = avatarLn
+	if tcpAddr, ok := avatarLn.Addr().(*net.TCPAddr); ok {
+		app.avatarPort = tcpAddr.Port
+	}
+	go func() {
+		if err := http.Serve(avatarLn, avatarMux); err != nil && err != http.ErrServerClosed {
+			app.log.Error("头像服务异常退出: " + err.Error())
+		}
+	}()
 
 	// ---- Web 控制面板（先于首跑 seed 起来：GUI 无控制台，seed 可能耗时
 	// 一分钟，浏览器面板是唯一可视化入口，须立即出现）----
@@ -127,6 +150,7 @@ func main() {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(panelHTML)
 	})
+	mux.HandleFunc("/api/avatar/upload", app.handleAvatarUpload)
 	mux.HandleFunc("/api/status", app.handleStatus)
 	mux.HandleFunc("/api/logs", app.handleLogs)
 	mux.HandleFunc("/api/start", app.actionHandler("start"))
@@ -142,6 +166,7 @@ func main() {
 	})
 	ln, err := net.Listen("tcp", *panelAddr)
 	if err != nil {
+		_ = avatarLn.Close()
 		showFatal("控制面板监听失败", err)
 		return
 	}
@@ -209,6 +234,7 @@ func main() {
 	// ---- 托盘常驻 ----
 	systray.Run(app.onTrayReady, func() {
 		app.sup.StopAll()
+		_ = app.avatarLn.Close()
 		if app.cfg.Launcher.HostsSwitch {
 			if err := hostsRestore(hostsFilePath()); err != nil {
 				app.log.Error("hosts 还原失败: " + err.Error() +
@@ -342,6 +368,7 @@ func (a *app) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	adminErr := a.adminErr
 	a.adminMu.RUnlock()
 	gamePath, gameRegion := a.gameState()
+	avatarBaseURL := a.suggestedAvatarBaseURL()
 	writeJSON(w, map[string]any{
 		"procs":       procs,
 		"last_error":  lastErr,
@@ -350,6 +377,7 @@ func (a *app) handleStatus(w http.ResponseWriter, _ *http.Request) {
 		"admin_error": adminErr,
 		"game_path":   gamePath,
 		"game_region": gameRegion,
+		"avatar_base_url": avatarBaseURL,
 		"hosts":       hostsMode(hostsFilePath()),
 	})
 }

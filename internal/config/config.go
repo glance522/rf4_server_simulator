@@ -71,6 +71,7 @@ type Gateway struct {
 
 type Game struct {
 	Tunnel        Tunnel `yaml:"tunnel"` // 与 Gateway.Tunnel 相同配置
+	AvatarURL     string `yaml:"avatar_url"`
 	ObsAddr       string `yaml:"obs_addr"`
 	DefaultUserid int64  `yaml:"default_userid"` // 单账号模式下使用的固定 userid
 

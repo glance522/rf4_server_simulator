@@ -142,6 +142,14 @@ func (s *Server) BuildProfile307(ctx context.Context, uid int64) (*proto.Value, 
 		0: proto.Args(proto.S("210"), build5013()),
 	})
 
+	avatarURL, err := s.DB.PlayerAvatarURL(ctx, p.UID)
+	if err != nil {
+		return nil, err
+	}
+	if avatarURL == "" {
+		avatarURL = s.cfg.AvatarURL
+	}
+
 	return wiregen.MakeObj("ghfbofgdflm", map[int]*proto.Value{
 		0:  proto.U32(uint32(p.UID)),
 		1:  proto.StrVal(p.Name),
@@ -152,7 +160,7 @@ func (s *Server) BuildProfile307(ctx context.Context, uid int64) (*proto.Value, 
 		6:  proto.U32(uint32(totalPts)),
 		7:  proto.U64(uint64(p.Silver)),
 		8:  proto.U64(uint64(p.Gold)),
-		9:  proto.StrVal(""),
+		9:  proto.StrVal(avatarURL),
 		10: proto.U32(membershipKind),
 		11: proto.U64(membershipExp),
 		12: s.buildPose308(ctx, uid),

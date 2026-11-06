@@ -98,6 +98,7 @@ func NewServer(cfg config.Game, log *slog.Logger, obs *metrics.Server) *Server {
 		fishStates: map[int64]*FishState{},
 		levelMap:   map[int64]string{},
 	}
+
 	s.dispatch = NewDispatch(s)
 	registerHandlers(s.dispatch)
 	return s
