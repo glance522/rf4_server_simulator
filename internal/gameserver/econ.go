@@ -258,6 +258,10 @@ func (s *Server) fishingKeep(ctx *Ctx) ([]byte, bool) {
 	}
 	cctx := ctx.Sess.pushCtx()
 	st := s.stateFor(uid)
+	// 多竿：这尾鱼可能挂在自己那根竿上（玩家已经换过竿）。
+	if other := s.pendingStateByGUID(uid, want); other != nil && other != st {
+		st = other
+	}
 	st.finishMu.Lock()
 	defer st.finishMu.Unlock()
 

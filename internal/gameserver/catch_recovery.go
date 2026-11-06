@@ -23,6 +23,24 @@ func (s *Server) recoverCompletedCatchOnLogin(sess *Session) {
 	st.persist.recoverCompleted = completedCatchPending(st)
 	st.mu.Unlock()
 	st.finishMu.Unlock()
+	// 多竿：待处理渔获可能已经随竿进了副竿表（登录时按竿恢复），
+	// 这些竿也要打上“登录恢复”标记，否则换竿后自动入护会跳过它们。
+	s.fishMu.Lock()
+	sides := make([]*FishState, 0, len(s.sideRods[sess.Userid]))
+	for _, side := range s.sideRods[sess.Userid] {
+		sides = append(sides, side)
+	}
+	s.fishMu.Unlock()
+	for _, side := range sides {
+		if side == nil {
+			continue
+		}
+		side.mu.Lock()
+		if completedCatchPending(side) {
+			side.persist.recoverCompleted = true
+		}
+		side.mu.Unlock()
+	}
 	if err := s.recoverCompletedCatch(sess.Userid, nil); err != nil && !errors.Is(err, store.ErrKeepnetFull) {
 		s.log.Warn("待处理渔获恢复失败，原鱼已保留", "uid", sess.Userid, "err", err)
 	}
@@ -33,6 +51,25 @@ func (s *Server) recoverCompletedCatch(uid int64, notify *Session) error {
 		return nil
 	}
 	st := s.fishingState(uid)
+	// 多竿：待处理渔获可能挂在自己那根竿的状态上。
+	// 登录时记的 recoverCompleted 标记也要一起迁移过去，
+	// 否则自动入护会以为“本次登录不需要恢复”而跳过。
+	if holder := s.pendingStateByGUID(uid, ""); holder != nil && holder != st {
+		// 副竿的 persist.uid 可能为空（占位持久化被关掉），这里补上，
+		// 否则取结算回执会用到 uid=0 而失败。
+		holder.persist.Lock()
+		holder.persist.uid = uid
+		holder.persist.Unlock()
+		st.mu.Lock()
+		flag := st.persist.recoverCompleted
+		st.mu.Unlock()
+		if flag {
+			holder.mu.Lock()
+			holder.persist.recoverCompleted = true
+			holder.mu.Unlock()
+		}
+		st = holder
+	}
 	st.finishMu.Lock()
 	entry, err := s.recoverCompletedCatchLocked(st)
 	st.finishMu.Unlock()
