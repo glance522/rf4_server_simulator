@@ -74,16 +74,10 @@ func TestGearPhysicsU32F32AndWeakestLink(t *testing.T) {
 	if got := gearWeakestPart(spec); got != "leader" {
 		t.Fatalf("最弱断件=%q，期望 leader", got)
 	}
-	can, part := canLandGear(spec, 20, 0.35)
-	if can || part != "leader" {
-		t.Fatalf("20kg 鱼应断 leader，得到 can=%v part=%q", can, part)
-	}
-	if can, part := canLandGear(spec, 10, 0.35); !can || part != "" {
-		t.Fatalf("10kg 鱼应能上岸，得到 can=%v part=%q", can, part)
-	}
+	// 注意：没有"鱼太重就不给咬钩/上不了岸"的判定函数，派鱼不按强度过滤。
 }
 
-func TestGearWeightCapIncludesHookStrengthAndHookSize(t *testing.T) {
+func TestGearWeightCapUsesHookEntryGeometry(t *testing.T) {
 	spec := gearPhysicsSpec{
 		RodPowerKg: 100, LineStrengthKg: 100, LeaderStrengthKg: 100,
 		HookPresent: true, HookStrengthKg: 80, HookLengthMM: 5, HookSize: 12, LineStretch: 0,
@@ -100,13 +94,13 @@ func TestGearWeightCapIncludesHookStrengthAndHookSize(t *testing.T) {
 	}
 }
 
-func TestGearWeightCapUsesWeakestLinkAndLineBuffer(t *testing.T) {
+func TestGearWeightCapUsesStrengthLimit(t *testing.T) {
 	spec := gearPhysicsSpec{
 		RodPowerKg: 14.0102, LineStrengthKg: 10.5,
 		LeaderStrengthKg: 13.3, ReelDragKg: 6.4, LineStretch: 0.85,
 	}
-	// 摩擦 6.4kg 低于鱼线 10.5kg，但摩擦是打滑力，上限跟鱼线走。
-	// 派鱼允许超过最弱承力件 35%，给控鱼留操作空间。
+	// 未安装渔线轮时，旧派鱼诊断口径取竿/线/前导中最小的承力。
+	// 打开截断调试时允许超过最弱承力件 35%，给控鱼留操作空间。
 	want := 10.5 * gearOverloadFactor
 	if got := gearWeightCapKg(spec); math.Abs(got-want) > 1e-9 {
 		t.Fatalf("gear cap=%f，期望 %f", got, want)
@@ -176,17 +170,26 @@ func TestRigGearIDsReadsCurrentRodFieldsAndComponents(t *testing.T) {
 	if ids.Rod != "rod_test" || ids.Reel != "reel_test" || ids.Line != "line_test" || ids.Leader != "leader_test" {
 		t.Fatalf("rig gear IDs=%+v", ids)
 	}
-	capKg, _, weakest := srv.gearWeightCapForRig(ctx, uid, rodGUID)
+	// 这里断言旧承力诊断口径；默认派鱼上限由 fishWeightCapKg 返回 0（不截断）。
+	spec := srv.loadGearSpecForRig(ctx, ids, rodGUID)
+	capKg := gearStrengthCapKg(spec)
+	weakest := gearWeakestPart(spec)
 	wantCap := (6.4 * 1.4) * gearOverloadFactor
 	if math.Abs(capKg-wantCap) > 1e-4 || weakest != "reel" {
 		t.Fatalf("当前钓组 cap=%f weakest=%q，期望 cap=%f weakest=reel", capKg, weakest, wantCap)
+	}
+	// 没有装钩时派鱼上限应为 0（不做任何截断）。
+	if got := srv.fishWeightCapKg(spec); got != 0 {
+		t.Fatalf("未装钩时派鱼上限=%f，期望 0", got)
 	}
 
 	// 实例耐久必须参与服务端最弱环计算：半耐久鱼线 10.5kg -> 5.25kg。
 	if err := db.SetItemDurability(ctx, lineGUID, 0.5); err != nil {
 		t.Fatal(err)
 	}
-	capKg, _, weakest = srv.gearWeightCapForRig(ctx, uid, rodGUID)
+	spec = srv.loadGearSpecForRig(ctx, srv.rigGearIDs(ctx, uid, rodGUID), rodGUID)
+	capKg = gearStrengthCapKg(spec)
+	weakest = gearWeakestPart(spec)
 	wantCap = 5.25 * gearOverloadFactor
 	if math.Abs(capKg-wantCap) > 1e-4 || weakest != "line" {
 		t.Fatalf("磨损后 cap=%f weakest=%q，期望 cap=%f weakest=line", capKg, weakest, wantCap)

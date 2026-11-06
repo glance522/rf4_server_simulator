@@ -2,7 +2,10 @@ package gameserver
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -180,6 +183,19 @@ func assertProgressCatchLevelGain(t *testing.T, result *proto.Value, levelsGaine
 	}
 }
 
+func progressCatchSkillGain(t *testing.T, result *proto.Value) float64 {
+	t.Helper()
+	stats := result.Field(0).Val
+	if stats == nil || stats.ArgCount() != 1 {
+		t.Fatal("上鱼响应缺少结算统计")
+	}
+	experience := stats.ArgItem(0).Field(8).Val
+	if experience == nil || experience.TypeID != 310 {
+		t.Fatal("上鱼响应缺少经验块")
+	}
+	return float64(proto.F32FromBits(u32Of(experience.Field(3).Num)))
+}
+
 func TestProgressNotificationsRequireRealLevelChange(t *testing.T) {
 	for _, tc := range []struct {
 		name                          string
@@ -307,4 +323,41 @@ func TestProgressNotificationsAdminSkillRefreshIsSilent(t *testing.T) {
 	if got := progressNotificationCount(batch, 6); got != 0 {
 		t.Fatalf("普通技能刷新误发%d次升级通知", got)
 	}
+}
+
+func TestFishingEndSettleAtMaxSkillSendsNoProficiencyGain(t *testing.T) {
+	srv, db := newProgressSrv(t)
+	progressNotificationProfile(t, srv, 5, baseXp(5))
+	sess, received := progressNotificationSession(t, srv, 1707)
+	ctx := context.Background()
+	if _, err := db.SQL.ExecContext(ctx,
+		`INSERT OR REPLACE INTO skill(uid, skill_id, points) VALUES(?,?,100)`, sess.Userid, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	// 满级后的新结算不能再带增量，否则客户端会弹 +0.x = 100%。
+	fish := &RolledFish{FishGUID: newFishGUID(), Species: "perch", Grade: 2, WeightG: 1120, LengthM: .3}
+	if got := progressCatchSkillGain(t, progressNotificationCatch(t, sess, fish)); got != 0 {
+		t.Fatalf("满级新结算 310.f3=%v want=0", got)
+	}
+
+	// 重放旧回执（例如 99.8→100 的那条鱼）也不能把旧增量再弹一次。
+	gain := 0.2
+	saved := catchReceipt{BaseXP: 10, TotalXP: 10, Level: 5, AccumulatedXP: baseXp(5), SkillID: 1, SkillGain: &gain}
+	raw, err := json.Marshal(saved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldFish := &RolledFish{FishGUID: newFishGUID(), Species: "perch", Grade: 2, WeightG: 1120, LengthM: .3}
+	if err := db.KVSet(ctx, fmt.Sprintf("catch-settlement:%d:%s", sess.Userid, strings.ToLower(oldFish.FishGUID)), string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if got := progressCatchSkillGain(t, progressNotificationCatch(t, sess, oldFish)); got != 0 {
+		t.Fatalf("重放旧回执仍发熟练度增量 310.f3=%v", got)
+	}
+	points, err := db.GetSkillPoints(ctx, sess.Userid, 1)
+	if err != nil || points != profCap {
+		t.Fatalf("满级熟练度被重放改变: points=%v err=%v", points, err)
+	}
+	progressNotificationBatch(t, sess, received)
 }

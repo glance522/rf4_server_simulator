@@ -143,6 +143,9 @@ bin\gateway.exe    -config config.yaml
 
 ## 开发
 
+开发（尤其 AI Agent）前请先读 [CLAUDE.md](CLAUDE.md)（仓库硬约束与文档入口）和
+[CONTRIBUTING.md](CONTRIBUTING.md)（提交规范）。
+
 ```bash
 make test      # go vet + 全部单测（含端到端钓鱼闭环，无需外部服务）
 make corpus    # 语料回环测试（语料文件不在仓库中时自动跳过）

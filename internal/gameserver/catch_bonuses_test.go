@@ -18,8 +18,7 @@ func TestRodXPUsesDefinitionAndSavedReceipt(t *testing.T) {
 		{"ML", "bolo_10022_LB400", 3, .25},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			srv, db := newProgressSrv(t)
-			importStaticForProbe(t, db)
+			srv, db := newRigTestServer(t)
 			ctx := context.Background()
 			const uid = int64(1000001)
 			rod, err := srv.CreateItem(ctx, uid, tc.item, "backpack", 1)
@@ -76,8 +75,7 @@ func TestRodXPUsesDefinitionAndSavedReceipt(t *testing.T) {
 }
 
 func TestRodXPRejectsForeignOrBrokenEquipment(t *testing.T) {
-	srv, db := newProgressSrv(t)
-	importStaticForProbe(t, db)
+	srv, db := newRigTestServer(t)
 	ctx := context.Background()
 	rod, err := srv.CreateItem(ctx, 1000001, "bolo_10022_LB400", "backpack", 1)
 	if err != nil {

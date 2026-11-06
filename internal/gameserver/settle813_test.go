@@ -29,6 +29,20 @@ func TestSettle813ReportsActualSkillGain(t *testing.T) {
 	}
 }
 
+func TestSettle813SuppressesReplayedSkillGain(t *testing.T) {
+	srv, _ := newDetachTestServer(t)
+	ctx := context.Background()
+	f := &RolledFish{FishGUID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Species: "c.roach", Grade: 1, WeightG: 186, LengthM: 0.1981}
+	r := &settleXpResult{totalXP: 35, skillID: 2, skillGain: 0.2, replayed: true}
+	if got := float64(proto.F32FromBits(u32Of(srv.buildSettle813(ctx, 1000001, f, r).Field(8).Val.Field(3).Num))); got != 0 {
+		t.Fatalf("重放 310.f3=%v, want 0", got)
+	}
+	r.replayed = false
+	if got := float64(proto.F32FromBits(u32Of(srv.buildSettle813(ctx, 1000001, f, r).Field(8).Val.Field(3).Num))); math.Abs(got-0.2) > 1e-6 {
+		t.Fatalf("首次结算 310.f3=%v, want 0.2", got)
+	}
+}
+
 func TestSettle813UsesIntegerMassFields(t *testing.T) {
 	srv, _ := newDetachTestServer(t)
 	ctx := context.Background()

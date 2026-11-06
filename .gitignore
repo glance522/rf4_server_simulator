@@ -28,7 +28,11 @@ internal/wiregen/testdata/corpus.jsonl.gz
 .vscode/
 .DS_Store
 Thumbs.db
+
+# 逆向资料（客户端文件/反编译产物/抓包），只留在本地，永不入库
+/ref/
 il2csharp_full
+
 tools/*
 !tools/*.ps1
 !tools/*.py

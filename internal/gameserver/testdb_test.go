@@ -26,35 +26,53 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-var migratedDBTemplate struct {
+type testDBTemplateKind int
+
+const (
+	testDBMigrated testDBTemplateKind = iota
+	testDBItems
+	testDBSkills
+	testDBRecipes
+)
+
+var testDBTemplates = [...]struct {
 	once sync.Once
 	path string
 	err  error
-}
+}{}
 
-var itemDBTemplate struct {
-	once sync.Once
-	path string
-	err  error
-}
-
-func migratedTestDBTemplate() (string, error) {
-	migratedDBTemplate.once.Do(func() {
-		migratedDBTemplate.path = filepath.Join(gameserverTestDBRoot, "migrated.db")
-		migratedDBTemplate.err = buildTestDBTemplate(migratedDBTemplate.path, false)
+func testDBTemplatePath(kind testDBTemplateKind) (string, error) {
+	if kind < 0 || int(kind) >= len(testDBTemplates) {
+		return "", fmt.Errorf("未知测试数据库模板: %d", kind)
+	}
+	slot := &testDBTemplates[kind]
+	slot.once.Do(func() {
+		names := map[testDBTemplateKind]string{
+			testDBMigrated: "migrated.db",
+			testDBItems:    "item-def.db",
+			testDBSkills:   "skills.db",
+			testDBRecipes:  "recipes.db",
+		}
+		slot.path = filepath.Join(gameserverTestDBRoot, names[kind])
+		slot.err = buildTestDBTemplate(slot.path, testDBTemplateTables(kind))
 	})
-	return migratedDBTemplate.path, migratedDBTemplate.err
+	return slot.path, slot.err
 }
 
-func itemTestDBTemplate() (string, error) {
-	itemDBTemplate.once.Do(func() {
-		itemDBTemplate.path = filepath.Join(gameserverTestDBRoot, "item-def.db")
-		itemDBTemplate.err = buildTestDBTemplate(itemDBTemplate.path, true)
-	})
-	return itemDBTemplate.path, itemDBTemplate.err
+func testDBTemplateTables(kind testDBTemplateKind) []string {
+	switch kind {
+	case testDBItems:
+		return []string{"item_def"}
+	case testDBSkills:
+		return []string{"item_def", "skill_def", "skill_cat_def"}
+	case testDBRecipes:
+		return []string{"item_def", "recipe"}
+	default:
+		return nil
+	}
 }
 
-func buildTestDBTemplate(path string, withItemDef bool) error {
+func buildTestDBTemplate(path string, staticTables []string) error {
 	db, err := store.Open(path)
 	if err != nil {
 		return err
@@ -63,14 +81,16 @@ func buildTestDBTemplate(path string, withItemDef bool) error {
 	if err := db.Migrate(); err != nil {
 		return err
 	}
-	if withItemDef {
+	if len(staticTables) > 0 {
 		staticPath := filepath.Join("..", "..", "server_data", "static.sqlite3")
 		if _, err := db.SQL.Exec(`ATTACH DATABASE ? AS src`, staticPath); err != nil {
 			return fmt.Errorf("附加静态库: %w", err)
 		}
-		if _, err := db.SQL.Exec(`INSERT OR IGNORE INTO main.item_def SELECT * FROM src.item_def`); err != nil {
-			_, _ = db.SQL.Exec(`DETACH DATABASE src`)
-			return fmt.Errorf("导入 item_def: %w", err)
+		for _, table := range staticTables {
+			if _, err := db.SQL.Exec(`INSERT OR IGNORE INTO main.` + table + ` SELECT * FROM src.` + table); err != nil {
+				_, _ = db.SQL.Exec(`DETACH DATABASE src`)
+				return fmt.Errorf("导入静态表 %s: %w", table, err)
+			}
 		}
 		if _, err := db.SQL.Exec(`DETACH DATABASE src`); err != nil {
 			return err
@@ -80,12 +100,9 @@ func buildTestDBTemplate(path string, withItemDef bool) error {
 	return nil
 }
 
-func seedTestDBFile(t *testing.T, path string, withItemDef bool) {
+func seedTestDBFile(t *testing.T, path string, kind testDBTemplateKind) {
 	t.Helper()
-	template, err := migratedTestDBTemplate()
-	if withItemDef {
-		template, err = itemTestDBTemplate()
-	}
+	template, err := testDBTemplatePath(kind)
 	if err != nil {
 		t.Skipf("准备测试数据库模板: %v", err)
 	}
@@ -94,18 +111,28 @@ func seedTestDBFile(t *testing.T, path string, withItemDef bool) {
 
 func openMigratedTestDB(t *testing.T) *store.DB {
 	t.Helper()
-	return openTestDBFromTemplate(t, false)
+	return openTestDBFromTemplate(t, testDBMigrated)
 }
 
 func openItemTestDB(t *testing.T) *store.DB {
 	t.Helper()
-	return openTestDBFromTemplate(t, true)
+	return openTestDBFromTemplate(t, testDBItems)
 }
 
-func openTestDBFromTemplate(t *testing.T, withItemDef bool) *store.DB {
+func openSkillCraftTestDB(t *testing.T) *store.DB {
+	t.Helper()
+	return openTestDBFromTemplate(t, testDBSkills)
+}
+
+func openRecipeTestDB(t *testing.T) *store.DB {
+	t.Helper()
+	return openTestDBFromTemplate(t, testDBRecipes)
+}
+
+func openTestDBFromTemplate(t *testing.T, kind testDBTemplateKind) *store.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.db")
-	seedTestDBFile(t, path, withItemDef)
+	seedTestDBFile(t, path, kind)
 	db, err := store.Open(path)
 	if err != nil {
 		t.Fatalf("打开测试 SQLite: %v", err)

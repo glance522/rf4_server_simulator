@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"math"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,7 +17,6 @@ import (
 
 	"rf4server/internal/logging"
 	"rf4server/internal/proto"
-	"rf4server/internal/store"
 )
 
 // stressLog 统计压测期间 WARN 日志的失败原因，用于定位过载时的卡点。
@@ -77,15 +75,7 @@ func TestCraftStackExtreme(t *testing.T) {
 	users := stressEnvInt(t, "CRAFT_STRESS_USERS", 20)
 	rounds := stressEnvInt(t, "CRAFT_STRESS_ROUNDS", 50)
 
-	db, err := store.Open(filepath.Join(t.TempDir(), "craft-stack-stress.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "recipe")
+	db := openRecipeTestDB(t)
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
 	srv.randFloat = func() float64 { return 0 }
@@ -239,7 +229,7 @@ func TestCraftStackExtreme(t *testing.T) {
 			qty  int64
 		}{
 			{"boiled_egg", 1, int64(2 * rounds)},
-			{"feedcompleted", 1, int64(rounds)},
+			{"feedcompleted", int64(rounds), int64(60 * rounds)},
 			{"pvas_b10", int64(rounds), int64(rounds)},
 		}
 		for _, e := range expect {

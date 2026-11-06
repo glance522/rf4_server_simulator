@@ -435,7 +435,7 @@ func (s *Server) rollFish(loc string, bait string) *RolledFish {
 	return s.rollFishWithRules(loc, bait, 0, fishingSkillBonus{BiteSpeed: 1})
 }
 
-// rollFishForRig 是判鱼入口：先计算当前钓组的最弱环体重上限，
+// rollFishForRig 是判鱼入口：先按两个调试开关计算有效派鱼上限（默认 0，不截断），
 // 再对静态鱼库和内置鱼池应用该上限及奖杯幸运。
 func (s *Server) rollFishForRig(ctx context.Context, uid int64, gearGUID, loc, bait string, bonus fishingSkillBonus, contexts ...fishRollContext) *RolledFish {
 	c := rollContext(contexts)
@@ -461,7 +461,18 @@ func (s *Server) rollFishForRig(ctx context.Context, uid int64, gearGUID, loc, b
 			return nil
 		}
 		if capKg > 0 {
-			s.log.Info("钓鱼物理上限", "rod", ids.Rod, "reel", ids.Reel, "line", ids.Line, "leader", ids.Leader, "weakest", weakest, "cap_kg", capKg)
+			// 默认两条截断都关（capKg=0 不进这里）；只有管理员显式打开才会打这条日志。
+			strengthOn := s.tunableF("fish_weight_cap", 0) > 0
+			entryOn := s.tunableF("hook_entry_cap", 0) > 0
+			capRule := "hook_entry"
+			switch {
+			case strengthOn && entryOn:
+				capRule = "strength+hook_entry"
+			case strengthOn:
+				capRule = "strength"
+			}
+			s.log.Info("派鱼重量上限", "rod", ids.Rod, "reel", ids.Reel, "line", ids.Line,
+				"leader", ids.Leader, "weakest", weakest, "cap_kg", capKg, "rule", capRule)
 		}
 		return s.rollFishWithRules(loc, bait, capKg, bonus, c)
 	}
@@ -473,7 +484,7 @@ func (s *Server) rollFishForRig(ctx context.Context, uid int64, gearGUID, loc, b
 			continue
 		}
 		c.baits = group.baits
-		f := s.rollFishWithRules(loc, group.baits[0], gearWeightCapKg(selected), bonus, c)
+		f := s.rollFishWithRules(loc, group.baits[0], s.fishWeightCapKg(selected), bonus, c)
 		if f != nil {
 			f.HookGUID = group.hookGUID
 			f.BaitGUIDs, f.BaitsKnown = strings.Join(group.baitGUIDs, " "), true
@@ -625,7 +636,8 @@ func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bo
 		scale = 1
 	}
 	capG := 0.0
-	if gearCapKg > 0 && s.tunableF("fish_weight_cap", 1) > 0 {
+	// gearCapKg 是上层按开关计算好的有效上限；0 表示完全不截断。
+	if gearCapKg > 0 {
 		capG = gearCapKg * 1000
 		if capG < 1 {
 			return nil
@@ -885,7 +897,8 @@ func (s *Server) rollFishPoolsWithRules(loc string, gearCapKg float64, bonus fis
 		scale = 1
 	}
 	capG := 0.0
-	if s.tunableF("fish_weight_cap", 1) > 0 {
+	// 同上：没有生效上限（gearCapKg<=0）时不截断，鱼池按原分布投放。
+	if gearCapKg > 0 {
 		capG = poolWeightCapG(gearCapKg, bonus.FightTolerance)
 		if capG > 0 {
 			eligible := make([]fishPoolEntry, 0, len(pool))
@@ -1701,8 +1714,8 @@ func (s *Server) notifyFishReleased(sess *Session, f *RolledFish) {
 // 客户端内置本地化模板：4=鱼线轮损坏 5=鱼竿损坏 6=鱼线拉断
 // 7=鱼脱钩 10=牙齿咬断钓组 30=引线(子线)断了。
 var escapeTemplateKind = map[string]int{
-	"脱钩": 7, "脱钩离开": 7, "咬钩未刺中": 7,
-	"断主线": 6, "断子线": 30,
+	"脱钩离开": 7,
+	"断主线":  6, "断子线": 30,
 	"断竿":     5,
 	"渔线轮超载":  4,
 	"钓组组件断裂": 10,

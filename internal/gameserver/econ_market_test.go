@@ -514,15 +514,7 @@ func TestLevelKeyOfLoc(t *testing.T) {
 // TestRepairFlow 银修理闭环：磨损 → 21/3 按客户端报价扣费 → 耐久回 1.0 →
 // 4/5 重建树耐久字段同步（durability 生命周期最小模型）。
 func TestRepairFlow(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "repair.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForProbe(t, db)
+	db := openItemTestDB(t)
 	ctx := context.Background()
 	srv := NewServer(config.Game{Tunnel: config.Tunnel{PSK: "repair"}}, logging.Discard(), nil)
 	srv.SetDB(db)

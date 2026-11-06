@@ -1,0 +1,16 @@
+{
+ "source": "客户端 ebjhdhighdj 静态注册表逆向（4.0.25034，2026-11-06）。判定函数 hlkoandbhil：竿子类 11 全禁、竿子类 5 档位-1>2 禁、轮子类 1 档位-1>4 禁。字段与 item_def.attrs_json 同名（fopbhlmkcpe=子类，bmmpdijcjdf/gkfbafmbpam=档位）。",
+ "levels": {
+  "level_018_moskitnoe": {
+   "caption": "kWaterbodyRestriction_Mednoe",
+   "rules": [
+    {"category": 3, "subtype": 11, "mode": "ban",
+     "note": "carp 鲤竿全禁"},
+    {"category": 3, "subtype": 5, "mode": "tier_max", "tier_attr": "bmmpdijcjdf", "max_tier": 3,
+     "note": "match 竞技竿：档位≥4 禁（允许≤3）"},
+    {"category": 6, "subtype": 1, "mode": "tier_max", "tier_attr": "gkfbafmbpam", "max_tier": 5,
+     "note": "spin 纺车轮：size 档≥6 禁（允许≤5）"}
+   ]
+  }
+ }
+}

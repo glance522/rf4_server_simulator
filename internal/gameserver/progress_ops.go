@@ -264,8 +264,12 @@ func (s *Server) buildSettle813(ctx context.Context, uid int64, f *RolledFish, r
 	silverCents := int64(math.Round(silverRate * math.Max(1, float64(f.WeightG))))
 
 	// 310 经验块：f0=总经验，f1=升级数，f2=钓法大类，f3=熟练度增量，f6=加成分解。
+	// 重放回执只还原事实，不能再次触发熟练度提示；满级后尤其会误弹旧的 +0.x = 100%。
 	levelsGained := int64(0)
-	if !r.replayed {
+	skillGain := r.skillGain
+	if r.replayed {
+		skillGain = 0
+	} else {
 		levelsGained = max64(0, r.levelsGained)
 	}
 	bonuses := proto.Args(proto.S("31"))
@@ -292,7 +296,7 @@ func (s *Server) buildSettle813(ctx context.Context, uid int64, f *RolledFish, r
 		0: proto.U64(uint64(r.totalXP)),
 		1: proto.U32(uint32(levelsGained)),
 		2: proto.U32(uint32(r.skillID)),
-		3: proto.F32(float32(r.skillGain)),
+		3: proto.F32(float32(skillGain)),
 		4: proto.Null(),
 		5: proto.U32(uint32(max64(0, r.levelsGained))),
 		6: bonuses,
@@ -340,9 +344,11 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 	hasFish := pending != nil && hooked
 
 	if pending != nil && !hooked {
-		// 鱼已咬钩但玩家未刺中，记录一次逃脱。
+		// 鱼已咬钩但玩家未刺中：官方对未上钩离场不播报（客户端模板表
+		// 无「未上钩」类），只留日志备查；escapes 计数口径保持现状
+		// （官方口径无法从客户端验证，不动最稳）。
+		ctx.Log.Info("14/4 未刺中收竿：咬钩未上钩，官方语义不播报")
 		s.bumpFishingCounter(uid, "escapes")
-		s.notifyFishEscape(ctx.Sess, pending, "咬钩未刺中")
 	}
 	var res *settleXpResult
 	if hasFish {

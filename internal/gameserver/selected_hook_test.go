@@ -124,6 +124,12 @@ func TestSelectedHookReloadKeepsOtherMissingRequestsAcrossRestart(t *testing.T) 
 func TestSelectedHookRollUsesEachHooksDefinitionAndBaitSnapshot(t *testing.T) {
 	s, db := newRigTestServer(t)
 	rod, _, groups := selectedHookMarineRig(t, s, []string{"worm_01", "muckworm"})
+	// 派鱼默认不按钩号截断，这里要验证“某个钩组判不出鱼就换下一个钩组”的兜底路径，
+	// 所以显式打开钩入口截断，让 1mm 那个钩（上限 67.5g）判不出 80g 起的美洲池鱼。
+	if err := db.TunableSet(t.Context(), "hook_entry_cap", "1", "test"); err != nil {
+		t.Fatal(err)
+	}
+	s.execAdminCmd(&AdminCommand{Op: "reload_tunables"})
 	for i, g := range groups {
 		row, err := db.GetItemByGUID(t.Context(), g.hookGUID)
 		if err != nil {

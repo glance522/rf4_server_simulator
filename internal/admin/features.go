@@ -204,7 +204,8 @@ func (s *Server) handleFishPool(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-func (s *Server) handlePlayerSkillUpdate(w http.ResponseWriter, r *http.Request) {	var req struct {
+func (s *Server) handlePlayerSkillUpdate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
 		UID     int64   `json:"uid"`
 		SkillID int64   `json:"skill_id"`
 		Points  float64 `json:"points"`

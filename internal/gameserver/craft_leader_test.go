@@ -3,7 +3,6 @@ package gameserver
 import (
 	"context"
 	"math"
-	"path/filepath"
 	"testing"
 
 	"rf4server/internal/logging"
@@ -13,15 +12,7 @@ import (
 )
 
 func TestCraftedLeaderUsesSelectedMaterials(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "leader-craft.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "recipe")
+	db := openRecipeTestDB(t)
 
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
@@ -154,15 +145,7 @@ func TestCraftedLeaderUsesSelectedMaterials(t *testing.T) {
 }
 
 func TestNormalizeLeaderInnerWirePreservesMaterialIdentity(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "leader-wire-normalize.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def")
+	db := openItemTestDB(t)
 
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)

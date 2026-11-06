@@ -2,53 +2,93 @@ package gameserver
 
 import (
 	"context"
+	"math"
 	"testing"
 )
 
-// fish_weight_cap 配置兼容测试：
-// 默认值必须保持原版行为（钓具承重截断开启），只有管理员显式
-// 写入 0 才关闭截断；存量配置升级（无该键、非法值）不受影响。
+// 派鱼重量上限策略：
+//
+//	鱼咬不咬钩取决于饵、水域、深度和鱼种分布，**不取决于钓具强度，也不取决于钩号**。
+//	本体里钩号只决定钩的强度与外观，没有"鱼嘴太大咬不住小钩"的判定，所以
+//	fish_weight_cap 与 hook_entry_cap 默认都是 0：派鱼不做任何重量截断。
+//
+//	钓具只决定"拉不拉得上来"：线细、钩小，遇到大鱼会在搏鱼阶段断线断钩。
+//
+// 两个开关保留，供管理员对照调试旧模型（上游默认是 1/1）。
 
-// TestFishWeightCapDefaultPreservesVanilla 管理员未配置该键时，
-// 两处截断路径（DB 装备上限 / pool 内置上限）传入的默认值必须为 1，
-// 即升级后默认行为与上游一致。
-func TestFishWeightCapDefaultPreservesVanilla(t *testing.T) {
+// TestDispatchCapDefaultIsOff 未配置时派鱼不截断：任何钓具组合都是一样的口径。
+func TestDispatchCapDefaultIsOff(t *testing.T) {
 	s, _ := newDetachTestServer(t)
-	// 与 fishing.go 两处调用点保持一致的读取形态。
-	if got := s.tunableF("fish_weight_cap", 1); got != 1 {
-		t.Fatalf("未配置时 fish_weight_cap = %v, want 1（原版截断）", got)
+	if got := s.tunableF("fish_weight_cap", 0); got != 0 {
+		t.Fatalf("未配置时 fish_weight_cap = %v, want 0（承力不参与派鱼）", got)
+	}
+	if got := s.tunableF("hook_entry_cap", 0); got != 0 {
+		t.Fatalf("未配置时 hook_entry_cap = %v, want 0（钩号不参与派鱼）", got)
+	}
+	for _, spec := range []gearPhysicsSpec{
+		{},
+		{RodPowerKg: 3, LineStrengthKg: 1, HookPresent: true, HookLengthMM: 2, HookSize: 2},
+		{RodPowerKg: 300, LineStrengthKg: 200, HookPresent: true, HookLengthMM: 76, HookSize: 33},
+	} {
+		if got := s.fishWeightCapKg(spec); got != 0 {
+			t.Fatalf("默认不应截断，spec=%+v 得到 %.3f kg", spec, got)
+		}
 	}
 }
 
-// TestFishWeightCapInvalidValueFallsBack 非法配置值不得关闭截断，
-// 必须回退默认（1）。
+// TestFishWeightCapInvalidValueFallsBack 非法配置值回退到默认（0）。
 func TestFishWeightCapInvalidValueFallsBack(t *testing.T) {
 	s, db := newDetachTestServer(t)
-	if err := db.TunableSet(context.Background(), "fish_weight_cap", "abc", "test"); err != nil {
-		t.Fatal(err)
-	}
-	s.execAdminCmd(&AdminCommand{Op: "reload_tunables"})
-	if got := s.tunableF("fish_weight_cap", 1); got != 1 {
-		t.Fatalf("非法值 fish_weight_cap = %v, want 1（回退默认）", got)
+	for _, key := range []string{"fish_weight_cap", "hook_entry_cap"} {
+		if err := db.TunableSet(context.Background(), key, "abc", "test"); err != nil {
+			t.Fatal(err)
+		}
+		s.execAdminCmd(&AdminCommand{Op: "reload_tunables"})
+		if got := s.tunableF(key, 0); got != 0 {
+			t.Fatalf("非法值 %s = %v, want 0（回退默认）", key, got)
+		}
 	}
 }
 
-// TestFishWeightCapExplicitOffAndOn 管理员显式 0 关闭截断、改回 1 恢复，
-// 走管理指令 reload 的真实热更路径。
-func TestFishWeightCapExplicitOffAndOn(t *testing.T) {
+// TestDispatchIgnoresGearAndHook 是策略本身的行为锁：同一条鱼，换线、换钩都不改变派鱼口径。
+func TestDispatchIgnoresGearAndHook(t *testing.T) {
 	s, db := newDetachTestServer(t)
-	if err := db.TunableSet(context.Background(), "fish_weight_cap", "0", "test"); err != nil {
-		t.Fatal(err)
+	weak := gearPhysicsSpec{RodPowerKg: 3, LineStrengthKg: 1, HookPresent: true, HookLengthMM: 2, HookSize: 2}
+	strong := gearPhysicsSpec{RodPowerKg: 80, LineStrengthKg: 100, HookPresent: true, HookLengthMM: 76, HookSize: 33}
+
+	if got := s.fishWeightCapKg(weak); got != 0 {
+		t.Fatalf("弱组默认口径应为 0（不截断），实得 %.3f", got)
 	}
-	s.execAdminCmd(&AdminCommand{Op: "reload_tunables"})
-	if got := s.tunableF("fish_weight_cap", 1); got != 0 {
-		t.Fatalf("显式 0 后 fish_weight_cap = %v, want 0（截断关闭）", got)
+	if got := s.fishWeightCapKg(strong); got != 0 {
+		t.Fatalf("强组默认口径应为 0（不截断），实得 %.3f", got)
 	}
+
+	// 开关保留：打开后回到各自的旧口径，用于对照。
 	if err := db.TunableSet(context.Background(), "fish_weight_cap", "1", "test"); err != nil {
 		t.Fatal(err)
 	}
 	s.execAdminCmd(&AdminCommand{Op: "reload_tunables"})
-	if got := s.tunableF("fish_weight_cap", 1); got != 1 {
-		t.Fatalf("显式 1 后 fish_weight_cap = %v, want 1（截断恢复）", got)
+	if got, want := s.fishWeightCapKg(weak), gearStrengthCapKg(weak); math.Abs(got-want) > 1e-9 {
+		t.Fatalf("开启承力截断后应回到强度上限: got=%.4f want=%.4f", got, want)
+	}
+
+	if err := db.TunableSet(context.Background(), "fish_weight_cap", "0", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.TunableSet(context.Background(), "hook_entry_cap", "1", "test"); err != nil {
+		t.Fatal(err)
+	}
+	s.execAdminCmd(&AdminCommand{Op: "reload_tunables"})
+	if got, want := s.fishWeightCapKg(weak), hookEntryCapKg(weak); math.Abs(got-want) > 1e-9 {
+		t.Fatalf("开启钩入口截断后应回到钩口径: got=%.4f want=%.4f", got, want)
+	}
+
+	// 两个都打开时取较小值。
+	if err := db.TunableSet(context.Background(), "fish_weight_cap", "1", "test"); err != nil {
+		t.Fatal(err)
+	}
+	s.execAdminCmd(&AdminCommand{Op: "reload_tunables"})
+	if got, want := s.fishWeightCapKg(weak), gearWeightCapKg(weak); math.Abs(got-want) > 1e-9 {
+		t.Fatalf("两个开关都开时应取较小值: got=%.4f want=%.4f", got, want)
 	}
 }

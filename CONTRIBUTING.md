@@ -86,6 +86,13 @@ go build ./...
 - 不得提交包含本机绝对路径、个人账号或隐私信息的文件。
 - 不得使用来源不明或未经授权的官方素材来搭建私服界面。
 
+### 逆向资料与本地参考目录
+
+- 客户端反编译、抓包等**逆向资料默认只放在本机 `ref/` 目录**（该目录已被 `.gitignore` 排除）。
+  - 包括但不限于：`Assembly-CSharp.dll`、`global-metadata.dat`、反编译源码、IDA/语义索引、`rf4_hook` 产物、抓包原始 hex、官方客户端回放数据。
+- 这些材料只能留在本地用于协议核对，**不得提交**，也不得在 PR、Issue、日志或文档里泄露其中的原始字节、账号或路径。
+- 需要引用协议结论时，直接引用 `docs/` 内已整理的结论（如 `docs/debugging-workflow.md`、`docs/official-protocol-workshop.md`），不要引用 `ref/` 内的原始文件。
+
 ## Agent 贡献要求
 
 AI Agent 与人类作者遵守相同标准，并额外注意：

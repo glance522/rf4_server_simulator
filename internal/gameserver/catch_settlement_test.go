@@ -217,7 +217,11 @@ func TestCatchSettlementReadsLegacyReceiptWithoutRecredit(t *testing.T) {
 	if err != nil || r == nil || !r.replayed || r.totalXP != 90 || r.premiumXP != 40 || len(r.bonuses) != 1 || r.bonuses[0] != saved.Bonuses[0] || r.skillGain != .2 {
 		t.Fatalf("legacy receipt changed: %+v %v", r, err)
 	}
-	entries := s.buildSettle813(ctx, uid, fish, r).Field(8).Val.Field(6).Val
+	settle := s.buildSettle813(ctx, uid, fish, r)
+	if got := float64(proto.F32FromBits(u32Of(settle.Field(8).Val.Field(3).Num))); got != 0 {
+		t.Fatalf("旧回执重放仍发送熟练度增量 %v", got)
+	}
+	entries := settle.Field(8).Val.Field(6).Val
 	if entries.ArgCount() != 2 {
 		t.Fatalf("legacy bonus count = %d", entries.ArgCount())
 	}

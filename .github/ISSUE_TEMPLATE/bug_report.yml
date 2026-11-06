@@ -1,0 +1,100 @@
+name: BUG 反馈
+description: 按类别提供版本、复现步骤和实际表现，帮助定位问题。
+title: "[BUG] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请用“【功能/界面】+ 操作 + 错误结果”概括标题，并尽量一次只反馈一个问题。
+        提交前请查看 [已有 Issues](https://github.com/glance522/rf4_server_simulator/issues?q=is%3Aissue) 和 [BUG 反馈表](https://docs.qq.com/sheet/DVnpaU0JoUmxnWk1N?tab=6cahat)。已有同一问题时，请补充到原记录，避免重复提交。
+        安装和登录问题可先参考 [新手教程](https://docs.qq.com/aio/DVmVyc0p0SEZUU3Bw)；版本差异以所用发布包内的“快速开始.txt”为准。
+  - type: dropdown
+    id: category
+    attributes:
+      label: 问题分类
+      description: 选择最相关的一类；无法确定时选“其他”。
+      options:
+        - 背包鱼护
+        - 鱼类
+        - 杆轮线
+        - 饵窝
+        - 其他商品
+        - 店铺类
+        - 技能、经验、等级
+        - 钓组类
+        - 玩法类
+        - 其他
+    validations:
+      required: true
+  - type: input
+    id: server_version
+    attributes:
+      label: 服务端版本
+      description: 填写 Release 标签、Preview 压缩包名或源码 Commit ID，不要只写“最新版”；无法确认时请注明。
+      placeholder: Release 标签 / Preview 包名 / Commit ID
+    validations:
+      required: true
+  - type: input
+    id: client_version
+    attributes:
+      label: 客户端版本
+      description: 请填写实际使用的版本；当前项目适配 4.0.25034，其他版本尚未验证。
+      placeholder: 例如 4.0.25034
+    validations:
+      required: true
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: 复现频率
+      options:
+        - 每次都能复现
+        - 偶尔出现
+        - 仅出现一次，尚未再次复现
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从进入相关界面或准备装备开始，按顺序描述操作；偶发问题请描述发生前的操作。
+      placeholder: |
+        1. 进入……
+        2. 使用……，执行……
+        3. 出现……
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+      description: 你认为执行上述操作后应该发生什么？
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      description: 实际发生了什么？如有报错，请填写已脱敏的错误文字。
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 环境与相关玩法（可选）
+      description: 按需补充操作系统、单机或局域网、地图、鱼种、钓法、装备名称及影响复现的自定义设置。不要粘贴整个配置文件。
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 日志或截图（可选）
+      description: |
+        仅在有助于说明问题时提供。日志可从控制面板复制，只保留问题发生前后的相关片段。
+        请先移除 token、账号、玩家标识和本机路径。不要上传 config.yaml、certs/、data/、私钥或真实存档。
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前检查
+      options:
+        - label: 我已查看已有 Issues 和 BUG 反馈表，未发现同一问题的记录。
+          required: true
+        - label: 我已检查填写内容及附件，没有包含账号、token、私钥、真实存档或其他个人信息。
+          required: true

@@ -145,7 +145,8 @@ const TUNABLE_DEFS=[
   ['release_xp_ratio','放生经验比例',0.5],
   ['fight_power_scale','搏斗拉力倍率（越低越不易断线）',1],
   ['fish_weight_scale','鱼体重倍率（2=两倍重）',1],
-  ['fish_weight_cap','鱼重受钓具上限限制（0=不限制，倍率可无限放大）',1,'鱼重上限截断'],
+  ['fish_weight_cap','承力截断：鱼重受钓具强度限制（0=关，派鱼不看线粗）',0,'鱼重上限截断'],
+  ['hook_entry_cap','钩入口截断（0=关，所有钩都能上所有鱼）',0,'钩入口截断'],
   ['settle_scale_debug','结算刻度调试（0=关）',0],
   ['fish_tv_channel','鱼汛聊天通道（24..31，27=公聊）',27],
   ['fish_tv_kind','鱼汛消息类型（401.f0，0=发言）',0],
@@ -153,7 +154,7 @@ const TUNABLE_DEFS=[
 ];
 async function loadTunables(){
  const t=await api('/api/tunables');
- const groups=[['咬钩与鱼饵',['bite_probability','bite_delay_fixed','bite_delay_scale','bite_delay_max','bite_delay_lure_max','bait_pref_scale','bait_pref_weight_shift']],['鱼体与搏斗',['fish_weight_scale','fish_weight_cap','fight_power_scale']],['经验与结算',['xp_gain','release_xp_ratio','settle_scale_debug']],['鱼汛播报',['fish_tv_channel','fish_tv_kind','fish_tv_kv']]];
+ const groups=[['咬钩与鱼饵',['bite_probability','bite_delay_fixed','bite_delay_scale','bite_delay_max','bite_delay_lure_max','bait_pref_scale','bait_pref_weight_shift']],['鱼体与搏斗',['fish_weight_scale','fish_weight_cap','hook_entry_cap','fight_power_scale']],['经验与结算',['xp_gain','release_xp_ratio','settle_scale_debug']],['鱼汛播报',['fish_tv_channel','fish_tv_kind','fish_tv_kv']]];
 
  $('#tunablesBody').innerHTML=groups.map(([title,keys])=>'<section class="tunable-group"><h3>'+title+'</h3><div class="tunable-fields">'+keys.map(key=>{
  const [,label,def]=TUNABLE_DEFS.find(x=>x[0]===key);

@@ -47,8 +47,8 @@ func TestSharedSkillPartialWriteAndResetRollBackTogether(t *testing.T) {
 
 func sharedSkillTestServer(t *testing.T, level int64) *Server {
 	t.Helper()
-	srv, db := newProgressSrv(t)
-	importStaticForSkillsCraft(t, db, "item_def", "skill_def", "skill_cat_def")
+	db := openSkillCraftTestDB(t)
+	srv := newSkillsCraftServer(t, db)
 	if _, err := db.EnsureProfile(t.Context(), sharedSkillUID); err != nil {
 		t.Fatal(err)
 	}

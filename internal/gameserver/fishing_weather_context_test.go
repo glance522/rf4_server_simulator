@@ -3,12 +3,9 @@ package gameserver
 import (
 	"encoding/json"
 	"math"
-	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
-
-	"rf4server/internal/store"
 )
 
 func weatherIRNode(class string, values ...uint64) irNode {
@@ -148,14 +145,7 @@ func TestFishingWeatherAllMapPlansCoverTheirSentWindow(t *testing.T) {
 }
 
 func TestFishingWeatherSceneAliasesUseTheirOwnMapPlan(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "weather-locations.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
+	db := openMigratedTestDB(t)
 	for _, level := range []string{spawnLevelKey, "level_002_kirzah_river", "level_004_torfyanoe_ozero", "level_009_ahtuba"} {
 		if _, err := db.SQL.Exec(`INSERT INTO loc_alias(alias,loc,note) VALUES(?,?,?)`, level, level, "weather test"); err != nil {
 			t.Fatal(err)

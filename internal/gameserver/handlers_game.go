@@ -672,6 +672,18 @@ func hCastPrepare(ctx *Ctx) ([]byte, bool) {
 		st.RigType = rigType
 		st.mu.Unlock()
 	}
+	// 水域装备限制：当前地图禁用的竿不可抛投准备（与 17/7 同一套拦截，
+	// 客户端直发 14/1 时兜底）。
+	if reason := srv.placeRodViolation(ctx.Sess.pushCtx(), ctx.Sess.Userid, gear); reason != "" {
+		st.mu.Lock()
+		st.GearGuid = ""
+		st.mu.Unlock()
+		ctx.Log.Info("14/1 被拒：装备限制", "rod", shortGUID(gear), "reason", reason)
+		if body := castReady158(ctx, "", depthCM, 0); body != nil {
+			return body, true
+		}
+		return nil, false
+	}
 
 	body := castReady158(ctx, gear, depthCM, rigType)
 	if body == nil {
@@ -730,6 +742,18 @@ func hCast(ctx *Ctx) ([]byte, bool) {
 		st.mu.Lock()
 		st.RigType = rt
 		st.mu.Unlock()
+	}
+	// 水域装备限制：竿或已装渔轮被当前地图禁用时不可抛投
+	// （17/7 已拦正常路径，这里兜底已装配好才切图的情况）。
+	// 官服语义：装配放行、抛竿拦；用 136 (kOperationResult_WrongRegion)
+	// 弹正规文案，避免普通异常名落到「内部错误」。
+	if reason := srv.placeRigViolation(ctx.Sess.pushCtx(), ctx.Sess.Userid, gear); reason != "" {
+		st.mu.Lock()
+		st.GearGuid = ""
+		st.mu.Unlock()
+		ctx.Log.Info("14/2 被拒：装备限制", "rod", shortGUID(gear), "reason", reason)
+		ctx.ReplyOperationResult(136) // kOperationResult_WrongRegion
+		return nil, true
 	}
 	// 14/1 给出的是满力度上限；14/2 才携带本次实际落点、动作和出手力度。
 	// 这里只做真实请求诊断，不能把本杆力度写回下一杆的上限。
@@ -1026,9 +1050,19 @@ func hFishingLeft(ctx *Ctx) ([]byte, bool) {
 		// 旧逻辑把 CastActive 一并清掉，导致饵仍在水中却永远不再派鱼。
 		// 只清理当前鱼，并在同一水中钓组上重新安排下一次判鱼；
 		// 路亚脱钩同样重新排鱼，收线途中仍可能再次咬钩。
+		//
+		// 官方语义（客户端状态机 + 2026-11-06 线上日志实证）：
+		// f0=1/2/8 只是客户端鱼 AI 不同的内部计时器/状态机路径
+		// （咬钩窗口、试探窗口、钩概率掷骰），**f0 本身不区分鱼
+		// 是否上过钩**——搏鱼中跑鱼同样走计时器路径报 f0=2
+		// （riv_rb_trout 一轮 14/14 → 14/11 → f0=2，全程无 8/7）。
+		// 是否真脱钩以服务端记的 14/11 中鱼确认（st.Hooked）为准：
+		//   已中鱼 → 跑鱼等同 f0=7 真脱钩：播报模板 7 并计 escapes；
+		//   未中鱼 → 吃饵/试探后游走，官方静默（模板表无此类）。
 		st.cancelBiteTimerLocked()
 		pending := st.Pending
 		alreadyResolved := st.Resolved
+		hooked := st.Hooked
 		st.Pending = nil
 		st.PushSent = false
 		st.Hooked = false
@@ -1036,11 +1070,14 @@ func hFishingLeft(ctx *Ctx) ([]byte, bool) {
 		castActive := st.CastActive
 		inWater := st.InWater
 		st.mu.Unlock()
-		if !alreadyResolved {
+		if hooked && !alreadyResolved {
+			srv.bumpFishingCounter(ctx.Sess.Userid, "escapes")
 			srv.notifyFishEscape(ctx.Sess, pending, "脱钩离开")
+			ctx.Log.Info("14/12 已中鱼跑鱼，按真脱钩播报", "f0", f0)
+		} else {
+			ctx.Log.Info("14/12 鱼未上钩离场，官方静默", "f0", f0, "hooked", hooked)
 		}
 		if castActive && inWater {
-			ctx.Log.Info("14/12 鱼未中钩离场，重新排下一尾", "f0", f0)
 			srv.scheduleBiteState(ctx.Sess, st, false, false)
 		}
 		return nil, true
