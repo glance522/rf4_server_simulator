@@ -46,6 +46,28 @@ func (d *DB) AddSkillPoints(ctx context.Context, uid, skillID int64, delta float
 	return err
 }
 
+// GetSkillPointsTx 在事务内读取技能大类熟练度；无记录时返回 0。
+func (d *DB) GetSkillPointsTx(ctx context.Context, tx *sql.Tx, uid, skillID int64) (float64, error) {
+	var pts float64
+	err := tx.QueryRowContext(ctx,
+		`SELECT MIN(points, ?) FROM skill WHERE uid=? AND skill_id=?`,
+		maxSkillPoints, uid, skillID).Scan(&pts)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return pts, err
+}
+
+// AddSkillPointsTx 在事务内增加熟练度，供“扣物 + 加熟练度”原子提交使用。
+func (d *DB) AddSkillPointsTx(ctx context.Context, tx *sql.Tx, uid, skillID int64, delta float64) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO skill(uid, skill_id, points) VALUES(?,?,MIN(?,?))
+		ON CONFLICT (uid, skill_id) DO UPDATE
+		SET points = MIN(points + excluded.points, ?)`,
+		uid, skillID, delta, maxSkillPoints, maxSkillPoints)
+	return err
+}
+
 // ListSkillNodes 取玩家技能节点等级，并把共享身份投影到组内全部节点。
 func (d *DB) ListSkillNodes(ctx context.Context, uid int64) (map[int64]int64, error) {
 	out, err := d.listRawSkillNodes(ctx, uid)

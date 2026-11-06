@@ -60,6 +60,12 @@ type app struct {
 	avatarDir  string
 	avatarPort int
 	avatarLn   net.Listener
+	gameMu     sync.RWMutex
+	startGame  func(*exec.Cmd) error
+	avatarMu   sync.RWMutex
+	avatarDir  string
+	avatarPort int
+	avatarLn   net.Listener
 
 	// 托盘状态：systray 在 Run 之前内部句柄为 nil，提前调用 SetIcon/
 	// SetTooltip 会 panic。这里先记录期望状态，托盘就绪后再应用。
@@ -115,6 +121,7 @@ func main() {
 	appCtx, appCancel := context.WithCancel(context.Background())
 	app := &app{
 		cfg: cfg, cfgPath: *configPath, log: panelLogger{}, ctx: appCtx, cancel: appCancel,
+		avatarDir: "avatars",
 		avatarDir: "avatars",
 		trayColor: 3, trayTip: "fish-localserver 本地服务器", // 3=灰（初始化中）
 	}
@@ -370,16 +377,25 @@ func (a *app) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	gamePath, gameRegion := a.gameState()
 	avatarBaseURL := a.suggestedAvatarBaseURL()
 	writeJSON(w, map[string]any{
-		"procs":       procs,
-		"last_error":  lastErr,
-		"admin":       "/admin/",
-		"admin_ready": adminReady,
-		"admin_error": adminErr,
-		"game_path":   gamePath,
-		"game_region": gameRegion,
+		"procs":           procs,
+		"last_error":      lastErr,
+		"admin":           "/admin/",
+		"admin_ready":     adminReady,
+		"admin_error":     adminErr,
+		"game_path":       gamePath,
+		"game_region":     gameRegion,
 		"avatar_base_url": avatarBaseURL,
-		"hosts":       hostsMode(hostsFilePath()),
+		"hosts":           hostsMode(hostsFilePath()),
 	})
+}
+
+func (a *app) avatarStatusURL() string {
+	a.avatarMu.RLock()
+	defer a.avatarMu.RUnlock()
+	if a.cfg != nil && strings.TrimSpace(a.cfg.Game.AvatarURL) != "" {
+		return a.cfg.Game.AvatarURL
+	}
+	return a.suggestedAvatarURL()
 }
 
 // handleHosts 面板 hosts 指向开关：GET 返回当前指向，POST ?mode=local|official 切换。

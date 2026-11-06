@@ -791,7 +791,7 @@ func TestCraftCountableProductsStack(t *testing.T) {
 	sess := &Session{ID: 1, Userid: uid, Srv: srv, log: logging.Discard()}
 	box := &handlerBox{srv: srv, sess: sess, main: 9, sub: 1}
 
-	craftOnce := func(recipe string, materials []craftSlot) {
+	craftOnce := func(recipe string, materials []craftSlot) *proto.Value {
 		t.Helper()
 		box.tree = proto.Args524(craftObj8(recipe, materials, 1))
 		body, ok := box.invoke(t)
@@ -802,6 +802,7 @@ func TestCraftCountableProductsStack(t *testing.T) {
 		if !v.IsKind(proto.KindObj) || v.TypeID != 803 || u64Of(v.Fields[0].Num) != 1 {
 			t.Fatalf("%s 制作应成功，实得 %v/%d", recipe, v.Kind, v.TypeID)
 		}
+		return v
 	}
 	stackRows := func(itemID string) (rows, qty int64) {
 		t.Helper()
@@ -819,7 +820,14 @@ func TestCraftCountableProductsStack(t *testing.T) {
 			t.Fatalf("第 %d 次创建 food_egg 失败: %v", i+1, err)
 		}
 		srv.alignItemRowQty(ctx, egg)
-		craftOnce("craft_cook_boiled_egg", nil)
+		v := craftOnce("craft_cook_boiled_egg", nil)
+		// 结果卡只显示本次产出 1；背包快照必须是合并后的整堆。
+		if got := craftResultQty(t, v); got != 1 {
+			t.Fatalf("第 %d 次烹调 803.f1 数量应为本产出 1，实得 %d", i+1, got)
+		}
+		if got := craftInventoryQty(t, v); got != int64(i+1) {
+			t.Fatalf("第 %d 次烹调 803.f6 数量应为整堆 %d，实得 %d", i+1, i+1, got)
+		}
 	}
 	if rows, qty := stackRows("boiled_egg"); rows != 1 || qty != 2 {
 		t.Fatalf("两次烹调应合并成 1 堆 2 个，实得 rows=%d qty=%d", rows, qty)
@@ -854,4 +862,103 @@ func TestCraftCountableProductsStack(t *testing.T) {
 	if rows, qty := stackRows("pvas_b10"); rows != 2 || qty != 2 {
 		t.Fatalf("两次 PVA 制作应保持 2 个独立实例，实得 rows=%d qty=%d", rows, qty)
 	}
+}
+
+// TestCraftResultCardUsesProducedQuantity 验证制作结果卡只带本次产出量：
+// 同一成品堆连续制作时 803.f1 不能下发整堆数量，f6 仍必须是整堆快照。
+func TestCraftResultCardUsesProducedQuantity(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "craft-result-qty.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	importStaticForSkillsCraft(t, db, "item_def", "recipe")
+	ctx := context.Background()
+	srv := newSkillsCraftServer(t, db)
+	srv.randFloat = fixedRolls(0.9) // 不涨熟练度，避免干扰数量断言
+	uid := int64(2000008)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	sess := &Session{ID: 1, Userid: uid, Srv: srv, log: logging.Discard()}
+	box := &handlerBox{srv: srv, sess: sess, main: 9, sub: 1}
+
+	// bread 的定义单位量是 30：制作 1 份产出 30，制作 2 份产出 60。
+	craft := func(times uint64) *proto.Value {
+		t.Helper()
+		for i := uint64(0); i < times; i++ {
+			loaf, err := srv.CreateItem(ctx, uid, "loaf_01", "backpack", 1)
+			if err != nil {
+				t.Fatalf("构造 loaf_01 失败: %v", err)
+			}
+			srv.alignItemRowQty(ctx, loaf)
+		}
+		box.tree = proto.Args524(craftObj8("craft_bait_bread", nil, times))
+		body, ok := box.invoke(t)
+		if !ok {
+			t.Fatal("9/1 未处理")
+		}
+		v := decodeTreeValue(t, srv, body)
+		if !v.IsKind(proto.KindObj) || v.TypeID != 803 || u64Of(v.Fields[0].Num) != 1 {
+			t.Fatalf("bread 制作应成功，实得 %v/%d", v.Kind, v.TypeID)
+		}
+		return v
+	}
+
+	first := craft(1)
+	if got := craftResultQty(t, first); got != 30 {
+		t.Fatalf("首份 803.f1 数量应为本次产出 30，实得 %d", got)
+	}
+	if got := craftInventoryQty(t, first); got != 30 {
+		t.Fatalf("首份 803.f6 数量应为整堆 30，实得 %d", got)
+	}
+
+	second := craft(1)
+	if got := craftResultQty(t, second); got != 30 {
+		t.Fatalf("第二份 803.f1 数量应为本次产出 30（不是整堆 60），实得 %d", got)
+	}
+	if got := craftInventoryQty(t, second); got != 60 {
+		t.Fatalf("第二份 803.f6 数量应为整堆 60，实得 %d", got)
+	}
+
+	third := craft(2)
+	if got := craftResultQty(t, third); got != 60 {
+		t.Fatalf("制作 2 份的 803.f1 数量应为本次产出 60，实得 %d", got)
+	}
+	if got := craftInventoryQty(t, third); got != 120 {
+		t.Fatalf("制作 2 份的 803.f6 数量应为整堆 120，实得 %d", got)
+	}
+}
+
+// craftResultQty 返回 803.f1 第一件产出物的数量。
+func craftResultQty(t *testing.T, v *proto.Value) int64 {
+	t.Helper()
+	return craftItemListQty(t, v, 1, "803.f1")
+}
+
+// craftInventoryQty 返回 803.f6 背包增量里第一件产出物的数量。
+func craftInventoryQty(t *testing.T, v *proto.Value) int64 {
+	t.Helper()
+	return craftItemListQty(t, v, 6, "803.f6")
+}
+
+// craftItemListQty 读取 803 指定字段里第一件物品的数量位。
+func craftItemListQty(t *testing.T, v *proto.Value, field int, label string) int64 {
+	t.Helper()
+	if v == nil || !v.IsKind(proto.KindObj) || field >= len(v.Fields) {
+		t.Fatalf("%s: 响应不是 803: %+v", label, v)
+	}
+	list := v.Fields[field].Val
+	if list == nil || list.Kind != proto.KindArgs || list.ArgCount() < 1 {
+		t.Fatalf("%s 应至少带 1 件物品，实得 %+v", label, list)
+	}
+	item := list.ArgItem(0)
+	idx := fieldIdxByCS(item.Class, csQty)
+	if idx < 0 || idx >= len(item.Fields) || item.Fields[idx].Num == nil {
+		t.Fatalf("%s 的 %s 物品树没有数量字段: %+v", label, item.Class, item)
+	}
+	return int64(u64Of(item.Fields[idx].Num))
 }

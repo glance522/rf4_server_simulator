@@ -20,7 +20,11 @@
     "admin_komar",
     "rf_books"
    ],
-   "map_key": "level_001_lake"
+   "map_key": "level_001_lake",
+   "books": [
+    "float_fishing_book",
+    "spinning_book"
+   ]
   },
   "admin_010": {
    "kind": 3,
@@ -42,7 +46,10 @@
     "admin_north_sea",
     "rf_books"
    ],
-   "map_key": "level_012_north_sea"
+   "map_key": "level_012_north_sea",
+   "books": [
+    "seafish_book"
+   ]
   },
   "admin_013": {
    "kind": 3,
@@ -85,7 +92,10 @@
     "admin_copper",
     "rf_books"
    ],
-   "map_key": "level_018_moskitnoe"
+   "map_key": "level_018_moskitnoe",
+   "books": [
+    "feeder_book"
+   ]
   },
   "admin_19": {
    "kind": 3,
@@ -93,7 +103,11 @@
     "admin_los",
     "rf_books"
    ],
-   "map_key": "level_019_american_pond"
+   "map_key": "level_019_american_pond",
+   "books": [
+    "float_fishing_book",
+    "spinning_book"
+   ]
   },
   "admin_grass": {
    "kind": 3,

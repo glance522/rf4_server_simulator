@@ -1148,6 +1148,10 @@ func gradeMapVal(m map[int64]float64, grade int64) float64 {
 
 // buildFish27 构造 27 判鱼对象。
 func (s *Server) fishStaminaFor(f *RolledFish) float64 {
+	return s.fishStaminaForProfile(f, s.fishFightProfileFor(f))
+}
+
+func (s *Server) fishStaminaForProfile(f *RolledFish, profile fishFightProfile) float64 {
 	if f == nil {
 		return 0
 	}
@@ -1159,7 +1163,21 @@ func (s *Server) fishStaminaFor(f *RolledFish) float64 {
 	if scale > 0 {
 		stamina *= scale
 	}
-	return stamina
+	return stamina * profile.StaminaScale
+}
+
+func (s *Server) fishFightPullFor(f *RolledFish, profile fishFightProfile) float64 {
+	if f == nil {
+		return 0
+	}
+	pull := f.Force
+	if pull <= 0 {
+		pull = verifiedForcePerGram * float64(f.WeightG)
+	}
+	if k := s.tunableF("fight_power_scale", 1.0); k > 0 && k != 1.0 {
+		pull = math.Max(0.5, math.Round(pull*k*10000)/10000)
+	}
+	return math.Max(0.5, math.Round(pull*profile.ForceScale*10000)/10000)
 }
 
 func (s *Server) fishInitialStaminaRatio() float64 {
@@ -1194,17 +1212,10 @@ func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string) *proto.Va
 		f16v, f17v, f18v = fb[16], fb[17], fb[18]
 		f19v, f20v = fb[19], fb[20]
 	}
-	stamina := s.fishStaminaFor(f)
+	profile := s.fishFightProfileFor(f)
+	stamina := s.fishStaminaForProfile(f, profile)
 	initialStamina := s.fishInitialStaminaRatio()
-	pull := f.Force
-	if pull <= 0 {
-		pull = verifiedForcePerGram * w
-	}
-	// fight_power_scale：整体缩放鱼的拉力（同时影响 26 条张力曲线）。
-	// 调低可显著减少断线与收杆脱钩，调高则更硬核；默认 1.0 保持真实样本比例。
-	if k := s.tunableF("fight_power_scale", 1.0); k > 0 && k != 1.0 {
-		pull = math.Max(0.5, math.Round(pull*k*10000)/10000)
-	}
+	pull := s.fishFightPullFor(f, profile)
 
 	var named *string
 	name := f.Name
@@ -1244,7 +1255,7 @@ func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string) *proto.Va
 		18: proto.F32(float32(f18v)),
 		19: proto.F32(float32(f19v)),
 		20: proto.F32(float32(f20v)),
-		21: s.buildFightCurves(f.Species, pull),
+		21: s.buildFightCurvesForFish(f, pull, profile),
 		22: proto.Str(named),
 		23: proto.Guid(hook),
 		24: proto.Null(),
@@ -1266,18 +1277,14 @@ func (s *Session) Push14_14(f *RolledFish, hookGUID, gearGuid string) bool {
 	if gearGuid == "" {
 		gearGuid = "00000000000000000000000000000000"
 	}
-	stamina := s.Srv.fishStaminaFor(f)
+	profile := s.Srv.fishFightProfileFor(f)
+	stamina := s.Srv.fishStaminaForProfile(f, profile)
 	initialStamina := s.Srv.fishInitialStaminaRatio()
-	force := f.Force
-	if force <= 0 {
-		force = verifiedForcePerGram * float64(f.WeightG)
-	}
-	if k := s.Srv.tunableF("fight_power_scale", 1.0); k > 0 && k != 1.0 {
-		force = math.Max(0.5, math.Round(force*k*10000)/10000)
-	}
+	force := s.Srv.fishFightPullFor(f, profile)
 	s.log.Info("14/14 发鱼",
 		"鱼种", f.Species, "重量_g", f.WeightG, "体力池", stamina,
-		"初始体力", initialStamina, "拉力", force)
+		"初始体力", initialStamina, "拉力", force, "体型比例", profile.SizeRatio,
+		"冲刺倍率", profile.ForceScale, "耐力倍率", profile.StaminaScale)
 	return s.Push(14, 14, proto.Args524(
 		proto.Guid(gearGuid),
 		s.Srv.buildFish27(f, hookGUID, gearGuid),
@@ -1650,6 +1657,15 @@ func (s *Server) notifyFishLanded(sess *Session, f *RolledFish, newRecord bool) 
 	var kv *proto.Value
 	if s.tunableF("fish_tv_kv", 0) != 0 {
 		kv = fishTVKv(f.Species, f.WeightG)
+	}
+	// k25/k26/k03 是带参数的官方模板播报，依赖 401.f4 模板参数；KV 未启用
+	// （kv==nil）时客户端解析模板缺参会抛异常断连（回登录界面）。此时退化
+	// 为已验证的普通系统文本播报，保留提示且不掉线。
+	if kv == nil {
+		if text := s.fishLandedText(f, newRecord); text != "" {
+			sess.pushSystemChat(text)
+		}
+		return
 	}
 	switch {
 	case f.Grade >= 4:

@@ -3,9 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -245,28 +243,7 @@ func setMappingValue(mapping *yaml.Node, key, value string) {
 }
 
 func requireLocalJSONPost(w http.ResponseWriter, r *http.Request) bool {
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]string{"error": "仅支持 POST"})
-		return false
-	}
-	if !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
-		writeJSONStatus(w, http.StatusUnsupportedMediaType, map[string]string{"error": "Content-Type 必须是 application/json"})
-		return false
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil || !net.ParseIP(host).IsLoopback() {
-		writeJSONStatus(w, http.StatusForbidden, map[string]string{"error": "仅允许本机控制中心调用"})
-		return false
-	}
-	if origin := r.Header.Get("Origin"); origin != "" {
-		u, err := url.Parse(origin)
-		if err != nil || !strings.EqualFold(u.Host, r.Host) {
-			writeJSONStatus(w, http.StatusForbidden, map[string]string{"error": "拒绝跨站请求"})
-			return false
-		}
-	}
-	return true
+	return requireLocalPost(w, r, "application/json")
 }
 
 func writeJSONStatus(w http.ResponseWriter, status int, value any) {

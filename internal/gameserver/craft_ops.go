@@ -301,8 +301,8 @@ func (s *Server) resolveRecipe(ctx context.Context, key string) *store.Recipe {
 // ---- 9/1 制作闭环 ----
 
 // hCraft 处理 9/1 制作：解析配方、校验材料、事务内扣料、产出入包并写流水。
-// 可计件产物并入已有同种堆，非计件产物保持独立实例；803.f1 返回产出
-// （合并后为整堆），f6 返回背包增量，f8 返回移除项。
+// 可计件产物并入已有同种堆，非计件产物保持独立实例；803.f1 返回本次产出
+// （数量为本次产出量），f6 返回背包增量（合并后为整堆），f8 返回移除项。
 //
 // 未知配方、材料不足和入库失败均返回 803(false)，避免客户端等待缺失响应。
 func hCraft(ctx *Ctx) ([]byte, bool) {
@@ -485,9 +485,13 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 		}
 	}
 
+	// 本次产出量：可计件产物在 prepareNewItem 已按定义单位量×份数折算；
+	// 引线物化只改子材料与强度，不动数量。
+	producedQty := producedRow.Qty
+
 	// 可计件产物（面包、熟食、饲料等）并入已有同种背包堆，避免每次制作多出一个独立堆；
 	// 拟饵、PVA、引线等非计件产物不受影响，仍插入新实例。
-	row, _, err := grantPreparedItemTx(cctx, tx, producedRow, true)
+	row, merged, err := grantPreparedItemTx(cctx, tx, producedRow, true)
 	if err != nil {
 		return fail("产出物入库失败", "output", outputID, "err", err)
 	}
@@ -504,11 +508,28 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 		"took", len(touched), "recipe", recipe.RecipeID,
 		"skill", skillCat, "mastery_gain", masteryGain)
 
-	produced := make([]*proto.Value, 0, 1)
+	// 背包快照（803.f6 与 4/22）沿用合并后的整堆行；结果卡（803.f1）只放
+	// 本次产出量，两者用各自独立的物品树，避免结果卡显示整堆数量。
+	upsert := make([]*proto.Value, 0, 1+len(touched))
+	var stackTree *proto.Value
 	if tree, terr := srv.ItemToTree(cctx, row); terr == nil {
-		produced = append(produced, tree)
+		stackTree = tree
+		upsert = append(upsert, tree)
+	} else {
+		ctx.Log.Warn("9/1 背包快照构造失败", "output", outputID, "err", terr)
 	}
-	upsert := append([]*proto.Value{}, produced...)
+	produced := make([]*proto.Value, 0, 1)
+	if stackTree != nil {
+		preview := stackTree
+		if merged && producedQty > 0 && producedQty != row.Qty {
+			if tree, perr := srv.craftProducedTree(cctx, row, producedQty); perr == nil {
+				preview = tree
+			} else {
+				ctx.Log.Warn("9/1 制作结果对象构造失败", "output", outputID, "err", perr)
+			}
+		}
+		produced = append(produced, preview)
+	}
 	var removed []string
 	for _, g := range touched {
 		r2, gerr := srv.DB.GetItemByGUID(cctx, g)
@@ -527,8 +548,9 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 		if masteryGain > 0 {
 			ctx.Sess.Push2_4SkillTree("制作 " + outputID)
 		}
-		if len(produced) > 0 {
-			ctx.Sess.Push(4, 22, proto.Args(proto.S("61"), produced...))
+		if stackTree != nil {
+			// 4/22 是背包快照，必须下发合并后的整堆数量。
+			ctx.Sess.Push(4, 22, proto.Args(proto.S("61"), stackTree))
 		}
 	})
 	return srv.replyCraftResultWithSkill(ctx, true, produced, upsert, removed, progress, skillTree)
@@ -1065,6 +1087,36 @@ func craftDemandObjs(recipe *store.Recipe) []*proto.Value {
 }
 
 // ---- 803 构造 ----
+
+// craftProducedTree 构造 803.f1 的制作结果对象：数量只取本次产出量。
+// 可计件产物并入已有堆后 row.Qty 是整堆总量，直接下发会让结果卡显示
+// "整堆数量"而不是本次做了多少；GUID 与物理字段仍沿用合并后的行，
+// 保证客户端按同一实例渲染。f6 与 4/22 的背包快照必须用原行，不能复用本函数。
+func (s *Server) craftProducedTree(ctx context.Context, row *store.Item, producedQty int64) (*proto.Value, error) {
+	if row == nil {
+		return nil, fmt.Errorf("空物品行")
+	}
+	if producedQty < 1 {
+		return nil, fmt.Errorf("无效产出数量 %d", producedQty)
+	}
+	fields, err := FieldsFromJSON(row.FieldsJSON)
+	if err != nil {
+		return nil, err
+	}
+	idx := fieldIdxByCS(row.WireClass, csQty)
+	if idx < 0 || idx >= len(fields) {
+		return nil, fmt.Errorf("物品 %s 没有数量字段", row.ItemID)
+	}
+	fields[idx].Num = ptrU64(uint64(producedQty))
+	fj, err := FieldsToJSON(fields)
+	if err != nil {
+		return nil, err
+	}
+	preview := *row
+	preview.Qty = producedQty
+	preview.FieldsJSON = fj
+	return s.ItemToTree(ctx, &preview)
+}
 
 // replyCraftResult 构造 803 制作/分解结果：
 // f1 是制作结果预览，f6 是背包增量（产出 + 剩余材料），f8 是耗尽移除的 GUID。

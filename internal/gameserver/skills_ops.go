@@ -45,6 +45,15 @@ const (
 	// 熟练度越高，命中增长的概率越低；100% 时直接返回 0。
 	fishingProficiencyChanceScale = 25.0
 	fishingProficiencyMaxChance   = 0.9
+
+	// 技能书（category 80）在 item_def.attrs_json 中用 ndnngghaelp 指定技能大类，
+	// fejmchnmimb 是 f32 位模式的目标熟练度（30%/40%），不是增量。
+	skillBookCategory    int64  = 80
+	skillBookMaxSkillCat uint64 = 11
+
+	// 174 = abadjfbfdjb.hpifaoeaeja，客户端映射到
+	// kOperationResult_SkillBookReadNoEffect（阅读技能书没有效果）。
+	operationResultSkillBookReadNoEffect = 174
 )
 
 // fishingProficiencyGainChance 返回一次钓获触发熟练度增长的概率。
@@ -155,6 +164,154 @@ func (s *Server) awardSkillProficiencyWithRolls(ctx context.Context, uid, cat in
 		return 0
 	}
 	return gain
+}
+
+// useSkillBook 处理 4/8 中 category 80 的技能书：按书目配置把对应大类熟练度
+// 提升到目标百分比，并在同一事务里消耗一本书。
+//
+// item_def.attrs_json 里 ndnngghaelp 是技能大类（1 浮钓 / 2 纺车 / 3 喂食器 /
+// 11 海钓），fejmchnmimb 是 f32 位模式的目标熟练度（30 或 40）。已达到目标时
+// 不消耗书，回操作结果码 174，由客户端显示 kOperationResult_SkillBookReadNoEffect；
+// 不能回普通 .NET 异常，否则客户端会退化成 kCommon_E_INTERNAL_WITHCODE 通用内部错误。
+// 非技能书交回 hItemUse 的通用分支。
+func (s *Server) useSkillBook(ctx *Ctx) ([]byte, bool) {
+	if !s.requireDB(ctx) {
+		return nil, false
+	}
+	storage, hasStorage := ctx.ArgInt(0)
+	if ctx.Tree == nil || ctx.Tree.Kind != proto.KindArgs || len(ctx.Tree.Items) != 2 {
+		return nil, false
+	}
+	arg := ctx.Tree.ArgItem(1)
+	if arg == nil || arg.Kind != proto.KindGuid || !validRigGUID(arg.Hex) {
+		return nil, false
+	}
+
+	var tx *sql.Tx
+	fail := func(message string) ([]byte, bool) {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+		ctx.ReplyFailure("System.InvalidOperationException", message)
+		return nil, true
+	}
+	failed := func(err error) ([]byte, bool) {
+		ctx.Log.Warn("阅读技能书未完成", "err", err)
+		return fail("阅读技能书未完成，请重试")
+	}
+	noEffect := func() ([]byte, bool) {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+		ctx.ReplyOperationResult(operationResultSkillBookReadNoEffect)
+		return nil, true
+	}
+
+	cctx, uid := ctx.Sess.pushCtx(), ctx.Sess.Userid
+	var err error
+	tx, err = beginEconomyTx(cctx, s.DB)
+	if err != nil {
+		return failed(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	row, err := getItemTx(cctx, tx, arg.Hex)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false
+	}
+	if err != nil {
+		return failed(err)
+	}
+	def, err := itemDefByNumericIDTx(cctx, tx, row.NumericID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false
+	}
+	if err != nil {
+		return failed(err)
+	}
+	if def.Category != skillBookCategory {
+		return nil, false
+	}
+	bookClass := categoryWireClass[skillBookCategory]
+	if ctx.Sess.Closed() {
+		return fail("会话已关闭，请重新连接")
+	}
+	if !hasStorage || storage != 0 || row.UID != uid || row.Container != "backpack" || row.RigGUID != "" {
+		return fail("只能阅读自己背包中的技能书")
+	}
+	if row.WireClass != bookClass.Class || row.TypeID != bookClass.TypeID {
+		return fail("技能书状态无效，请刷新背包")
+	}
+
+	catRaw, ok := defAttrU64(def, "ndnngghaelp")
+	if !ok || catRaw == 0 || catRaw > skillBookMaxSkillCat {
+		return fail("技能书缺少有效的技能类别")
+	}
+	cat := int64(catRaw)
+	bits, ok := defAttrF32(def, "fejmchnmimb")
+	if !ok {
+		return fail("技能书缺少目标熟练度")
+	}
+	target := float64(proto.F32FromBits(bits))
+	if target <= 0 {
+		return fail("技能书目标熟练度无效")
+	}
+	if target > profCap {
+		target = profCap
+	}
+	current, err := s.DB.GetSkillPointsTx(cctx, tx, uid, cat)
+	if err != nil {
+		return failed(err)
+	}
+	if current < 0 {
+		current = 0
+	}
+	if current > profCap {
+		current = profCap
+	}
+	if current+1e-6 >= target {
+		ctx.Log.Info("4/8 技能书阅读无效", "item", def.ItemID, "cat", cat,
+			"skill", fmt.Sprintf("%.1f>=%.1f", current, target))
+		return noEffect()
+	}
+	if err := s.DB.AddSkillPointsTx(cctx, tx, uid, cat, target-current); err != nil {
+		return failed(err)
+	}
+	if _, err := consumeItemQtyTx(cctx, tx, row, 1); err != nil {
+		return failed(err)
+	}
+
+	var updated []*proto.Value
+	var removed []string
+	if row.Qty == 0 {
+		removed = []string{row.GUID}
+	} else {
+		fields, err := FieldsFromJSON(row.FieldsJSON)
+		if err != nil {
+			return failed(err)
+		}
+		tree := proto.Obj(row.WireClass, uint32(row.TypeID), fields...)
+		stateFlagsZeroFill(row.WireClass, tree, def)
+		updated = []*proto.Value{tree}
+	}
+	body, err := proto.EncodeValue(buildRigSnapshot800(nil, updated, removed), ctx.Sess.Table())
+	if err != nil {
+		return failed(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return failed(err)
+	}
+	change := baitChange{Removed: removed}
+	if len(updated) > 0 {
+		change.Updated = []string{row.GUID}
+	}
+	ctx.AfterResponse(func() {
+		ctx.Sess.Push2_4SkillTree("阅读 " + def.ItemID)
+		ctx.Sess.pushBaitChange(change)
+	})
+	ctx.Log.Info("4/8 阅读技能书", "item", def.ItemID, "cat", cat,
+		"skill", fmt.Sprintf("%.1f->%.1f", current, target))
+	return body, true
 }
 
 // fishingBonus 按当前钓法合成永久与当前竿熟练度，不给未知节点补通用加成。

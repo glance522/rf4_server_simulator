@@ -10,12 +10,33 @@ import (
 // 商店货架补齐：历史抓取的 shop_item 与内嵌 kind 模板都不完整，新商品
 // （例如 2025 款限量产品）没有货架行，客户端就会显示"无库存"。
 // 这里按“店内已有品类 +（品牌店）同品牌”把缺的商品补回货架，
-// 价格缺失时用同类商品的中位价估价。
+// 价格缺失时用同类商品的中位价估价。管理机构按目录登记的 books 白名单
+// 上架品类 80 的技能书（见 shopBookCategory）。
 
 // partCategories 是装配零件品类，不单独在商店售卖。
 var partCategories = map[int64]bool{
 	4: true, 5: true, 7: true, 8: true, 9: true, 10: true,
 	34: true, 36: true, 52: true, 63: true, 81: true,
+}
+
+// 管理机构的书籍货架：shop_kind_defs.json 按地区登记具体书目，
+// 技能书品类为 80，与店内地图（40）不同类，且静态 item_def 中品牌为空，
+// 通用补齐规则（同品类 + 同品牌）永远补不到它们，必须按白名单显式上架。
+// 所有技能书统一挂银币 998500 / 金币 500 两个有效价，避免各店静态价目漂移。
+const (
+	shopBookCategory    int64 = 80
+	shopBookSilverPrice int64 = 998500
+	shopBookGoldPrice   int64 = 500
+)
+
+func shopBookIDs(def shopStoreDefinition) map[string]bool {
+	out := make(map[string]bool, len(def.Books))
+	for _, id := range def.Books {
+		if id = strings.TrimSpace(id); id != "" {
+			out[id] = true
+		}
+	}
+	return out
 }
 
 type shopItemMeta struct {
@@ -219,6 +240,7 @@ func (d *DB) augmentShopShelf(ctx context.Context, def shopStoreDefinition, shel
 	}
 	have := make(map[string]bool, len(shelf))
 	cats := make(map[int64]bool)
+	bookIDs := shopBookIDs(def)
 	for _, p := range shelf {
 		if p == nil {
 			continue
@@ -228,6 +250,9 @@ func (d *DB) augmentShopShelf(ctx context.Context, def shopStoreDefinition, shel
 			cats[m.Category] = true
 		}
 	}
+	if len(bookIDs) > 0 {
+		cats[shopBookCategory] = true
+	}
 	if len(cats) == 0 {
 		return shelf, 0, nil
 	}
@@ -236,15 +261,29 @@ func (d *DB) augmentShopShelf(ctx context.Context, def shopStoreDefinition, shel
 		if have[id] || !cats[m.Category] || partCategories[m.Category] {
 			continue
 		}
-		if len(def.Brands) > 0 && !brandMatches(m.Brand, def.Brands) {
+		isBook := m.Category == shopBookCategory
+		if isBook {
+			// 技能书只按地区白名单上架，未登记的书一律不补。
+			if !bookIDs[id] {
+				continue
+			}
+		} else if len(def.Brands) > 0 && !brandMatches(m.Brand, def.Brands) {
 			continue
 		}
 		if p, ok := d.shopSupplement.prices[id]; ok && (p.Silver > 0 || p.Gold > 0) {
 			cp := *p
+			if isBook {
+				cp.Silver = shopBookSilverPrice
+				cp.Gold = shopBookGoldPrice
+			}
 			if cp.Stock <= 0 {
 				cp.Stock = 1000
 			}
 			add = append(add, &cp)
+			continue
+		}
+		if isBook {
+			// 书籍只按静态价目上架，缺价时不估价，避免生成错误的价格。
 			continue
 		}
 		// 优先用“同类同级最贵”的价格，其次同类型中位价。

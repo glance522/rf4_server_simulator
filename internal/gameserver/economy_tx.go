@@ -201,7 +201,7 @@ func (s *Server) prepareNewItem(ctx context.Context, uid int64, itemID, containe
 	if err != nil || def == nil {
 		return nil, fmt.Errorf("物品定义不存在: %s", itemID)
 	}
-	cls, ok := categoryWireClass[def.Category]
+	cls, ok := resolveWireClass(def)
 	if !ok {
 		cls = wireClassEntry{fallbackWireClass, fallbackTypeID}
 	}

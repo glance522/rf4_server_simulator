@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+<<<<<<< HEAD
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+=======
+>>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -21,16 +24,25 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+<<<<<<< HEAD
 	"time"
 	"unicode"
 
 	"rf4server/internal/store"
+=======
+
+	"gopkg.in/yaml.v3"
+>>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 )
 
 const (
 	maxAvatarUploadBytes = 5 << 20
 	maxAvatarPixels      = 16_000_000
+<<<<<<< HEAD
 	avatarPathPrefix     = "/avatars/"
+=======
+	avatarImagePath      = "/avatars/avatar.png"
+>>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 )
 
 func (a *app) handleAvatarUpload(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +80,7 @@ func (a *app) handleAvatarUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+<<<<<<< HEAD
 	username := strings.TrimSpace(r.FormValue("username"))
 	if err := validateAvatarUsername(username); err != nil {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -97,6 +110,23 @@ func (a *app) handleAvatarUpload(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusInternalServerError, map[string]string{"error": "构造头像地址失败: " + err.Error()})
 		return
 	}
+=======
+	avatarURL := strings.TrimSpace(r.FormValue("url"))
+	if avatarURL == "" {
+		avatarURL = a.suggestedAvatarURL()
+	}
+	if err := validateAvatarURL(avatarURL); err != nil {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if a.cfgPath == "" {
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]string{"error": "未指定配置文件路径"})
+		return
+	}
+
+	a.avatarMu.Lock()
+	defer a.avatarMu.Unlock()
+>>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	dir := a.avatarDir
 	if dir == "" {
 		dir = "avatars"
@@ -105,6 +135,7 @@ func (a *app) handleAvatarUpload(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusInternalServerError, map[string]string{"error": "创建头像目录失败: " + err.Error()})
 		return
 	}
+<<<<<<< HEAD
 	a.avatarMu.Lock()
 	defer a.avatarMu.Unlock()
 	if err := replaceAvatarFile(filepath.Join(dir, filename), pngData); err != nil {
@@ -173,6 +204,25 @@ func (a *app) enqueueAvatarRefresh(uid int64) error {
 func (a *app) handleAvatarImage(w http.ResponseWriter, r *http.Request) {
 	filename := strings.TrimPrefix(r.URL.Path, avatarPathPrefix)
 	if !strings.HasPrefix(r.URL.Path, avatarPathPrefix) || !validAvatarFilename(filename) {
+=======
+	if err := replaceAvatarFile(filepath.Join(dir, "avatar.png"), pngData); err != nil {
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]string{"error": "保存头像失败: " + err.Error()})
+		return
+	}
+	if err := persistAvatarURL(a.cfgPath, avatarURL); err != nil {
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]string{"error": "头像已上传，但保存配置失败: " + err.Error()})
+		return
+	}
+
+	if a.cfg != nil {
+		a.cfg.Game.AvatarURL = avatarURL
+	}
+	writeJSON(w, map[string]string{"url": avatarURL})
+}
+
+func (a *app) handleAvatarImage(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != avatarImagePath {
+>>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 		http.NotFound(w, r)
 		return
 	}
@@ -186,7 +236,11 @@ func (a *app) handleAvatarImage(w http.ResponseWriter, r *http.Request) {
 	if dir == "" {
 		dir = "avatars"
 	}
+<<<<<<< HEAD
 	file, err := os.Open(filepath.Join(dir, filename))
+=======
+	file, err := os.Open(filepath.Join(dir, "avatar.png"))
+>>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.NotFound(w, r)
@@ -204,10 +258,17 @@ func (a *app) handleAvatarImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+<<<<<<< HEAD
 	http.ServeContent(w, r, filename, info.ModTime(), file)
 }
 
 func (a *app) suggestedAvatarBaseURL() string {
+=======
+	http.ServeContent(w, r, "avatar.png", info.ModTime(), file)
+}
+
+func (a *app) suggestedAvatarURL() string {
+>>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	host := ""
 	if a.cfg != nil {
 		host = strings.Trim(strings.TrimSpace(a.cfg.Gateway.AdvertiseHost), "[]")
@@ -222,6 +283,7 @@ func (a *app) suggestedAvatarBaseURL() string {
 	return (&url.URL{
 		Scheme: "http",
 		Host:   net.JoinHostPort(host, strconv.Itoa(port)),
+<<<<<<< HEAD
 	}).String()
 }
 
@@ -230,10 +292,22 @@ func validateAvatarBaseURL(raw string) error {
 	if err != nil || u.Scheme != "http" || u.Hostname() == "" || u.User != nil ||
 		(u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
 		return fmt.Errorf("图片服务地址必须是完整的 HTTP 地址，例如 http://127.0.0.1:8090")
+=======
+		Path:   avatarImagePath,
+	}).String()
+}
+
+func validateAvatarURL(raw string) error {
+	u, err := url.ParseRequestURI(raw)
+	if err != nil || u.Scheme != "http" || u.Hostname() == "" || u.User != nil ||
+		u.Path != avatarImagePath || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("头像地址必须是完整的 HTTP 地址，并以 %s 结尾", avatarImagePath)
+>>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	}
 	return nil
 }
 
+<<<<<<< HEAD
 func validateAvatarUsername(username string) error {
 	if username == "" || len(username) > 128 {
 		return fmt.Errorf("请输入有效的玩家用户名（最多 128 字节）")
@@ -277,6 +351,8 @@ func avatarURLFor(baseURL, filename string) (string, error) {
 	return u.String(), nil
 }
 
+=======
+>>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 func normalizeAvatarPNG(data []byte) ([]byte, error) {
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || (format != "png" && format != "jpeg" && format != "gif") {
@@ -328,6 +404,53 @@ func replaceAvatarFile(path string, data []byte) error {
 	return os.Rename(tmpName, path)
 }
 
+<<<<<<< HEAD
+=======
+func persistAvatarURL(configPath, avatarURL string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(configPath)
+	if err != nil {
+		return err
+	}
+	var doc yaml.Node
+	if strings.TrimSpace(string(data)) != "" {
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			return err
+		}
+	}
+	if doc.Kind == 0 {
+		doc.Kind = yaml.DocumentNode
+	}
+	if len(doc.Content) == 0 {
+		doc.Content = append(doc.Content, &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"})
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return fmt.Errorf("配置根节点不是 YAML 映射")
+	}
+	game := mappingValue(root, "game")
+	if game == nil {
+		root.Content = append(root.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "game"},
+			&yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"},
+		)
+		game = root.Content[len(root.Content)-1]
+	}
+	if game.Kind != yaml.MappingNode {
+		return fmt.Errorf("配置项 game 不是 YAML 映射")
+	}
+	setMappingValue(game, "avatar_url", avatarURL)
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configPath, out, info.Mode().Perm())
+}
+
+>>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 func requireLocalPost(w http.ResponseWriter, r *http.Request, expectedMediaType string) bool {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
