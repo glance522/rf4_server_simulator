@@ -150,13 +150,18 @@ const TUNABLE_DEFS=[
   ['fish_tv_channel','鱼汛聊天通道（24..31，27=公聊）',27],
   ['fish_tv_kind','鱼汛消息类型（401.f0，0=发言）',0],
   ['fish_tv_kv','鱼汛KV参数（1=鱼名+重量，未确认前勿开）',0],
+  ['fish_escape_taunt','跑鱼嘲讽文案（1=随机嘲讽，0=官方“鱼脱钩了”）',1],
 ];
 async function loadTunables(){
  const t=await api('/api/tunables');
- const groups=[['咬钩与鱼饵',['bite_probability','bite_delay_fixed','bite_delay_scale','bite_delay_max','bite_delay_lure_max','bait_pref_scale','bait_pref_weight_shift']],['鱼体与搏斗',['fish_weight_scale','fish_weight_cap','fight_power_scale']],['经验与结算',['xp_gain','release_xp_ratio','settle_scale_debug']],['鱼汛播报',['fish_tv_channel','fish_tv_kind','fish_tv_kv']]];
+ const groups=[['咬钩与鱼饵',['bite_probability','bite_delay_fixed','bite_delay_scale','bite_delay_max','bite_delay_lure_max','bait_pref_scale','bait_pref_weight_shift']],['鱼体与搏斗',['fish_weight_scale','fish_weight_cap','fight_power_scale']],['经验与结算',['xp_gain','release_xp_ratio','settle_scale_debug']],['鱼汛播报',['fish_tv_channel','fish_tv_kind','fish_tv_kv']],['跑鱼提示',['fish_escape_taunt']]];
 
  $('#tunablesBody').innerHTML=groups.map(([title,keys])=>'<section class="tunable-group"><h3>'+title+'</h3><div class="tunable-fields">'+keys.map(key=>{
  const [,label,def]=TUNABLE_DEFS.find(x=>x[0]===key);
+ if(key==='fish_escape_taunt'){
+  const on=parseFloat(String(t[key]??'1'))>0;
+  return '<div class="tunable-field"><label>跑鱼提示（点击切换）</label><div><button class="btn sm" style="min-width:230px;'+(on?'background:#2f7d4f;border-color:#2f7d4f':'opacity:.6')+'" onclick="saveTunableVal(\'fish_escape_taunt\','+(on?0:1)+')">'+(on?'嘲讽文案：开（点击关闭）':'官方"鱼脱钩了"（点击开启嘲讽）')+'</button></div></div>';
+ }
  return '<div class="tunable-field"><label for="tun_'+key+'">'+esc(label)+'</label><div><input type="number" step="any" id="tun_'+key+'" value="'+esc(String(t[key]??''))+'" placeholder="默认 '+def+'"><button class="btn alt sm" onclick="saveTunable(\''+key+'\')">保存</button></div>'+'</div>';
  }).join('')+'</div></section>').join('')
  +'<section class="tunable-group"><h3>通道测试（立即推送，探测 24..31 的客户端表现）</h3><div class="tunable-fields">'
@@ -174,6 +179,11 @@ async function fishTVTest(){
   if(!(ch>=24&&ch<=31)){toast('通道取值 24..31','bad');return}
   await api('/api/fish_tv_test',{method:'POST',body:JSON.stringify({uid:0,channel:ch,kind:kind||0,text,kv_shape:shape,species:fish,weight_g:w})});
   toast('已发送 ch='+ch+' kind='+(kind||0)+' shape='+shape+'（约 2 秒内到达）');
+}
+async function saveTunableVal(key,val){
+  await api('/api/tunables',{method:'POST',body:JSON.stringify({key,value:String(val)})});
+  toast('已保存，最多 30 秒生效');
+  loadTunables();
 }
 async function saveTunable(key){
   const v=$('#tun_'+key).value.trim();

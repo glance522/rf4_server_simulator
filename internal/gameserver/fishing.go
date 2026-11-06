@@ -1748,6 +1748,8 @@ func (s *Server) notifyFishReleased(sess *Session, f *RolledFish) {
 // escapeTemplateKind 跑鱼原因 → 官方聊天模板类型（401.f0）。
 // 客户端内置本地化模板：4=鱼线轮损坏 5=鱼竿损坏 6=鱼线拉断
 // 7=鱼脱钩 10=牙齿咬断钓组 30=引线(子线)断了。
+// 当前跑鱼提示统一改用 kind3 蓝色自由文案（见 notifyFishEscape），
+// 本映射保留备查；恢复官方分原因文案时改回对应 pushChatProbe 即可。
 var escapeTemplateKind = map[string]int{
 	"脱钩": 7, "脱钩离开": 7, "咬钩未刺中": 7,
 	"断主线": 6, "断子线": 30,
@@ -1756,19 +1758,54 @@ var escapeTemplateKind = map[string]int{
 	"钓组组件断裂": 10,
 }
 
-// notifyFishEscape 在鱼丢失（脱钩/断线/超时等）时经聊天频道推送提示。
-// 官方模板样式（"player 鱼线拉断了"）；未知原因回退自由文本。
+// fishEscapeTaunts 跑鱼语气词池：随机抽一条拼进跑鱼提示。
+var fishEscapeTaunts = []string{
+	"真是FW啊",
+	"这都能跑",
+	"煮熟的鸭子飞了",
+	"手滑了吧",
+	"竿子太拉了",
+	"鱼比人聪明",
+	"白忙活一场",
+	"差亿点点",
+	"又给跑了",
+	"空军预定",
+	"打龟佬",
+}
+
+// notifyFishEscape 跑鱼提示：类型3（蓝色 KV 模板），文案带随机语气词，
+// 重量走键2（客户端模板句尾自动显示“X 克/公斤”）。
+// fish_escape_taunt=0 时回退官方类型7模板（“鱼脱钩了”）。
 func (s *Server) notifyFishEscape(sess *Session, f *RolledFish, reason string) {
 	if s == nil || sess == nil {
 		return
 	}
-	if kind, ok := escapeTemplateKind[reason]; ok {
-		sess.pushChatProbe(27, kind, "", nil)
+	if s.tunableF("fish_escape_taunt", 1) == 0 {
+		sess.pushChatProbe(27, 7, "", nil)
 		return
 	}
-	if text := s.fishEscapeText(f, reason); text != "" {
-		sess.pushSystemChat(text)
+	weight := int64(0)
+	name := ""
+	tier := ""
+	if f != nil {
+		if f.WeightG > 0 {
+			weight = f.WeightG
+		}
+		name = s.speciesZhName(s.dbCtx(), f.Species)
+		if name == "" {
+			name = f.Species
+		}
+		if f.Grade >= 4 {
+			tier = "超级稀有 "
+		} else if f.Grade == 3 {
+			tier = "稀有 "
+		}
 	}
+	taunt := fishEscapeTaunts[rand.Intn(len(fishEscapeTaunts))]
+	// 客户端 KV 模板恒在句尾追加“X 克/公斤”段（缺键2 显示“0 克”），
+	// 重量只能放句尾：文案不带重量数字，键2 带真实重量。
+	text := "你的 " + tier + name + "，跑掉了，" + taunt + "！"
+	sess.pushChatProbe(27, 3, "", fishTVKv(text, weight))
 }
 
 // bumpFishingCounter 增加玩家钓鱼计数器（escapes 等），幂等累加。
