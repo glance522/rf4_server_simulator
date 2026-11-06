@@ -2399,7 +2399,7 @@ func hHanditemPrepare(ctx *Ctx) ([]byte, bool) {
 	if len(guids) > 0 {
 		gear = guids[0]
 	}
-	st := srv.stateFor(ctx.Sess.Userid)
+	st := srv.swapActiveRod(ctx.Sess.Userid, gear)
 	st.mu.Lock()
 	if gear != "" {
 		st.GearGuid = gear // 13/7 读它，不写会让后续 set_dist 回全零
@@ -2539,7 +2539,12 @@ func hRodTake(ctx *Ctx) ([]byte, bool) {
 	if len(guids) > 0 {
 		rod = guids[0]
 	}
-	st := srv.stateFor(ctx.Sess.Userid)
+	st := srv.swapActiveRod(ctx.Sess.Userid, rod)
+	// 任意一根竿上还有没处理的鱼就先拦下，避免拿竿把待处理渔获顶掉。
+	if other := srv.rodWithUnresolvedCatch(ctx.Sess.Userid); other != nil {
+		srv.pendingCatchAllowsCast(ctx, other)
+		return nil, true
+	}
 	if !srv.pendingCatchAllowsCast(ctx, st) {
 		return nil, true
 	}
