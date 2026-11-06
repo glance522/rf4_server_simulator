@@ -1715,7 +1715,7 @@ func (s *Server) notifyFishReleased(sess *Session, f *RolledFish) {
 // 7=鱼脱钩 10=牙齿咬断钓组 30=引线(子线)断了。
 var escapeTemplateKind = map[string]int{
 	"脱钩离开": 7,
-	"断主线": 6, "断子线": 30,
+	"断主线":  6, "断子线": 30,
 	"断竿":     5,
 	"渔线轮超载":  4,
 	"钓组组件断裂": 10,

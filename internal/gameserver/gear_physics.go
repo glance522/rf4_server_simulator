@@ -170,8 +170,8 @@ func nestedF32(m map[string]any, key string) float64 {
 	return f
 }
 
-func rodPowerKg(def *store.ItemDef) float64     { return itemDefF32(def, gearAttrMaxLoad) }
-func rodLengthM(def *store.ItemDef) float64     { return itemDefF32(def, gearAttrLength) }
+func rodPowerKg(def *store.ItemDef) float64 { return itemDefF32(def, gearAttrMaxLoad) }
+func rodLengthM(def *store.ItemDef) float64 { return itemDefF32(def, gearAttrLength) }
 
 // missingRodDataLogged 记录已经告警过"缺物理字段"的竿 itemID，每个竿只告警一次，
 // 避免每次抛竿/断件都刷日志。

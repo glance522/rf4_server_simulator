@@ -35,7 +35,7 @@ func TestBaitMountAvailForRigTable(t *testing.T) {
 			t.Fatalf("钓组 %d 可选集 = %d，期望 pop-up 族 %d", rt, got, popup)
 		}
 	}
-	maggot := int64(1024 | 2048) | baitMountMaggotFamily
+	maggot := int64(1024|2048) | baitMountMaggotFamily
 	if got := baitMountAvailForRig(29, 0); got != maggot {
 		t.Fatalf("底蛆钓组可选集 = %d，期望 %d", got, maggot)
 	}
@@ -125,7 +125,7 @@ func TestRigSetTypeRebuildsBaitMountFields(t *testing.T) {
 
 // TestItemToTreeSanitizesLegacyBaitMountFields 锁定渲染级联动：
 // 存量竿的快照还存着联动上线前的全开掩码 f9 + 失效 f8 时，登录背包树
-//（4/5，ItemToTree→rebuildRod）必须按当前钓组类型重算后下发，且不落库。
+// （4/5，ItemToTree→rebuildRod）必须按当前钓组类型重算后下发，且不落库。
 func TestItemToTreeSanitizesLegacyBaitMountFields(t *testing.T) {
 	s, db := newRigTestServer(t)
 	ctx := t.Context()

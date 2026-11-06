@@ -54,13 +54,13 @@ func TestNormalizeGameExecutableStripsInvisibleChars(t *testing.T) {
 	raw := game
 	half := len(raw) / 2
 	noisy := []string{
-		"\u202a" + raw,                            // LTR 嵌入标记
-		"\u200b" + raw + "\u200b",                 // 零宽空格
-		"\uFEFF" + raw,                            // BOM
-		"\"" + raw + "\"",                         // 复制为路径带引号
-		"  " + raw + " \r\n",                      // 首尾空白
-		raw[:half] + "\u202c" + raw[half:],        // 路径中间的格式字符
-		strings.Replace(raw, ":", "：", 1),         // 全角冒号
+		"\u202a" + raw,                     // LTR 嵌入标记
+		"\u200b" + raw + "\u200b",          // 零宽空格
+		"\uFEFF" + raw,                     // BOM
+		"\"" + raw + "\"",                  // 复制为路径带引号
+		"  " + raw + " \r\n",               // 首尾空白
+		raw[:half] + "\u202c" + raw[half:], // 路径中间的格式字符
+		strings.Replace(raw, ":", "：", 1),  // 全角冒号
 	}
 	for _, in := range noisy {
 		got, err := normalizeGameExecutable(in)

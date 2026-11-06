@@ -21,12 +21,12 @@ func TestPlaceGearRuleViolated(t *testing.T) {
 		item    string
 		wantBan bool
 	}{
-		{"carp_10046_360H", true},     // 鲤竿：全禁
-		{"match_10042_EM18", true},    // 竞技竿档4：禁
-		{"match_10025_M130H", false},  // 竞技竿档3：放行
-		{"spin_7016", true},           // 纺车轮 size6：禁
-		{"spin_7015", false},          // 纺车轮 size5：放行
-		{"spin_10158_M100HH", false},  // 纺车竿：不在限制范围
+		{"carp_10046_360H", true},    // 鲤竿：全禁
+		{"match_10042_EM18", true},   // 竞技竿档4：禁
+		{"match_10025_M130H", false}, // 竞技竿档3：放行
+		{"spin_7016", true},          // 纺车轮 size6：禁
+		{"spin_7015", false},         // 纺车轮 size5：放行
+		{"spin_10158_M100HH", false}, // 纺车竿：不在限制范围
 	} {
 		row, err := srv.CreateItem(ctx, 1000001, tc.item, "backpack", 1)
 		if err != nil {

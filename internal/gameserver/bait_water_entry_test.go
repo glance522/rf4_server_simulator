@@ -51,7 +51,7 @@ func TestGroundbaitAndPvaConsumeOnWaterEntryOnly(t *testing.T) {
 				fields[5] = proto.Field{Op: "U32", Num: ptrU64(anim)}
 				fields[6] = proto.Field{Op: "STR", Str: strPtr("loc12_01")}
 				if _, ok := hFishingStep(&Ctx{Sess: sess, Main: 14, Sub: 7,
-					Tree: proto.Args524(proto.Obj("lobemkloehp", 0, fields...)),
+					Tree:     proto.Args524(proto.Obj("lobemkloehp", 0, fields...)),
 					DecodeOK: true, Log: logging.Discard()}); !ok {
 					t.Fatal("14/7 未处理")
 				}

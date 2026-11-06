@@ -8,22 +8,22 @@ import (
 
 // Profile 玩家档案（profile 表行）。
 type Profile struct {
-	UID        int64
-	Name       string
-	Level      int64
-	XP         int64
-	Silver     int64
-	Gold       int64
-	Region     string
-	Membership int64
+	UID           int64
+	Name          string
+	Level         int64
+	XP            int64
+	Silver        int64
+	Gold          int64
+	Region        string
+	Membership    int64
 	MembershipExp int64
-	Stars      int64
-	Bank       int64
-	Email      string
-	Role       int64
-	Banned     bool
-	CreatedTS  float64
-	UpdatedTS  float64
+	Stars         int64
+	Bank          int64
+	Email         string
+	Role          int64
+	Banned        bool
+	CreatedTS     float64
+	UpdatedTS     float64
 }
 
 // EnsureProfile 无档案时创建默认档案。默认昵称为 "player"；不要生成
