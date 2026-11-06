@@ -363,6 +363,38 @@ func placeBuyoutPrice(place string, packet int64) int64 {
 	return tiers[packet-1]
 }
 
+// placeTravelCosts 保存各地图切图所需银币，取自 1/4 game/configs(6) 下发
+// 的地点配置（type_6.bin，DTO 209 的 f3 lndfgbajbfn）。客户端地图详情用
+// 同一数值显示"所需银币"并与档案 f7 余额比较，因此服务端只认这张静态表，
+// 不接受客户端报价。未登记或免费地图为 0。
+var placeTravelCosts = map[string]int64{
+	"level_001_lake":            0,
+	"level_002_kirzah_river":    0,
+	"level_003_viiveri_lake":    2590,
+	"level_004_torfyanoe_ozero": 790,
+	"level_005_volhov":          1490,
+	"level_006_ladoga":          2980,
+	"level_007_grass_lake":      1390,
+	"level_008_sura_river":      1690,
+	"level_009_ahtuba":          3480,
+	"level_010_belaya":          890,
+	"level_011_ladoga_02":       3380,
+	"level_012_north_sea":       9880,
+	"level_013_sev_don":         1590,
+	"level_014_carp_lake":       3160,
+	"level_015_tunguska":        4880,
+	"level_016_yama":            9880,
+	"level_018_moskitnoe":       4490,
+	"level_019_american_pond":   0,
+	"level_ban":                 0,
+	"level_tutorial":            0,
+}
+
+// placeTravelCost 返回切到该地图需要扣除的银币。
+func placeTravelCost(key string) int64 {
+	return placeTravelCosts[key]
+}
+
 // placeOwned 返回玩家是否已买断该地点。
 func (s *Server) placeOwned(ctx context.Context, uid int64, place string) bool {
 	if place == "" {

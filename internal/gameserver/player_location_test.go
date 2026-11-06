@@ -117,6 +117,174 @@ func TestPlayerLocationFirstLoginTravelReconnectAndRestart(t *testing.T) {
 	}
 }
 
+// 切图必须按目标地图所需银币扣款，同图重入与免费地图不重复收费。
+func TestTravelDeductsMapSilver(t *testing.T) {
+	db := connectTestDB(t)
+	const uid int64 = 1000002
+	srv := newLocationTestServer(t, db)
+	if _, err := db.EnsureProfile(context.Background(), uid); err != nil {
+		t.Fatal(err)
+	}
+	const start int64 = 10000
+	if _, err := db.SQL.Exec(`UPDATE profile SET silver=? WHERE uid=?`, start, uid); err != nil {
+		t.Fatal(err)
+	}
+	target := "level_004_torfyanoe_ozero"
+	cost := placeTravelCost(target)
+	if cost <= 0 {
+		t.Fatalf("测试地图未配置银币价: %s", target)
+	}
+	travel := func(level string) {
+		t.Helper()
+		ctx := locationTestCtx(locationTestSession(srv, uid),
+			proto.Args524(proto.StrVal(level), proto.U32(7)))
+		ctx.Main, ctx.Sub = 1, 14
+		if _, ok := hTravel(ctx); !ok {
+			t.Fatalf("1/14 切图未处理: %s", level)
+		}
+	}
+	silverOf := func() int64 {
+		t.Helper()
+		var v int64
+		if err := db.SQL.QueryRow(`SELECT silver FROM profile WHERE uid=?`, uid).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	travel(target)
+	if got := silverOf(); got != start-cost {
+		t.Fatalf("切图未扣银币: silver=%d want=%d", got, start-cost)
+	}
+	var txnCount int
+	if err := db.SQL.QueryRow(
+		`SELECT COUNT(*) FROM txn WHERE uid=? AND note='place_travel' AND silver_delta=?`,
+		uid, -cost).Scan(&txnCount); err != nil {
+		t.Fatal(err)
+	}
+	if txnCount != 1 {
+		t.Fatalf("切图流水应为 1 条，实得 %d", txnCount)
+	}
+	if loc, err := db.GetPlayerLocation(context.Background(), uid); err != nil ||
+		loc == nil || loc.LevelKey != target {
+		t.Fatalf("扣费后未切到目标地图: loc=%+v err=%v", loc, err)
+	}
+
+	travel(target)                    // 同图重入，客户端重新定位不算新旅行
+	travel("level_019_american_pond") // 免费地图
+	if got := silverOf(); got != start-cost {
+		t.Fatalf("同图/免费地图不应再扣费: silver=%d want=%d", got, start-cost)
+	}
+}
+
+// 银币不足时回业务失败，既不扣款也不切图。
+func TestTravelInsufficientSilverStaysOnMap(t *testing.T) {
+	db := connectTestDB(t)
+	const uid int64 = 1000003
+	srv := newLocationTestServer(t, db)
+	if _, err := db.EnsureProfile(context.Background(), uid); err != nil {
+		t.Fatal(err)
+	}
+	target := "level_012_north_sea"
+	cost := placeTravelCost(target)
+	if cost <= 0 {
+		t.Fatalf("测试地图未配置银币价: %s", target)
+	}
+	if _, err := db.SQL.Exec(`UPDATE profile SET silver=? WHERE uid=?`, cost-1, uid); err != nil {
+		t.Fatal(err)
+	}
+	ctx := locationTestCtx(locationTestSession(srv, uid), proto.Args524(proto.StrVal(target)))
+	ctx.Main, ctx.Sub = 1, 14
+	body, ok := hTravel(ctx)
+	if !ok || len(body) != 0 {
+		t.Fatalf("银币不足应回业务失败: ok=%v body=%x", ok, body)
+	}
+	var silver int64
+	if err := db.SQL.QueryRow(`SELECT silver FROM profile WHERE uid=?`, uid).Scan(&silver); err != nil {
+		t.Fatal(err)
+	}
+	if silver != cost-1 {
+		t.Fatalf("余额不足仍扣款: silver=%d want=%d", silver, cost-1)
+	}
+	if got := srv.currentLevel(uid); got == target {
+		t.Fatal("余额不足不应切换地图")
+	}
+}
+
+// 1/13 带地图 key 同样算一次切图，也要扣该地图的银币。
+func TestEnterMapWithKeyDeductsSilver(t *testing.T) {
+	db := connectTestDB(t)
+	const uid int64 = 1000005
+	srv := newLocationTestServer(t, db)
+	if _, err := db.EnsureProfile(context.Background(), uid); err != nil {
+		t.Fatal(err)
+	}
+	target := "level_010_belaya"
+	cost := placeTravelCost(target)
+	if cost <= 0 {
+		t.Fatalf("测试地图未配置银币价: %s", target)
+	}
+	const start int64 = 5000
+	if _, err := db.SQL.Exec(`UPDATE profile SET silver=? WHERE uid=?`, start, uid); err != nil {
+		t.Fatal(err)
+	}
+	ctx := locationTestCtx(locationTestSession(srv, uid), proto.Args524(proto.StrVal(target)))
+	if body, ok := hEnterMap(ctx); !ok || len(body) == 0 {
+		t.Fatalf("1/13 未处理: ok=%v", ok)
+	}
+	var silver int64
+	if err := db.SQL.QueryRow(`SELECT silver FROM profile WHERE uid=?`, uid).Scan(&silver); err != nil {
+		t.Fatal(err)
+	}
+	if silver != start-cost {
+		t.Fatalf("1/13 切图未扣银币: silver=%d want=%d", silver, start-cost)
+	}
+	// 同一地图的登录恢复（不带 key）不得再次扣费。
+	ctx = locationTestCtx(locationTestSession(srv, uid), proto.Args524())
+	if _, ok := hEnterMap(ctx); !ok {
+		t.Fatal("1/13 登录恢复未处理")
+	}
+	if err := db.SQL.QueryRow(`SELECT silver FROM profile WHERE uid=?`, uid).Scan(&silver); err != nil {
+		t.Fatal(err)
+	}
+	if silver != start-cost {
+		t.Fatalf("登录恢复不应再扣费: silver=%d want=%d", silver, start-cost)
+	}
+}
+
+// 已金币买断（无限通行）的地图切图不再收银币。
+func TestTravelBuyoutPlaceIsFree(t *testing.T) {
+	db := connectTestDB(t)
+	const uid int64 = 1000004
+	srv := newLocationTestServer(t, db)
+	if _, err := db.EnsureProfile(context.Background(), uid); err != nil {
+		t.Fatal(err)
+	}
+	target := "level_006_ladoga"
+	cost := placeTravelCost(target)
+	if cost <= 0 {
+		t.Fatalf("测试地图未配置银币价: %s", target)
+	}
+	if _, err := db.SQL.Exec(`UPDATE profile SET silver=? WHERE uid=?`, cost+100, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.PlaceAccessInsert(context.Background(), uid, target, "buyout"); err != nil {
+		t.Fatal(err)
+	}
+	ctx := locationTestCtx(locationTestSession(srv, uid), proto.Args524(proto.StrVal(target)))
+	ctx.Main, ctx.Sub = 1, 14
+	if _, ok := hTravel(ctx); !ok {
+		t.Fatal("1/14 未处理")
+	}
+	var silver int64
+	if err := db.SQL.QueryRow(`SELECT silver FROM profile WHERE uid=?`, uid).Scan(&silver); err != nil {
+		t.Fatal(err)
+	}
+	if silver != cost+100 {
+		t.Fatalf("已买断地图不应收旅费: silver=%d want=%d", silver, cost+100)
+	}
+}
+
 // 数据库中的地图 key 无效时，1/13 必须返回出生图并修正记录。
 func TestPlayerLocationInvalidMapFallsBackToSpawn(t *testing.T) {
 	db := connectTestDB(t)

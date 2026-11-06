@@ -3,6 +3,7 @@ package gameserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -434,8 +435,50 @@ func hPlace(ctx *Ctx) ([]byte, bool) {
 	return body, true
 }
 
+// chargeTravelSilver 切图前按目标地图所需银币扣款。
+// 同图重入、免费地图以及已金币买断（无限通行）的地图不收费；余额不足或
+// 扣款失败时回业务错误且不切图。返回 false 时调用方必须中止本次切图。
+func chargeTravelSilver(ctx *Ctx, key string) bool {
+	srv := ctx.Sess.Srv
+	uid := ctx.Sess.Userid
+	cost := placeTravelCost(key)
+	if cost <= 0 || key == srv.currentLevel(uid) {
+		return true
+	}
+	cctx := ctx.Sess.pushCtx()
+	if srv.placeOwned(cctx, uid, key) {
+		return true
+	}
+	tx, err := beginEconomyTx(cctx, srv.DB)
+	if err != nil {
+		ctx.Log.Warn("切图开启事务失败", "level", key, "err", err)
+		ctx.ReplyFailure("System.InvalidOperationException", "切图结算失败，请重试")
+		return false
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := applyWalletTx(cctx, tx, uid, -cost, 0, "buy", key, "", "place_travel"); err != nil {
+		if errors.Is(err, errInsufficientFunds) {
+			ctx.Log.Info("切图银币不足，不切图", "level", key, "cost", cost)
+			ctx.ReplyFailure("System.InvalidOperationException", "银币不足，无法前往该水域")
+		} else {
+			ctx.Log.Warn("切图银币扣款失败", "level", key, "err", err)
+			ctx.ReplyFailure("System.InvalidOperationException", "切图结算失败，请重试")
+		}
+		return false
+	}
+	if err := tx.Commit(); err != nil {
+		ctx.Log.Warn("切图事务提交失败", "level", key, "err", err)
+		ctx.ReplyFailure("System.InvalidOperationException", "切图结算失败，请重试")
+		return false
+	}
+	ctx.Log.Info("切图扣银币", "level", key, "silver", -cost)
+	// 1/13 的 206 响应不含档案，靠 2/1 推送刷新客户端余额。
+	ctx.Sess.Push2_1()
+	return true
+}
+
 // hTravel 处理 1/14 切图，返回 [dob(205), 护网快照(800), 玩家档案(307), null]。
-// 地图解锁由客户端的档案字段决定；本处理器负责切换当前地图和返回场景数据。
+// 切图前按目标地图扣除银币，扣款后构造的档案 307 即为新余额。
 func hTravel(ctx *Ctx) ([]byte, bool) {
 	if !ctx.Sess.Srv.requireDB(ctx) {
 		return nil, false
@@ -448,6 +491,9 @@ func hTravel(ctx *Ctx) ([]byte, bool) {
 	}
 	key = travelLevelKey(key)
 	sess := ctx.Sess
+	if !chargeTravelSilver(ctx, key) {
+		return nil, true
+	}
 	nowUnix := time.Now().Unix()
 	body, err := sess.Srv.buildTravelBodyAt(sess, key, nowUnix)
 	if err != nil {
@@ -495,6 +541,9 @@ func hEnterMap(ctx *Ctx) ([]byte, bool) {
 	// 1/13 若带地图 key，则以本次进入作为一次成功切图；空请求是登录恢复。
 	if requested != "" {
 		level = travelLevelKey(requested)
+		if !chargeTravelSilver(ctx, level) {
+			return nil, true
+		}
 		scene = sceneForLevel(level)
 	}
 	level = travelLevelKey(level)
