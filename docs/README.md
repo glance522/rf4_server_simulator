@@ -21,3 +21,15 @@
 
 - [调试工作流](debugging-workflow.md)：本地调试、日志和协议排查流程。
 - [官方协议工作坊](official-protocol-workshop.md)：协议观察、记录和整理资料。
+
+## 工程约定
+
+- [仓库入口](../CLAUDE.md)：硬约束（红线）与事实入口表，Agent 必读。
+- [术语表](../CONTEXT.md)：跨模块共享术语，每条带反例。
+- [工程工作流](agents/workflow.md)：快速路径与约束路径的分级、门禁级别。
+- [变更记录约定](agents/issue-tracker.md)：`specs/changes` 目录与状态流转。
+- [领域文档约定](agents/domain.md)：文档地图、证据等级、对账表。
+- [ADR 0001](adr/0001-engineering-constraints.md)：为什么采用按风险分级的约束体系。
+
+长期能力契约在 `specs/capabilities/`（协议契约、钓鱼与结算、存储与幂等、工程质量），
+一次改动的规格在 `specs/changes/`。

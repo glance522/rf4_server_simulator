@@ -1,0 +1,74 @@
+name: CI
+
+# 说明：
+# 1. 本 workflow 计划设为 required status check，因此 pull_request 触发**不加 paths 过滤**：
+#    带 paths 的 workflow 在未命中的 PR 上不报告状态，required 会永远卡在 Expected。
+# 2. 交叉编译到 windows/amd64 与发布产物一致，同时避免 Linux 下 launcher 的托盘依赖（cgo/gtk）。
+# 3. test 不跳过任何用例：仓库若有既有失败，应通过修复测试的独立 PR 恢复绿色，
+#    不允许用 -skip 或延长超时制造假绿。
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Build & Vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOOS: windows
+      GOARCH: amd64
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l cmd internal)
+          if [ -n "$out" ]; then
+            echo "以下文件未 gofmt："
+            echo "$out"
+            exit 1
+          fi
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # 原生 linux 跑测试；串行执行包，避免 SQLite/网络集成测试在共享 runner 上互相争抢导致超时。
+      # 不测 ./cmd/launcher（托盘依赖 cgo/gtk，与发布平台无关）。
+      - name: go test
+        env:
+          CGO_ENABLED: "0"
+        run: go test -p 1 ./internal/... ./cmd/gameserver/... ./cmd/gateway/... ./cmd/seed/...
