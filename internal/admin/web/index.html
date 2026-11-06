@@ -149,7 +149,7 @@ const TUNABLE_DEFS=[
   ['settle_scale_debug','结算刻度调试（0=关）',0],
   ['fish_tv_channel','鱼汛聊天通道（24..31，27=公聊）',27],
   ['fish_tv_kind','鱼汛消息类型（401.f0，0=发言）',0],
-  ['fish_tv_kv','鱼汛KV参数（1=鱼名+重量，未确认前勿开）',0],
+  ['fish_tv_kv','鱼汛KV参数（1=彩色播报，0=白色纯文本）',1],
 ];
 async function loadTunables(){
  const t=await api('/api/tunables');

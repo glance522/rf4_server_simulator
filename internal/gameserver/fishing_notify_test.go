@@ -158,7 +158,7 @@ func TestFishEventChatTexts(t *testing.T) {
 	}
 
 	kept := srv.fishKeptText(tench(1, 547))
-	if !strings.Contains(kept, "入护") || !strings.Contains(kept, "547g") {
+	if !strings.Contains(kept, "未达标") || !strings.Contains(kept, "547g") {
 		t.Fatalf("入护播报不符: %q", kept)
 	}
 	if strings.Contains(kept, "护内") {

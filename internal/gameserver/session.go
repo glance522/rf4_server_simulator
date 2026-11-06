@@ -43,6 +43,12 @@ type Session struct {
 	fishPushGUID string
 	fishPushAt   time.Time
 
+	// landedMu / landedGUID / landedAt 记录最近一条已发落地播报的鱼，
+	// 供 notifyFishKept 跳过同一尾鱼后续的“入护”行（避免刷两行）。
+	landedMu   sync.Mutex
+	landedGUID string
+	landedAt   time.Time
+
 	stateMu      sync.Mutex
 	state        map[string]any // 会话级业务状态（选图、抛竿状态等）
 	weatherMu    sync.RWMutex
