@@ -348,7 +348,6 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 		// 用跑鱼模板（kind3/语气词）播报"跑掉了"，不再静默。
 		ctx.Log.Info("14/4 未刺中收竿：咬钩未上钩，补发跑鱼提示",
 			"fish", shortGUID(pending.FishGUID), "species", pending.Species)
-		s.bumpFishingCounter(uid, "escapes")
 		s.notifyFishEscape(ctx.Sess, pending, "收竿跑鱼")
 	}
 	var res *settleXpResult

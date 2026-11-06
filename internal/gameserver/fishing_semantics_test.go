@@ -194,6 +194,34 @@ func TestFishingLeftBumpsEscapes(t *testing.T) {
 	}
 }
 
+func TestFishingEndSettleUnhookedDoesNotCountEscape(t *testing.T) {
+	srv, db := newDetachTestServer(t)
+	const uid = int64(1000001)
+	sess := newProbeSess(srv)
+	st := srv.stateFor(uid)
+	st.mu.Lock()
+	st.Pending = &RolledFish{
+		FishGUID: "77777777777777777777777777777777", Species: "c.roach", Grade: 1, WeightG: 400,
+	}
+	st.CastActive = true
+	st.Hooked = false
+	st.Resolved = false
+	st.mu.Unlock()
+
+	body, ok := srv.fishingEndSettle(&Ctx{Sess: sess, Main: 14, Sub: 4, DecodeOK: true, Log: logging.Discard()})
+	if !ok || len(body) == 0 {
+		t.Fatalf("14/4 未处理: ok=%v bytes=%d", ok, len(body))
+	}
+
+	var escapes int
+	if err := db.SQL.QueryRow(`SELECT COALESCE((SELECT value FROM player_counters WHERE uid=? AND key='escapes'),0)`, uid).Scan(&escapes); err != nil {
+		t.Fatal(err)
+	}
+	if escapes != 0 {
+		t.Fatalf("14/4 咬钩未中钩不应计为跑鱼，escapes=%d", escapes)
+	}
+}
+
 func TestFishingLeftStatus8KeepsInWaterCastAndSchedulesNextFish(t *testing.T) {
 	srv, db := newDetachTestServer(t)
 	const uid = int64(1000001)

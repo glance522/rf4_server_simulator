@@ -247,6 +247,9 @@ func TestFishEventChatTexts(t *testing.T) {
 	if got := srv.fishLandedText(tench(1, 547), false); got != "" {
 		t.Fatalf("普通鱼不应播报: %q", got)
 	}
+	if got := srv.fishLandedText(tench(1, 547), true); got != "" {
+		t.Fatalf("未达标破纪录也不应播报: %q", got)
+	}
 	if got := srv.fishLandedText(tench(4, 6300), false); !strings.Contains(got, "钓获蓝冠") || !strings.Contains(got, "6.30kg") {
 		t.Fatalf("蓝冠播报不符: %q", got)
 	}

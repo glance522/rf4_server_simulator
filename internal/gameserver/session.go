@@ -43,11 +43,6 @@ type Session struct {
 	fishPushGUID string
 	fishPushAt   time.Time
 
-	// announced 记录最近发过落地播报的鱼（GUID → 时间），用于抑制同一尾鱼
-	// 随后的入护文案，避免同一频道刷两行。
-	announced   map[string]time.Time
-	announcedMu sync.Mutex
-
 	stateMu      sync.Mutex
 	state        map[string]any // 会话级业务状态（选图、抛竿状态等）
 	weatherMu    sync.RWMutex

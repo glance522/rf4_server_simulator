@@ -1857,14 +1857,10 @@ func (s *Server) fishEscapeText(f *RolledFish, reason string) string {
 		s.speciesZhName(s.dbCtx(), f.Species), formatWeightG(f.WeightG), reason)
 }
 
-// fishAnnouncedWindow 是落地播报后抑制同鱼入护文案的窗口。
-// 入护结算可能晚于落地播报数秒，窗口取宽一些。
-const fishAnnouncedWindow = 30 * time.Second
-
 // fishAnnouncementKind 返回落地播报使用的聊天模板类型；0 表示不发模板。
 // 25=超级稀有（Grade>=4 蓝冠）、26=稀有（Grade 3 奖杯）、3=达标（Grade 2，
-// 重量超过绿旗但未到黄旗）；未达标（Grade 1）不播报。
-func fishAnnouncementKind(grade int64, newRecord bool) int {
+// 重量超过绿旗但未到黄旗）；未达标（Grade 1）一律不播报。
+func fishAnnouncementKind(grade int64) int {
 	switch {
 	case grade >= 4:
 		return 25
@@ -1872,54 +1868,11 @@ func fishAnnouncementKind(grade int64, newRecord bool) int {
 		return 26
 	case grade == 2:
 		return 3
-	case newRecord:
-		return 3
 	}
 	return 0
 }
 
-// markFishAnnounced 记录该鱼已经发过落地播报；空 GUID 忽略。
-func (s *Session) markFishAnnounced(guid string) {
-	if guid == "" {
-		return
-	}
-	now := time.Now()
-	s.announcedMu.Lock()
-	defer s.announcedMu.Unlock()
-	if s.announced == nil {
-		s.announced = make(map[string]time.Time, 4)
-	}
-	s.announced[guid] = now
-	pruneAnnouncedLocked(s.announced, now)
-}
-
-// fishAnnounced 报告该鱼是否在窗口内已经发过落地播报。
-func (s *Session) fishAnnounced(guid string) bool {
-	if guid == "" {
-		return false
-	}
-	now := time.Now()
-	s.announcedMu.Lock()
-	defer s.announcedMu.Unlock()
-	if len(s.announced) == 0 {
-		return false
-	}
-	pruneAnnouncedLocked(s.announced, now)
-	at, ok := s.announced[guid]
-	return ok && now.Sub(at) < fishAnnouncedWindow
-}
-
-// pruneAnnouncedLocked 清理过期条目，避免长时间在线时会话 map 无界增长。
-// 调用方必须持有 s.announcedMu。
-func pruneAnnouncedLocked(m map[string]time.Time, now time.Time) {
-	for guid, at := range m {
-		if now.Sub(at) >= fishAnnouncedWindow {
-			delete(m, guid)
-		}
-	}
-}
-
-// notifyFishLanded 播报蓝冠、奖杯和破纪录；普通鱼由结算卡展示。
+// notifyFishLanded 播报达标、奖杯和蓝冠；普通鱼由结算卡展示。
 func (s *Server) notifyFishLanded(sess *Session, f *RolledFish, newRecord bool) {
 	if sess == nil || f == nil {
 		return
@@ -1934,27 +1887,20 @@ func (s *Server) notifyFishLanded(sess *Session, f *RolledFish, newRecord bool) 
 	// k25/k26/k03 是带参数的官方模板播报，依赖 401.f4 模板参数；KV 未启用
 	// （kv==nil）时客户端解析模板缺参会抛异常断连（回登录界面）。此时退化
 	// 为已验证的普通系统文本播报，保留提示且不掉线。
-	announced := false
 	if kv == nil {
 		if text := s.fishLandedText(f, newRecord); text != "" {
 			sess.pushSystemChat(text)
-			announced = true
 		}
-	} else if kind := fishAnnouncementKind(f.Grade, newRecord); kind != 0 {
+	} else if kind := fishAnnouncementKind(f.Grade); kind != 0 {
 		// 25=稀有奖杯（蓝冠，kDlg_Chat_EventFishCaughtRareTrophy）、
-		// 26=奖杯（kDlg_Chat_EventFishCaughtTrophy）、3=达标/破纪录（玩家，鱼名 X 千克）。
+		// 26=奖杯（kDlg_Chat_EventFishCaughtTrophy）、3=达标（玩家，鱼名 X 千克）。
 		sess.pushChatProbe(27, kind, "", kv)
-		announced = true
 	}
-	// 记下这尾鱼已经播报过：随后的入护结算不再补一条同鱼文案。
-	if announced {
-		sess.markFishAnnounced(f.FishGUID)
-	}
+
 }
 
 // notifyFishKept 入护播报已永久停用：结算卡已经展示入护结果，
 // 聊天里再补一条白色“入护：…”只是重复信息，未达标/达标鱼都不再发。
-// fishKeptText 与 announced 去重逻辑保留，供以后恢复分行播报时使用。
 func (s *Server) notifyFishKept(sess *Session, f *RolledFish) {
 	if sess == nil || f == nil {
 		return
