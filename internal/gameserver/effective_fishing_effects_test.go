@@ -12,9 +12,7 @@ import (
 
 func effectiveSkillTestServer(t *testing.T) (*Server, string) {
 	t.Helper()
-	db := connectTestDB(t)
-	// item_def 已由测试库模板导入，重复导入会撞唯一键。
-	importStaticForSkillsCraft(t, db, "skill_def", "skill_cat_def")
+	db := openSkillCraftTestDB(t)
 	srv := NewServerForGearTest(t, db)
 	if _, err := db.EnsureProfile(context.Background(), 1000001); err != nil {
 		t.Fatal(err)

@@ -10,8 +10,7 @@ import (
 // 档位≥4 禁、spin 纺车轮 size 档≥6 禁。
 
 func TestPlaceGearRuleViolated(t *testing.T) {
-	srv, db := newProgressSrv(t)
-	importStaticForProbe(t, db)
+	srv, db := newRigTestServer(t)
 	ctx := context.Background()
 	rules := restrictionsForLevel("level_018_moskitnoe")
 	if len(rules) != 3 {
@@ -53,8 +52,7 @@ func TestPlaceRestrictionOnlyOnRegisteredLevel(t *testing.T) {
 }
 
 func TestPlaceRodAndRigViolation(t *testing.T) {
-	srv, db := newProgressSrv(t)
-	importStaticForProbe(t, db)
+	srv, db := newRigTestServer(t)
 	ctx := context.Background()
 	const uid = int64(1000001)
 	if _, err := db.EnsureProfile(ctx, uid); err != nil {

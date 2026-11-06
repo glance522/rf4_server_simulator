@@ -3,7 +3,6 @@ package gameserver
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -16,15 +15,7 @@ import (
 
 // TestItemTreeSkeleton 打印 4/5 物品元素骨架，用于检查不同类别生成不同 wire 类。
 func TestItemTreeSkeleton(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "probe.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForProbe(t, db)
+	db := openItemTestDB(t)
 	ctx := context.Background()
 	srv := NewServer(config.Game{Tunnel: config.Tunnel{PSK: "probe"}}, logging.Discard(), nil)
 	srv.SetDB(db)
@@ -85,15 +76,7 @@ func skeletonOf(v *proto.Value) map[string]any {
 // TestItemHandlersFullChain 全链路探测：4/1 → 4/4 → 4/5 经处理器 + 编码全链路，
 // 打印响应体和解码骨架，用于检查回包形状。
 func TestItemHandlersFullChain(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "probe2.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForProbe(t, db)
+	db := openItemTestDB(t)
 	ctx := context.Background()
 	srv := NewServer(config.Game{Tunnel: config.Tunnel{PSK: "probe"}}, logging.Discard(), nil)
 	srv.SetDB(db)
@@ -146,15 +129,7 @@ func probeArgsGuids(guids []string) *proto.Value {
 
 // TestItemDetailsEncodeError 定位 4/5 编码失败的具体物品与字段。
 func TestItemDetailsEncodeError(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "probe3.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForProbe(t, db)
+	db := openItemTestDB(t)
 	ctx := context.Background()
 	srv := NewServer(config.Game{Tunnel: config.Tunnel{PSK: "probe"}}, logging.Discard(), nil)
 	srv.SetDB(db)
@@ -201,15 +176,7 @@ func TestItemDetailsEncodeError(t *testing.T) {
 
 // TestGjdmdcpoifhMismatch 探查 gjdmdcpoifh(101) 字段数不匹配的物品明细。
 func TestGjdmdcpoifhMismatch(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "probe4.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForProbe(t, db)
+	db := openItemTestDB(t)
 	ctx := context.Background()
 	srv := NewServer(config.Game{Tunnel: config.Tunnel{PSK: "probe"}}, logging.Discard(), nil)
 	srv.SetDB(db)
@@ -275,14 +242,7 @@ func TestSpawnClasses(t *testing.T) {
 
 // TestSpawnLocatorBuild 验证 1/13 响应可编码、顶层为 206 且 dob 重锚生效。
 func TestSpawnLocatorBuild(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "probe5.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
+	db := openMigratedTestDB(t)
 	srv := NewServer(config.Game{Tunnel: config.Tunnel{PSK: "probe"}}, logging.Discard(), nil)
 	srv.SetDB(db)
 	body, err := srv.buildSpawnLocatorBody(spawnLevelKey, spawnScene, time.Now().Unix())
@@ -380,15 +340,7 @@ func TestTimelineHandlersSmoke(t *testing.T) {
 // TestAllHandlersDecode 在探针会话上调用每个已注册处理器，
 // 验证返回的响应体都能被协议层完整解码。
 func TestAllHandlersDecode(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "gate.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForProbe(t, db)
+	db := openItemTestDB(t)
 	ctx := context.Background()
 	srv := NewServer(config.Game{Tunnel: config.Tunnel{PSK: "gate"}}, logging.Discard(), nil)
 	srv.SetDB(db)
@@ -432,18 +384,6 @@ func TestNumericIDFieldMapping(t *testing.T) {
 	}
 }
 
-// importStaticForProbe 从仓库自带静态库导入 item_def（探针用，仅此一张表）。
-func importStaticForProbe(t *testing.T, db *store.DB) {
-	t.Helper()
-	if _, err := db.SQL.Exec(`ATTACH DATABASE ? AS src`, "../../server_data/static.sqlite3"); err != nil {
-		t.Skip("静态库不可用: ", err)
-	}
-	defer func() { _, _ = db.SQL.Exec(`DETACH DATABASE src`) }()
-	if _, err := db.SQL.Exec(`INSERT OR IGNORE INTO main.item_def SELECT * FROM src.item_def`); err != nil {
-		t.Skip("item_def 导入失败: ", err)
-	}
-}
-
 // TestCSNamesCanonical 验证常量表中的字段名都存在于对应物品类。
 func TestCSNamesCanonical(t *testing.T) {
 	for cls, want := range map[string][]string{
@@ -462,19 +402,10 @@ func TestCSNamesCanonical(t *testing.T) {
 
 // TestCreateItemWellFormed 验证创建物品的 GUID、数字 id 和可编码结构。
 func TestCreateItemWellFormed(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "wellform.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForProbe(t, db)
+	db := openItemTestDB(t)
 	ctx := context.Background()
 	srv := NewServer(config.Game{Tunnel: config.Tunnel{PSK: "wf"}}, logging.Discard(), nil)
 	srv.SetDB(db)
-	importStaticForProbe(t, db)
 	// 从商店货架取几种不同类别的商品
 	shopItems := []string{"bob_25018", "shirt_35002", "worm_01", "spinner_2713"}
 	for _, itemID := range shopItems {
@@ -506,17 +437,9 @@ func TestCreateItemWellFormed(t *testing.T) {
 
 // TestProbeCreatedFields 打印 CreateItem 产出的字段 JSON，用于检查 GUID 和字段结构。
 func TestProbeCreatedFields(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "probe6.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
+	db := openItemTestDB(t)
 	srv := NewServer(config.Game{Tunnel: config.Tunnel{PSK: "p"}}, logging.Discard(), nil)
 	srv.SetDB(db)
-	importStaticForProbe(t, db)
 	it, err := srv.CreateItem(context.Background(), 1000001, "bob_25018", "backpack", 1)
 	if err != nil {
 		t.Skip(err)
@@ -533,15 +456,7 @@ func TestProbeCreatedFields(t *testing.T) {
 // TestWorkshopToolsAreNotFishingLine 工坊工具和材料不能再落成钓线类。
 // 已经按钓线类买进背包的钳子，启动修复后改写成工具类并保留 guid。
 func TestWorkshopToolsAreNotFishingLine(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "workshop.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForProbe(t, db)
+	db := openItemTestDB(t)
 	ctx := context.Background()
 	srv := NewServer(config.Game{Tunnel: config.Tunnel{PSK: "workshop"}}, logging.Discard(), nil)
 	srv.SetDB(db)

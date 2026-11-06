@@ -5,7 +5,6 @@ package gameserver
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -90,15 +89,7 @@ func TestScaleDemandsOverflow(t *testing.T) {
 }
 
 func TestCraftBatchCapsAndSlotScaling(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "craft-limits.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "recipe")
+	db := openRecipeTestDB(t)
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
 	srv.randFloat = fixedRolls(0.9)

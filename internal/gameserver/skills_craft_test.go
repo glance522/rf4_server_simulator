@@ -3,7 +3,6 @@ package gameserver
 import (
 	"context"
 	"math"
-	"path/filepath"
 	"testing"
 
 	"rf4server/internal/config"
@@ -14,20 +13,6 @@ import (
 
 // skills_craft_test.go 测试技能学习（5/2、5/3、5/4）和制作流程（9/1、9/3、9/4、9/6）。
 // 测试使用仓库自带的静态库，并按需导入 skill_def、skill_cat_def、recipe 和 item_def。
-
-// importStaticForSkillsCraft 从静态库导入指定表；缺少表或库时跳过测试。
-func importStaticForSkillsCraft(t *testing.T, db *store.DB, tables ...string) {
-	t.Helper()
-	if _, err := db.SQL.Exec(`ATTACH DATABASE ? AS src`, "../../server_data/static.sqlite3"); err != nil {
-		t.Skip("静态库不可用: ", err)
-	}
-	defer func() { _, _ = db.SQL.Exec(`DETACH DATABASE src`) }()
-	for _, tb := range tables {
-		if _, err := db.SQL.Exec(`INSERT INTO main.` + tb + ` SELECT * FROM src.` + tb); err != nil {
-			t.Skipf("%s 导入失败: %v", tb, err)
-		}
-	}
-}
 
 func newSkillsCraftServer(t *testing.T, db *store.DB) *Server {
 	t.Helper()
@@ -88,15 +73,7 @@ func craftObj8(recipe string, materials []craftSlot, qty uint64) *proto.Value {
 // TestSkillLearnFlow 验证技能学习、学习点数扣减、重置和全量重置。
 // 测试数据包含 cat1 的节点 502、504 和 514。
 func TestSkillLearnFlow(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "skills.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "skill_def", "skill_cat_def")
+	db := openSkillCraftTestDB(t)
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
 	if err := srv.EnsurePlayer(ctx, 1000001); err != nil {
@@ -245,15 +222,7 @@ func TestSkillLearnFlow(t *testing.T) {
 // TestSkillLearnAtLevel5SharedPoints 复现线上角色状态：5 级、无已投点。
 // 5 级累计 4 点；学习 514 应扣 1 点并把 313/701/1002 同步到同一等级。
 func TestSkillLearnAtLevel5SharedPoints(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "skills-live.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "skill_def", "skill_cat_def")
+	db := openSkillCraftTestDB(t)
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
 	if err := srv.EnsurePlayer(ctx, 1000001); err != nil {
@@ -321,15 +290,7 @@ func TestSkillLearnAtLevel5SharedPoints(t *testing.T) {
 // 当前静态数据：1/2/3/4/5/7/8/10/11 各有开放节点，可逐级练满；
 // 6 类没有 max_level>0 的节点，9 类熟练度 0 时全部锁定。
 func TestSkillLearnEveryCategoryWithAdminPoints(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "skills-all-cats.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "skill_def", "skill_cat_def")
+	db := openSkillCraftTestDB(t)
 	ctx := context.Background()
 	const uid = 1000001
 	srv := newSkillsCraftServer(t, db)
@@ -467,15 +428,7 @@ func TestSkillLearnEveryCategoryWithAdminPoints(t *testing.T) {
 // 可解锁的节点应全部成功；要求 110% 的节点仍锁定（永久熟练度封顶 100，需竿加成到 110）。
 // 6 类没有 max_level>0 的节点，熟练度全满也不能加点。
 func TestSkillLearnAllNodesAtFullProficiency(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "skills-full-prof.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "skill_def", "skill_cat_def")
+	db := openSkillCraftTestDB(t)
 	ctx := context.Background()
 	const uid = 1000001
 	srv := newSkillsCraftServer(t, db)
@@ -597,15 +550,7 @@ func TestSkillLearnAllNodesAtFullProficiency(t *testing.T) {
 // TestCraftFlow 制作闭环：材料齐 → 产出+消耗；材料缺 → 803(false)。
 // 附带 9/3 分解、9/4 询价、9/6 模板与路径 2（客户端材料槽）。
 func TestCraftFlow(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "craft.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "recipe")
+	db := openRecipeTestDB(t)
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
 	srv.randFloat = fixedRolls(0.1, 0.9)
@@ -828,15 +773,7 @@ func TestCraftFlow(t *testing.T) {
 // TestBaitCraftStacksAndMastery 验证连续制作鱼饵会合并到同一个背包堆，
 // 每次制作固定产出一包 30 个并增加 0.1% 捕获鱼饵熟练度。
 func TestBaitCraftStacksAndMastery(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "bait-craft-stack.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "recipe")
+	db := openRecipeTestDB(t)
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
 	srv.randFloat = fixedRolls(0.1, 0.9)
@@ -873,15 +810,7 @@ func TestBaitCraftStacksAndMastery(t *testing.T) {
 
 // TestBaitDigFlow 验证 9/3 使用铲子会产出鱼饵、合并背包堆并增加捕获鱼饵熟练度。
 func TestBaitDigFlow(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "baitdig.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def")
+	db := openItemTestDB(t)
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
 	uid := int64(2000003)
@@ -998,14 +927,7 @@ func TestCraftSkillCatForRecipe(t *testing.T) {
 
 // TestCraftProficiencyByRecipeFamily 校验四类技能按件概率增长、未命中与上限处理。
 func TestCraftProficiencyByRecipeFamily(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "craft-prof.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
+	db := openMigratedTestDB(t)
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
 	uid := int64(2000005)
@@ -1064,15 +986,7 @@ func TestCraftProficiencyByRecipeFamily(t *testing.T) {
 
 // TestCraftCookReplyCarriesSkillTree 校验烹调制作 803 回包携带 310 进度与 312 技能树。
 func TestCraftCookReplyCarriesSkillTree(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "cook-skill.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "recipe")
+	db := openRecipeTestDB(t)
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
 	srv.randFloat = fixedRolls(0.1, 0.9)
@@ -1124,15 +1038,7 @@ func TestCraftCookReplyCarriesSkillTree(t *testing.T) {
 // TestCraftCountableProductsStack 验证可计件的制作产物会并入同一背包堆，
 // 而非计件产物（如 PVA 饵料板）仍保持独立实例。
 func TestCraftCountableProductsStack(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "craft-stack.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "recipe")
+	db := openRecipeTestDB(t)
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
 	srv.randFloat = fixedRolls(0.9) // 固定不涨熟练度，避免干扰数量断言
@@ -1219,15 +1125,7 @@ func TestCraftCountableProductsStack(t *testing.T) {
 // TestCraftResultCardUsesProducedQuantity 验证制作结果卡只带本次产出量：
 // 同一成品堆连续制作时 803.f1 不能下发整堆数量，f6 仍必须是整堆快照。
 func TestCraftResultCardUsesProducedQuantity(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "craft-result-qty.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := db.Migrate(); err != nil {
-		t.Fatal(err)
-	}
-	importStaticForSkillsCraft(t, db, "item_def", "recipe")
+	db := openRecipeTestDB(t)
 	ctx := context.Background()
 	srv := newSkillsCraftServer(t, db)
 	srv.randFloat = fixedRolls(0.9) // 不涨熟练度，避免干扰数量断言
