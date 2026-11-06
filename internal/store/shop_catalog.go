@@ -37,6 +37,7 @@ type shopStoreDefinition struct {
 	Kind   int      `json:"kind"`
 	Brands []string `json:"brands"`
 	MapKey string   `json:"map_key"`
+	Books  []string `json:"books"`
 }
 
 type shopKindCatalog struct {

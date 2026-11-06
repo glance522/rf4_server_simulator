@@ -1062,11 +1062,11 @@ func hFishingLeft(ctx *Ctx) ([]byte, bool) {
 
 func hFishingGen(ctx *Ctx) ([]byte, bool) { return nil, true } // fire-and-forget
 func hFishingLoad(ctx *Ctx) ([]byte, bool) {
-	st := ctx.Sess.Srv.stateFor(ctx.Sess.Userid)
-	st.mu.Lock()
-	st.Hooked = true
-	st.mu.Unlock()
-	ctx.Sess.Push4_22Full()
+	// 14/8 是持续发送的钓组负载/姿态遥测，不是中钩确认。
+	// 全量 4/22 会重建鱼实体并打断冲刺、体力阶段；真实报文后没有这条推送。
+	if ctx.Sess.Srv.tunableF("fight_load_full_sync", 0) != 0 {
+		ctx.Sess.Push4_22Full()
+	}
 	return nil, true
 }
 

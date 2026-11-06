@@ -178,3 +178,33 @@ func TestFishEventChatTexts(t *testing.T) {
 		t.Fatalf("无鱼跑鱼播报不符: %q", got)
 	}
 }
+
+// 奖杯/蓝冠鱼上鱼时，若 KV 模板参数未启用（fish_tv_kv=0，默认），
+// 不得发带参数的 k25/k26/k03 模板播报（缺参会导致客户端解析异常断连），
+// 应退化为普通系统文本播报（24/27，kind=0）。
+func TestFishLandedFallsBackToPlainChatWithoutKV(t *testing.T) {
+	srv, _ := newRigTestServer(t)
+	sess, gc := newTunnelProbe(t, srv)
+
+	srv.notifyFishLanded(sess, &RolledFish{Species: "g_tench", Grade: 3, WeightG: 4100}, false)
+
+	env := awaitPushEnvelope(t, gc)
+	if env.Main != 24 || env.Sub != 27 {
+		t.Fatalf("上鱼播报应走 24/27，实得 %d/%d", env.Main, env.Sub)
+	}
+	dec, _, err := proto.DecodeValue(env.Body, 0, srv.Table())
+	if err != nil {
+		t.Fatalf("推送 body 不可解码: %v", err)
+	}
+	if dec.Kind != proto.KindArgs || len(dec.Items) != 3 {
+		t.Fatalf("24/27 body 应 args[3]，实得 kind=%v len=%d", dec.Kind, len(dec.Items))
+	}
+	msg := dec.Items[0]
+	if got := msg.Field(0).Num; got == nil || u64Of(got) != 0 {
+		t.Fatalf("KV 未启用时上鱼播报应退化为 kind=0 纯文本，实得 %v", got)
+	}
+	mf1 := msg.Field(1)
+	if txt := mf1.StrOr(); !strings.Contains(txt, "钓获奖杯") || !strings.Contains(txt, "4.10kg") {
+		t.Fatalf("上鱼播报文本不符: %q", txt)
+	}
+}

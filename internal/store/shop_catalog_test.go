@@ -36,7 +36,7 @@ func findShopPrice(t *testing.T, rows []*ShopPrice, itemID string) *ShopPrice {
 
 func TestEmbeddedShopCatalogMatchesEvidenceAndCoversAllStores(t *testing.T) {
 	sum := sha256.Sum256(embeddedShopKindDefs)
-	const wantHash = "cbf7494f46f9f0768bd38a282e3780389b02b1b95a649d179f2d457c2b15f72d"
+	const wantHash = "b559ee1324cccd348c5620b144923dd6f25296b4fa90fb08348428347e558b1b"
 	if got := hex.EncodeToString(sum[:]); got != wantHash {
 		t.Fatalf("商店目录 hash=%s want=%s", got, wantHash)
 	}
@@ -268,5 +268,60 @@ func TestShopSupplementPricesRestockAndAdminStayAligned(t *testing.T) {
 	restored, _ := db.ShopItemGet(ctx, "fishingstore_009", "gold_line")
 	if restored.Gold != 15 || restored.Stock <= 0 {
 		t.Fatal("reset broke supplement/restock")
+	}
+}
+
+func TestAdminStoreBookShelvesByRegion(t *testing.T) {
+	db, err := OpenWithStatic(filepath.Join(t.TempDir(), "shop-books.sqlite3"),
+		filepath.Join("..", "..", "server_data", "static.sqlite3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	all := []string{"seafish_book", "feeder_book", "float_fishing_book", "spinning_book"}
+	cases := []struct {
+		store string
+		want  []string
+	}{
+		{"admin_012", []string{"seafish_book"}},
+		{"admin_18", []string{"feeder_book"}},
+		{"admin_01", []string{"float_fishing_book", "spinning_book"}},
+		{"admin_19", []string{"float_fishing_book", "spinning_book"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.store, func(t *testing.T) {
+			rows, err := db.ShopItems(ctx, tc.store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			byID := make(map[string]*ShopPrice, len(rows))
+			for _, r := range rows {
+				byID[r.ItemID] = r
+			}
+			wantSet := make(map[string]bool, len(tc.want))
+			for _, id := range tc.want {
+				wantSet[id] = true
+			}
+			for _, id := range all {
+				row, ok := byID[id]
+				// 凡是上架的技能书，有效价都必须是银 998500 / 金 500。
+				if ok && (row.Silver != 998500 || row.Gold != 500) {
+					t.Fatalf("%s@%s 技能书有效价不符: %+v", tc.store, id, row)
+				}
+				if !wantSet[id] {
+					if ok {
+						t.Fatalf("%s 不应上架 %s", tc.store, id)
+					}
+					continue
+				}
+				if !ok {
+					t.Fatalf("%s 缺少 %s", tc.store, id)
+				}
+			}
+		})
 	}
 }

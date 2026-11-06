@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -75,10 +76,25 @@ func (s *Server) loadFightCurves() {
 
 // buildFightCurves 构造 26 行曲线池，并按基础行 f8 缩放张力。
 func (s *Server) buildFightCurves(species string, pull float64) *proto.Value {
+	profile := s.fishFightProfileFor(&RolledFish{Species: species})
+	return s.buildFightCurvesWithProfile(species, pull, profile)
+}
+
+func (s *Server) buildFightCurvesForFish(f *RolledFish, pull float64, profile fishFightProfile) *proto.Value {
+	if f == nil {
+		return s.buildFightCurves("", pull)
+	}
+	return s.buildFightCurvesWithProfile(f.Species, pull, profile)
+}
+
+func (s *Server) buildFightCurvesWithProfile(species string, pull float64, profile fishFightProfile) *proto.Value {
 	s.curveMu.Lock()
 	rows := s.curves[species]
 	if len(rows) == 0 {
-		rows = s.curves["crucian"]
+		rows = s.curves[fishFightArchetypeFor(species).CurvePool]
+		if len(rows) == 0 {
+			rows = s.curves["crucian"]
+		}
 	}
 	s.curveMu.Unlock()
 
@@ -93,10 +109,20 @@ func (s *Server) buildFightCurves(species string, pull float64) *proto.Value {
 	}
 	for _, r := range rows {
 		items := map[int]*proto.Value{0: proto.U32(uint32(r[0]))}
+		stage := uint32(r[0])
+		phaseTension := fightPhaseTensionScale(stage)
+		phaseDuration := fightPhaseDurationScale(stage)
+		durationScale := profile.DurationScale * phaseDuration
+		if fightIsRestPhase(stage) {
+			durationScale = profile.RestScale * phaseDuration
+		}
 		for i := 1; i <= 14; i++ {
 			v := r[i]
 			if i == 8 || i == 9 {
-				v *= scale
+				v *= scale * phaseTension
+			}
+			if (i == 2 || i == 3) && v > 0 {
+				v = math.Max(0.1, v*durationScale)
 			}
 			items[i] = proto.F32(float32(v))
 		}

@@ -152,15 +152,10 @@ func TestFishingLoopFull(t *testing.T) {
 	fc.SendRequest(203, 14, 11)
 	waitPushCmd(t, fc, 4, 22, 3*time.Second)
 
-	// 14/8 拉力（应触发 4/22 全量：竿+线）
+	// 14/8 只是持续遥测，不应重建竿线或鱼实体。
 	fc.SendRequest(204, 14, 8)
-	full22 := waitPushCmd(t, fc, 4, 22, 3*time.Second)
-	if full22 == nil {
-		t.Fatal("14/8 后未收到 4/22")
-	}
-	dec, _, _ = proto.DecodeValue(full22.Body, 0, table)
-	if dec.ArgCodeStr() != "61" {
-		t.Fatalf("4/22 外层 code 应为 61, 实得 %q", dec.ArgCodeStr())
+	if extra22 := waitPushCmd(t, fc, 4, 22, 500*time.Millisecond); extra22 != nil {
+		t.Fatal("14/8 不应触发 4/22 全量重建")
 	}
 
 	// 14/4 收竿结算（801）

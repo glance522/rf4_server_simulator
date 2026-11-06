@@ -2,6 +2,7 @@ package gameserver
 
 import (
 	"log/slog"
+	"strconv"
 	"sync"
 
 	"rf4server/internal/proto"
@@ -79,6 +80,17 @@ func (c *Ctx) ReplyFailure(errorType, message string) {
 		return
 	}
 	c.Sess.SendEnvelope(envelope)
+}
+
+// ReplyOperationResult 用业务操作结果码回复失败。
+//
+// -3 信封的 f1 必须是 "RF4.API.APIError"、f2 必须是数字字符串：客户端
+// fjjhcjoonmi.hopgomnfdli 才会把 f2 解析成 abadjfbfdjb 并由
+// dchjlkidjdc.lapcaibjebj 显示对应的 kOperationResult_* 文案。用
+// "System.InvalidOperationException" 等普通异常名会被客户端落到
+// kCommon_E_INTERNAL_WITHCODE，显示成通用内部错误。
+func (c *Ctx) ReplyOperationResult(code int) {
+	c.ReplyFailure("RF4.API.APIError", strconv.Itoa(code))
 }
 
 // ReplyValue 编码 payload 值并回包。
