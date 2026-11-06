@@ -19,6 +19,7 @@
 
 ## 开发与协议
 
+- [已实现协议参考](protocols.md)：客户端 4.0.25034 已注册命令/推送的字节布局、来源与置信度。
 - [调试工作流](debugging-workflow.md)：本地调试、日志和协议排查流程。
 - [官方协议工作坊](official-protocol-workshop.md)：协议观察、记录和整理资料。
 
