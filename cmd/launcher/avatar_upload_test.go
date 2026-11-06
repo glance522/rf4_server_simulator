@@ -2,10 +2,7 @@ package main
 
 import (
 	"bytes"
-<<<<<<< HEAD
 	"context"
-=======
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	"encoding/json"
 	"image"
 	"image/color"
@@ -13,27 +10,18 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-<<<<<<< HEAD
 	"net/url"
-=======
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-<<<<<<< HEAD
 	"rf4server/internal/config"
 	"rf4server/internal/store"
-=======
-	"gopkg.in/yaml.v3"
-	"rf4server/internal/config"
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 )
 
 func TestHandleAvatarUploadAndServe(t *testing.T) {
 	dir := t.TempDir()
-<<<<<<< HEAD
 	db, err := store.Open(filepath.Join(dir, "avatar.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -52,35 +40,21 @@ func TestHandleAvatarUploadAndServe(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := db.SQL.Exec(`UPDATE profile SET name='angler2' WHERE uid=?`, secondUID); err != nil {
-=======
-	configPath := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte("# preserve this comment\ngateway:\n  advertise_host: 127.0.0.1\ngame:\n  obs_addr: ':9502'\n"), 0o644); err != nil {
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 		t.Fatal(err)
 	}
 	a := &app{
 		cfg:        &config.Config{Gateway: config.Gateway{AdvertiseHost: "127.0.0.1"}},
-<<<<<<< HEAD
 		avatarDir:  filepath.Join(dir, "avatars"),
 		avatarPort: 8090,
 		adminDB:    db,
 	}
 
 	req := avatarUploadRequest(t, firstProfile.Name, "http://127.0.0.1:8090", testAvatarPNGWithColor(t, color.RGBA{R: 255, A: 255}))
-=======
-		cfgPath:    configPath,
-		avatarDir:  filepath.Join(dir, "avatars"),
-		avatarPort: 8090,
-	}
-
-	req := avatarUploadRequest(t, "http://127.0.0.1:8090/avatars/avatar.png", testAvatarPNG(t))
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	rr := httptest.NewRecorder()
 	a.handleAvatarUpload(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("upload status=%d body=%s", rr.Code, rr.Body.String())
 	}
-<<<<<<< HEAD
 	var response struct {
 		URL      string `json:"url"`
 		Username string `json:"username"`
@@ -176,45 +150,11 @@ func assertAvatarUpdateQueued(t *testing.T, db *store.DB, wantUID int64) {
 	if cmd.Op != "refresh_player" || cmd.UID != wantUID {
 		t.Fatalf("avatar refresh command=%+v, want UID %d", cmd, wantUID)
 	}
-=======
-	var response map[string]string
-	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
-		t.Fatal(err)
-	}
-	if response["url"] != "http://127.0.0.1:8090/avatars/avatar.png" {
-		t.Fatalf("avatar URL=%q", response["url"])
-	}
-
-	configData, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(configData), "# preserve this comment") {
-		t.Fatalf("config comment not preserved:\n%s", configData)
-	}
-	var cfg config.Config
-	if err := yaml.Unmarshal(configData, &cfg); err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Game.AvatarURL != response["url"] || a.cfg.Game.AvatarURL != response["url"] {
-		t.Fatalf("persisted/in-memory avatar URL mismatch: config=%q app=%q", cfg.Game.AvatarURL, a.cfg.Game.AvatarURL)
-	}
-
-	rr = httptest.NewRecorder()
-	a.handleAvatarImage(rr, httptest.NewRequest(http.MethodGet, avatarImagePath, nil))
-	if rr.Code != http.StatusOK || rr.Header().Get("Content-Type") != "image/png" {
-		t.Fatalf("image response status=%d content-type=%q", rr.Code, rr.Header().Get("Content-Type"))
-	}
-	if _, err := png.DecodeConfig(bytes.NewReader(rr.Body.Bytes())); err != nil {
-		t.Fatalf("served avatar is not a PNG: %v", err)
-	}
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 }
 
 func TestHandleAvatarUploadRejectsInvalidImageAndCrossOrigin(t *testing.T) {
 	a := &app{
 		cfg:       &config.Config{Gateway: config.Gateway{AdvertiseHost: "127.0.0.1"}},
-<<<<<<< HEAD
 		avatarDir: filepath.Join(t.TempDir(), "avatars"),
 	}
 	db, err := store.Open(filepath.Join(t.TempDir(), "avatar.db"))
@@ -231,27 +171,13 @@ func TestHandleAvatarUploadRejectsInvalidImageAndCrossOrigin(t *testing.T) {
 	a.adminDB = db
 
 	req := avatarUploadRequest(t, "player", "", []byte("not an image"))
-=======
-		cfgPath:   filepath.Join(t.TempDir(), "config.yaml"),
-		avatarDir: filepath.Join(t.TempDir(), "avatars"),
-	}
-	if err := os.WriteFile(a.cfgPath, []byte("game: {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	req := avatarUploadRequest(t, "", []byte("not an image"))
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	rr := httptest.NewRecorder()
 	a.handleAvatarUpload(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("invalid image status=%d body=%s", rr.Code, rr.Body.String())
 	}
 
-<<<<<<< HEAD
 	req = avatarUploadRequest(t, "player", "", testAvatarPNG(t))
-=======
-	req = avatarUploadRequest(t, "", testAvatarPNG(t))
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	req.Header.Set("Origin", "http://evil.example")
 	rr = httptest.NewRecorder()
 	a.handleAvatarUpload(rr, req)
@@ -263,11 +189,7 @@ func TestHandleAvatarUploadRejectsInvalidImageAndCrossOrigin(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 func avatarUploadRequest(t *testing.T, username, baseURL string, data []byte) *http.Request {
-=======
-func avatarUploadRequest(t *testing.T, avatarURL string, data []byte) *http.Request {
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -278,7 +200,6 @@ func avatarUploadRequest(t *testing.T, avatarURL string, data []byte) *http.Requ
 	if _, err := part.Write(data); err != nil {
 		t.Fatal(err)
 	}
-<<<<<<< HEAD
 	if username != "" {
 		if err := writer.WriteField("username", username); err != nil {
 			t.Fatal(err)
@@ -286,10 +207,6 @@ func avatarUploadRequest(t *testing.T, avatarURL string, data []byte) *http.Requ
 	}
 	if baseURL != "" {
 		if err := writer.WriteField("base_url", baseURL); err != nil {
-=======
-	if avatarURL != "" {
-		if err := writer.WriteField("url", avatarURL); err != nil {
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 			t.Fatal(err)
 		}
 	}
@@ -301,7 +218,6 @@ func avatarUploadRequest(t *testing.T, avatarURL string, data []byte) *http.Requ
 	return req
 }
 
-<<<<<<< HEAD
 func mustURLPath(t *testing.T, rawURL string) string {
 	t.Helper()
 	u, err := url.Parse(rawURL)
@@ -319,12 +235,6 @@ func testAvatarPNGWithColor(t *testing.T, pixel color.RGBA) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
 	img.Set(0, 0, pixel)
-=======
-func testAvatarPNG(t *testing.T) []byte {
-	t.Helper()
-	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
-	img.Set(0, 0, color.RGBA{R: 255, A: 255})
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	var data bytes.Buffer
 	if err := png.Encode(&data, img); err != nil {
 		t.Fatal(err)

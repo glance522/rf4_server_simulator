@@ -2,14 +2,11 @@ package main
 
 import (
 	"bytes"
-<<<<<<< HEAD
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-=======
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -24,25 +21,17 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-<<<<<<< HEAD
 	"time"
 	"unicode"
-
 	"rf4server/internal/store"
-=======
 
 	"gopkg.in/yaml.v3"
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
-)
-
-const (
 	maxAvatarUploadBytes = 5 << 20
 	maxAvatarPixels      = 16_000_000
-<<<<<<< HEAD
+
 	avatarPathPrefix     = "/avatars/"
-=======
+
 	avatarImagePath      = "/avatars/avatar.png"
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 )
 
 func (a *app) handleAvatarUpload(w http.ResponseWriter, r *http.Request) {

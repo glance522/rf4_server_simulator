@@ -153,11 +153,7 @@ func (s *Server) BuildProfile307(ctx context.Context, uid int64) (*proto.Value, 
 		6:  proto.U32(uint32(totalPts)),
 		7:  proto.U64(uint64(p.Silver)),
 		8:  proto.U64(uint64(p.Gold)),
-<<<<<<< HEAD
 		9:  proto.StrVal(avatarURL),
-=======
-		9:  proto.StrVal(s.cfg.AvatarURL),
->>>>>>> f33dc6fbf75f7bed4504748b2ad037ecfc6e8aa4
 		10: proto.U32(membershipKind),
 		11: proto.U64(membershipExp),
 		12: s.buildPose308(ctx, uid),
