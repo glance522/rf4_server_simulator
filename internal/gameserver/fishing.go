@@ -1807,11 +1807,11 @@ func (s *Server) onBiteTimerTicketFor(uid int64, rod *FishState, ticket fishingT
 		s.pushPendingBite(sess, st, f, gear, generation)
 		return
 	}
+	// 不再等 14/7 的“在水中”动画位：客户端常常抛竿后 8 秒才发它，
+	// 干等会让鱼晚 8~10 秒才出现（实测延迟 10.8s / 12.8s）。
+	// 竿已经抛出去并进入判鱼链路，直接按已入水处理。
 	if !st.InWater {
-		// 还没等到 14/7 的“在水中”动画位：先挂起，等它出现再派鱼。
-		st.NeedBite = true
-		st.mu.Unlock()
-		return
+		st.InWater = true
 	}
 	base := st.CastTs
 	if st.FallSeen && !st.FallTs.IsZero() {
@@ -1821,6 +1821,15 @@ func (s *Server) onBiteTimerTicketFor(uid int64, rod *FishState, ticket fishingT
 	// 路亚族 floor 降 1.2s：拟饵落水即生效，没有"浮标立稳"这回事。
 	floor := 6 * time.Second
 	minWait := time.Second
+	// 落水保护必须跟随咬钩倍率：否则 bite_delay_scale=0.25 时，
+	// 第一轮 2.5 秒到点后会被"落水未满 6 秒"再顺延 3.5 秒，
+	// 玩家看到的就是固定 6 秒延迟（实测 6.0s）。
+	if sc := s.tunableF("bite_delay_scale", 1.0); sc > 0 && sc != 1.0 {
+		floor = time.Duration(float64(floor) * sc)
+		if floor < 800*time.Millisecond {
+			floor = 800 * time.Millisecond
+		}
+	}
 	if lure {
 		floor = 1200 * time.Millisecond
 		minWait = 500 * time.Millisecond
@@ -1842,11 +1851,16 @@ func (s *Server) onBiteTimerTicketFor(uid int64, rod *FishState, ticket fishingT
 	// 钓组就位守门（Motionless 位族）——**路亚跳过**：收线动画族
 	// StreamMoving/Twitch/StopAndGo 永远没有 Motionless 位，守门会把每杆
 	// 路亚都顺延到 +12s（14/14 全部错过收线窗口）。
-	if !lure && !onTheDrop && now.Sub(st.CastTs) < 12*time.Second && st.TickSeen && !st.RigSettled {
-		// 顺延 1s 轮询（12s 兜底）
-		s.armBiteTimerLocked(uid, st, now.Add(time.Second))
-		st.mu.Unlock()
-		return
+	// 副竿收不到 14/7（钓组动画只发当前竿），就位守门只对当前竿生效；
+	// 20 秒兜底，避免客户端不报就位位时这根竿无限轮询、永远不判鱼。
+	// 就位守门只在抛竿后 2 秒内生效：再晚就直接判鱼，
+	// 避免客户端迟迟不报就位位时把出鱼时间拖到 10 秒以上。
+	if !lure && !onTheDrop && !st.RigSettled && st.ActiveRod {
+		if elapsed := now.Sub(st.CastTs); st.CastTs.IsZero() || elapsed < 2*time.Second {
+			s.armBiteTimerLocked(uid, st, now.Add(time.Second))
+			st.mu.Unlock()
+			return
+		}
 	}
 	if st.Armed != nil {
 		// GM 武装的"下一杆必上"优先，且绕过两道重量上限（arm_next_fish）
