@@ -360,6 +360,9 @@ func (s *Server) biteDelayInWeather(st *FishState, weather fishingWeather, now t
 	scale := s.tunableF("bite_delay_scale", 1.0)
 	maxDelay := s.tunableF("bite_delay_max", 20.0)
 	lureMax := s.tunableF("bite_delay_lure_max", 6.0)
+	debugPreset := s.tunableF("debug_mode", 0) == 1 &&
+		s.tunableF("bite_delay_fixed", math.NaN()) == 0 && s.tunableF("bite_delay_scale", math.NaN()) == 1 &&
+		s.tunableF("bite_delay_max", math.NaN()) == 5 && s.tunableF("fish_weight_scale", math.NaN()) == 4
 	if st != nil && st.Loc != "" && s.DB != nil {
 		biteLoc := st.Loc
 		if resolved := s.DB.ResolveStatLoc(s.dbCtx(), biteLoc); resolved != "" {
@@ -371,6 +374,9 @@ func (s *Server) biteDelayInWeather(st *FishState, weather fishingWeather, now t
 			maxDelay = setting.BiteDelayMax
 			lureMax = setting.BiteDelayLureMax
 		}
+	}
+	if debugPreset {
+		return 3 + 2*rand.Float64()
 	}
 	if fixed > 0 {
 		return math.Max(0.05, fixed)
