@@ -730,6 +730,15 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 			ctx.Sess.Push(4, 22, proto.Args(proto.S("61"), stackTree))
 		}
 	})
+	// 制作成功事件：配方 ID 供 250-417 的制作类成就判断；烹饪熟练度只在
+	// 本次是烹饪配方时装配，非烹饪制作保持 0，技能类成就便不会误判。
+	cookPoints := float64(0)
+	if skillCat == craftCookSkillID {
+		cookPoints, _ = srv.DB.GetSkillPoints(cctx, uid, craftCookSkillID)
+	}
+	srv.evaluateAchievements(ctx, achievementEvent{
+		Kind: evCraftOK, RecipeID: recipe.RecipeID, CookPoints: cookPoints,
+	})
 	return srv.replyCraftResultWithSkill(ctx, true, produced, upsert, removed, progress, skillTree)
 }
 
