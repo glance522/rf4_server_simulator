@@ -335,6 +335,7 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 	hooked := st.Hooked
 	rigType := st.RigType
 	gearGUID := st.GearGuid
+// 上游语义：鱼离场时 14/12 已经把 pending 清掉，这里不需要额外判据。
 	st.mu.Unlock()
 
 	cctx := ctx.Sess.pushCtx()

@@ -41,12 +41,15 @@ type FishState struct {
 	BoatUntil int64
 	// BoatBoardAt / BoatOffAt 是客户端 3/10 boat_use 上报的上船、下船 unix。
 	// 3/10 只差请求体尾字节，已用实机样本对位（0x0e 上船、0x0f 下船）。
-	BoatBoardAt     int64
-	BoatOffAt       int64
-	CastTs          time.Time
-	FallTs          time.Time
-	FallSeen        bool
-	RigSettled      bool
+	BoatBoardAt int64
+	BoatOffAt   int64
+	CastTs      time.Time
+	FallTs      time.Time
+	FallSeen    bool
+	RigSettled  bool
+	// ActiveRod 表示这根竿是不是玩家当前正在观察的那根。
+	// 放在状态字段里，避免持 st.mu 时再去拿 fishMu 造成锁序反转。
+	ActiveRod       bool
 	TickSeen        bool
 	TickSeq         uint64  // 14/7 f14 客户端 tick 序号（诊断/恢复）
 	LastAnim        uint32  // 14/7 f5 上一次的动画位（仅在变更时打日志）
@@ -64,19 +67,22 @@ type FishState struct {
 	Hooked          bool
 	Resolved        bool
 	Pending         *RolledFish
-	biteTimer       *time.Timer
-	pendingTimer    *time.Timer
-	castGeneration  uint64
-	biteTicket      uint64
-	pendingTicket   uint64
-	PendingRepush   int           // 14/12 f0=3/5/6 连续拒收鱼实体时的重推次数
-	BiteAt          time.Time     // 原定咬钩绝对时刻；硬重启后据此恢复 timer
-	Keepnet         []*RolledFish // 回退缓存（DB 权威）
-	Bait            string
-	LastSkill       int64       // 本次钓鱼大类（1 浮钓 / 2 纺车）
-	Armed           *RolledFish // GM 武装"下一杆必上"（唯一绕过重量上限的路径）
-	Bonus           fishingSkillBonus
-	persist         fishPersistMeta
+	// castFish 是本杆已经选定并推送过的那尾鱼，只在新抛竿、
+	// 鱼真正离场或结算后清空；存在时任何判鱼路径都只能重推它。
+	castFish *RolledFish
+	biteTimer      *time.Timer
+	pendingTimer   *time.Timer
+	castGeneration uint64
+	biteTicket     uint64
+	pendingTicket  uint64
+	PendingRepush  int           // 14/12 f0=3/5/6 连续拒收鱼实体时的重推次数
+	BiteAt         time.Time     // 原定咬钩绝对时刻；硬重启后据此恢复 timer
+	Keepnet        []*RolledFish // 回退缓存（DB 权威）
+	Bait           string
+	LastSkill      int64       // 本次钓鱼大类（1 浮钓 / 2 纺车）
+	Armed          *RolledFish // GM 武装"下一杆必上"（唯一绕过重量上限的路径）
+	Bonus          fishingSkillBonus
+	persist        fishPersistMeta
 }
 
 // effectiveBaitDepthCMLocked 返回当前有效饵深。手杆从落水开始按固定
@@ -218,15 +224,18 @@ func (st *FishState) cancelPendingTimerLocked() {
 func (s *Server) armBiteTimerLocked(uid int64, st *FishState, due time.Time) {
 	st.cancelBiteTimerLocked()
 	st.BiteAt = due
+	s.log.Debug("[排口] rod", "rod", shortGUID(st.GearGuid), "in", time.Until(due).Round(time.Millisecond).String(),
+		"active", st.ActiveRod, "cast", st.CastActive, "water", st.InWater, "settled", st.RigSettled,
+		"resolved", st.Resolved, "pending", st.Pending != nil)
 	ticket := fishingTimerTicket{st.castGeneration, st.biteTicket}
-	st.biteTimer = time.AfterFunc(time.Until(due), func() { s.onBiteTimerTicket(uid, ticket) })
+	st.biteTimer = time.AfterFunc(time.Until(due), func() { s.onBiteTimerTicketFor(uid, st, ticket) })
 }
 
 func (s *Server) armPendingTimerLocked(uid int64, st *FishState, delay time.Duration) {
 	st.cancelPendingTimerLocked()
 	ticket := fishingTimerTicket{st.castGeneration, st.pendingTicket}
 	fish := st.Pending
-	st.pendingTimer = time.AfterFunc(delay, func() { s.repushPendingTicket(uid, ticket, fish) })
+	st.pendingTimer = time.AfterFunc(delay, func() { s.repushPendingTicketFor(uid, st, ticket, fish) })
 }
 
 // maxPendingRepush 限制 14/12 f0=3/5/6 连续拒收鱼实体时的重推次数。
@@ -270,8 +279,260 @@ func (s *Server) fishingState(uid int64) *FishState {
 		st = s.newFishState(uid)
 		s.fishStates[uid] = st
 	}
+	s.hydrateSideRodsLocked(uid)
 	s.fishMu.Unlock()
 	return st
+}
+
+// hydrateSideRodsLocked 首次访问该玩家时把副竿状态从 DB 读进 sideRods。
+// 调用方必须已持 s.fishMu；函数内部只做 DB 读，不再取锁。
+func (s *Server) hydrateSideRodsLocked(uid int64) {
+	if s == nil || s.DB == nil || uid == 0 {
+		return
+	}
+	if s.sideRodsHydrated[uid] {
+		return
+	}
+	s.sideRodsHydrated[uid] = true
+	loaded := s.loadSideRodStates(uid)
+	if len(loaded) == 0 {
+		return
+	}
+	if s.sideRods[uid] == nil {
+		s.sideRods[uid] = map[string]*FishState{}
+	}
+	for _, st := range loaded {
+		gear := st.persist.gear
+		if gear == "" {
+			continue
+		}
+		if _, exists := s.sideRods[uid][gear]; exists {
+			continue
+		}
+		s.sideRods[uid][gear] = st
+		s.log.Info("副竿状态已恢复", "uid", uid, "rod", shortGUID(gear))
+	}
+}
+
+// isActiveRodState 判断这个状态对象是不是玩家当前正在观察的那根竿。
+// 只比较指针：调用方通常已持有 st.mu，这里不能再碰 st.mu（会自锁）。
+func (s *Server) isActiveRodState(uid int64, st *FishState) bool {
+	s.fishMu.Lock()
+	cur := s.fishStates[uid]
+	s.fishMu.Unlock()
+	return cur == st
+}
+
+// rodState 取指定竿的状态；rod 为 nil 时回退到当前竿。
+func (s *Server) rodState(uid int64, rod *FishState) *FishState {
+	if rod != nil {
+		return rod
+	}
+	return s.fishingState(uid)
+}
+
+// swapActiveRod 把 gear 这根竿切成"当前竿"，并返回它的状态。
+//
+// 多竿同时作钓：每根竿一个独立 FishState，带自己的咬钩定时器与 Pending；
+// 玩家当前看的那根放在 fishStates[uid]，其余放在 sideRods[uid][gear]。
+// 切竿只是换指针，定时器继续跑，所以几根竿可以各自等口、各自出鱼。
+func (s *Server) swapActiveRod(uid int64, gear string) *FishState {
+	if gear == "" {
+		return s.stateFor(uid)
+	}
+	s.fishMu.Lock()
+	s.hydrateSideRodsLocked(uid)
+	cur, ok := s.fishStates[uid]
+	if !ok || cur == nil {
+		st := s.newFishState(uid)
+		st.mu.Lock()
+		st.GearGuid = gear
+		st.ActiveRod = true
+		st.mu.Unlock()
+		s.fishStates[uid] = st
+		s.fishMu.Unlock()
+		return st
+	}
+	cur.mu.Lock()
+	curGear := cur.GearGuid
+	cur.mu.Unlock()
+	if curGear == gear {
+		s.fishMu.Unlock()
+		cur.mu.Lock()
+		cur.ActiveRod = true
+		cur.mu.Unlock()
+		return cur
+	}
+	// 当前竿还没有竿身份（刚登录/存档恢复）：直接把这根竿挂上去，
+	// 不能新建状态，否则会丢掉已有的 CastActive / 咬钩定时器 / 饵。
+	if curGear == "" {
+		s.fishMu.Unlock()
+		cur.mu.Lock()
+		cur.GearGuid = gear
+		cur.ActiveRod = true
+		cur.mu.Unlock()
+		return cur
+	}
+	// 换竿：当前状态收进副竿表，目标竿（有则取出，无则新建）切成当前。
+	{
+		m := s.sideRods[uid]
+		if m == nil {
+			m = map[string]*FishState{}
+			s.sideRods[uid] = m
+		}
+		m[curGear] = cur
+	}
+	var next *FishState
+	if m := s.sideRods[uid]; m != nil {
+		if st, found := m[gear]; found {
+			next = st
+			delete(m, gear)
+		}
+	}
+	// 离开当前位的竿转为"副竿持久化"：快照写 KV（fishing-rod:<uid>:<gear>），
+	// 不再写 fishing_state 表，既不会覆盖当前竿存档，重启后也能恢复回副竿表。
+	if cur != nil {
+		cur.persist.Lock()
+		cur.persist.server = s
+		cur.persist.uid = uid
+		cur.persist.side = true
+		cur.persist.gear = curGear
+		cur.persist.lastSnapshot = ""
+		cur.persist.Unlock()
+		cur.mu.Lock()
+		cur.ActiveRod = false
+		cur.mu.Unlock()
+	}
+	if next == nil {
+		next = s.newFishState(uid)
+		next.persist.Lock()
+		next.persist.server = s
+		next.persist.uid = uid
+		next.persist.side = false
+		next.persist.gear = ""
+		next.persist.lastSnapshot = ""
+		next.persist.Unlock()
+		next.mu.Lock()
+		// newFishState 会从数据库恢复存档；若存档属于别的竿，只沿用场地类通用项。
+		if next.GearGuid != gear {
+			if cur != nil {
+				cur.mu.Lock()
+				next.Loc, next.Spot, next.DepthCM = cur.Loc, cur.Spot, cur.DepthCM
+				next.Bait, next.RigType = cur.Bait, cur.RigType
+				cur.mu.Unlock()
+			}
+			next.Pending = nil
+			next.castFish = nil
+			next.Hooked = false
+			next.Resolved = false
+			next.CastActive = false
+			next.InWater = false
+			next.NeedBite = false
+			next.PushSent = false
+			next.castGeneration = 0
+		}
+		next.GearGuid = gear
+		next.mu.Unlock()
+	}
+	next.mu.Lock()
+	hasState := next.Pending != nil || next.CastActive || next.castFish != nil
+	next.mu.Unlock()
+	if hasState {
+		next.persist.Lock()
+		next.persist.server = s
+		next.persist.uid = uid
+		next.persist.lastSnapshot = ""
+		next.persist.Unlock()
+	}
+	next.persist.Lock()
+	next.persist.side = false
+	next.persist.gear = ""
+	next.persist.server = s
+	next.persist.uid = uid
+	next.persist.lastSnapshot = ""
+	next.persist.Unlock()
+	next.mu.Lock()
+	next.ActiveRod = true
+	next.mu.Unlock()
+	s.fishStates[uid] = next
+	// 这根竿已经是当前竿，KV 里的副竿快照作废。
+	if s.DB != nil && gear != "" {
+		_ = s.DB.KVSet(s.dbCtx(), fmt.Sprintf(sideRodKeyPrefix, uid, gear), "")
+	}
+	{
+		gears := make([]string, 0, len(s.sideRods[uid]))
+		for g := range s.sideRods[uid] {
+			if g != "" {
+				gears = append(gears, g)
+			}
+		}
+		s.writeSideRodIndex(uid, gears)
+	}
+	s.fishMu.Unlock()
+	s.log.Info("多竿切换", "uid", uid, "from", shortGUID(curGear), "to", shortGUID(gear),
+		"副竿数", len(s.sideRods[uid]))
+	return next
+}
+
+// rodWithUnresolvedCatch 找出任意一根竿上还没处理完（未入护/未放生）的鱼。
+func (s *Server) rodWithUnresolvedCatch(uid int64) *FishState {
+	s.fishMu.Lock()
+	cands := make([]*FishState, 0, 1+len(s.sideRods[uid]))
+	if st := s.fishStates[uid]; st != nil {
+		cands = append(cands, st)
+	}
+	for _, st := range s.sideRods[uid] {
+		cands = append(cands, st)
+	}
+	s.fishMu.Unlock()
+	for _, st := range cands {
+		st.mu.Lock()
+		pending := completedCatchPending(st)
+		st.mu.Unlock()
+		if pending {
+			return st
+		}
+	}
+	return nil
+}
+
+// enablePersist 让这根竿成为可持久化的主竿（副竿保持纯内存）。
+func (st *FishState) enablePersist(s *Server, uid int64) {
+	if st == nil {
+		return
+	}
+	st.persist.Lock()
+	st.persist.server = s
+	st.persist.uid = uid
+	st.persist.lastSnapshot = ""
+	st.persist.Unlock()
+}
+
+// pendingStateByGUID 在所有竿（当前竿 + 副竿）里找持有这尾待处理鱼的竿状态。
+// 换竿后渔获跟着自己的竿进 sideRods，入护/放生必须能按 GUID 找回它。
+func (s *Server) pendingStateByGUID(uid int64, fishGUID string) *FishState {
+	s.fishMu.Lock()
+	cands := make([]*FishState, 0, 1+len(s.sideRods[uid]))
+	if st := s.fishStates[uid]; st != nil {
+		cands = append(cands, st)
+	}
+	for _, st := range s.sideRods[uid] {
+		cands = append(cands, st)
+	}
+	s.fishMu.Unlock()
+	for _, st := range cands {
+		if st == nil {
+			continue
+		}
+		st.mu.Lock()
+		p := st.Pending
+		match := p != nil && (fishGUID == "" || strings.EqualFold(p.FishGUID, fishGUID))
+		st.mu.Unlock()
+		if match {
+			return st
+		}
+	}
+	return nil
 }
 
 // ---- 钓组动画就位位族 ----
@@ -1450,7 +1711,7 @@ func (s *Session) Push14_14(f *RolledFish, hookGUID, gearGuid string) bool {
 	stamina := s.Srv.fishStaminaForProfile(f, profile)
 	initialStamina := s.Srv.fishInitialStaminaRatio()
 	force := s.Srv.fishFightPullFor(f, profile)
-	s.log.Info("14/14 发鱼",
+	s.log.Info("14/14 发鱼", "rod", shortGUID(gearGuid),
 		"鱼种", f.Species, "重量_g", f.WeightG, "体力池", stamina,
 		"初始体力", initialStamina, "拉力", force, "体型比例", profile.SizeRatio,
 		"冲刺倍率", profile.ForceScale, "耐力倍率", profile.StaminaScale)
@@ -1574,11 +1835,16 @@ func (s *Server) onBiteTimer(uid int64) {
 }
 
 func (s *Server) onBiteTimerTicket(uid int64, ticket fishingTimerTicket) {
+	s.onBiteTimerTicketFor(uid, nil, ticket)
+}
+
+// onBiteTimerTicketFor 只作用在传入的那根竿上（多竿时不能落到当前竿）。
+func (s *Server) onBiteTimerTicketFor(uid int64, rod *FishState, ticket fishingTimerTicket) {
 	sess := s.liveSessionByUID(uid)
 	if sess != nil {
 		sess.updateHappyHour(time.Now(), false)
 	}
-	st := s.fishingState(uid)
+	st := s.rodState(uid, rod)
 	st.mu.Lock()
 	if ticket.generation != st.castGeneration || ticket.sequence != st.biteTicket {
 		st.mu.Unlock()
@@ -1720,7 +1986,12 @@ func (s *Server) repushPending14_14(uid int64, expectedFishGUID ...string) {
 }
 
 func (s *Server) repushPendingTicket(uid int64, ticket fishingTimerTicket, fish *RolledFish) {
-	st := s.fishingState(uid)
+	s.repushPendingTicketFor(uid, nil, ticket, fish)
+}
+
+// repushPendingTicketFor 只作用于指定的那根竿。
+func (s *Server) repushPendingTicketFor(uid int64, rod *FishState, ticket fishingTimerTicket, fish *RolledFish) {
+	st := s.rodState(uid, rod)
 	sess := s.liveSessionByUID(uid)
 	st.mu.Lock()
 	if ticket.generation != st.castGeneration || ticket.sequence != st.pendingTicket || st.Pending != fish {

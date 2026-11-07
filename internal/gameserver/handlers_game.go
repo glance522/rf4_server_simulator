@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"rf4server/internal/proto"
@@ -762,7 +763,14 @@ func hCastPrepare(ctx *Ctx) ([]byte, bool) {
 	if len(guids) > 0 {
 		gear = guids[0]
 	}
-	st := srv.stateFor(ctx.Sess.Userid)
+	srv.log.Debug("[抛竿准备] 14/1", "guids", shortGUIDList(guids), "use", shortGUID(gear))
+	// 多竿：任意一根竿上还有没处理的鱼就先拦下，避免新一竿顶掉待处理渔获。
+	// 守门放在切竿之前：被拦下的抛竿不改写当前竿，行为与单竿一致。
+	if other := srv.rodWithUnresolvedCatch(ctx.Sess.Userid); other != nil {
+		srv.pendingCatchAllowsCast(ctx, other)
+		return nil, true
+	}
+	st := srv.swapActiveRod(ctx.Sess.Userid, gear)
 	if !srv.pendingCatchAllowsCast(ctx, st) {
 		return nil, true
 	}
@@ -862,7 +870,12 @@ func hCast(ctx *Ctx) ([]byte, bool) {
 	if len(guids) > 0 {
 		gear = guids[len(guids)-1]
 	}
-	st := srv.stateFor(ctx.Sess.Userid)
+	srv.log.Debug("[抛竿] 14/2", "guids", shortGUIDList(guids), "use", shortGUID(gear))
+	if other := srv.rodWithUnresolvedCatch(ctx.Sess.Userid); other != nil {
+		srv.pendingCatchAllowsCast(ctx, other)
+		return nil, true
+	}
+	st := srv.swapActiveRod(ctx.Sess.Userid, gear)
 	if !srv.pendingCatchAllowsCast(ctx, st) {
 		return nil, true
 	}
@@ -1203,6 +1216,7 @@ func hFishingPull(ctx *Ctx) ([]byte, bool) {
 }
 
 func hFishingHooked(ctx *Ctx) ([]byte, bool) {
+	switchRodByArgs(ctx)
 	srv := ctx.Sess.Srv
 	st := srv.stateFor(ctx.Sess.Userid)
 	st.mu.Lock()
@@ -1248,6 +1262,7 @@ func hFishingHooked(ctx *Ctx) ([]byte, bool) {
 }
 
 func hFishingLeft(ctx *Ctx) ([]byte, bool) {
+	switchRodByArgs(ctx)
 	// 14/12 的 f0 是客户端鱼实体状态变化：
 	//   f0=3/5：客户端因钓组状态拒收鱼实体，保留当前鱼并延迟重推；
 	//   f0=6：鱼实体已经进入当前钓组，等待玩家刺鱼；不能重推或清 Hooked，
@@ -1356,6 +1371,7 @@ func hFishingLoad(ctx *Ctx) ([]byte, bool) {
 // hFishingEnd 处理 14/4 收竿结算。
 // 结算由 progress_ops.go 的 fishingEndSettle 完成，包括经验、Premium 加成和等级更新。
 func hFishingEnd(ctx *Ctx) ([]byte, bool) {
+	switchRodByArgs(ctx)
 	// 收竿：钓组离水，清掉“在水中/挂起”状态。
 	st := ctx.Sess.Srv.stateFor(ctx.Sess.Userid)
 	st.mu.Lock()
@@ -1648,3 +1664,22 @@ func (s *Server) grantPremiumBundle(ctx context.Context, c *Ctx, uid int64, plac
 }
 
 var _ = context.Background
+
+// switchRodByArgs 用请求里第一个 GUID 把对应鱼竿切成当前竿。
+// 14/4 收竿、14/11 刺中、14/12 鱼状态的第一项都是钓组/竿的 GUID。
+func switchRodByArgs(ctx *Ctx) {
+	guids := deepGUIDs(ctx.Tree)
+	if len(guids) == 0 {
+		return
+	}
+	ctx.Sess.Srv.swapActiveRod(ctx.Sess.Userid, guids[0])
+}
+
+// shortGUIDList 把 GUID 列表缩成前 8 位，便于日志阅读。
+func shortGUIDList(guids []string) string {
+	out := make([]string, 0, len(guids))
+	for _, g := range guids {
+		out = append(out, shortGUID(g))
+	}
+	return strings.Join(out, ",")
+}

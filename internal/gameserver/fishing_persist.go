@@ -1,7 +1,9 @@
-package gameserver
+﻿package gameserver
 
 import (
 	"encoding/json"
+	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -24,6 +26,10 @@ type fishPersistMeta struct {
 	sessionID        uint64 // 仅进程内：检测重连/会话接管
 	recoverPending   bool   // 仅进程内：重连后重推同一尾 pending，不重新 roll
 	recoverCompleted bool   // 仅登录恢复时自动入护，不改变在线收鱼选择
+	// side 表示这是"副竿"状态：快照写到 KV（fishing-rod:<uid>:<gear>），
+	// 不写 fishing_state 表，避免副竿空快照覆盖当前竿存档。
+	side bool
+	gear string // 副竿的竿 GUID，作为 KV 键的一部分
 }
 
 func (m *fishStateMutex) Unlock() {
@@ -40,8 +46,15 @@ func (m *fishStateMutex) Unlock() {
 	m.Mutex.Unlock()
 
 	if !same && err == nil && meta.server != nil && meta.server.DB != nil {
-		if saveErr := meta.server.DB.SaveFishingState(meta.server.dbCtx(), snapshot); saveErr != nil {
-			meta.server.log.Warn("钓鱼状态持久化失败", "uid", meta.uid, "err", saveErr)
+		var saveErr error
+		if meta.side && meta.gear != "" {
+			// 副竿：写自己的 KV 快照，不碰当前竿的存档行。
+			saveErr = meta.server.saveSideRodSnapshot(meta.uid, meta.gear, string(raw))
+		} else {
+			saveErr = meta.server.DB.SaveFishingState(meta.server.dbCtx(), snapshot)
+		}
+		if saveErr != nil {
+			meta.server.log.Warn("钓鱼状态持久化失败", "uid", meta.uid, "side", meta.side, "err", saveErr)
 		} else {
 			meta.lastSnapshot = string(raw)
 		}
@@ -248,4 +261,84 @@ func (s *Server) resumeFishingState(st *FishState) {
 	}
 	s.armBiteTimerLocked(st.persist.uid, st, due)
 	st.mu.Unlock()
+}
+
+// ---- 副竿持久化（多竿同时作钓）----
+//
+// 当前竿写 fishing_state 表（上游行为不变）；副竿写 KV：
+//   fishing-rod:<uid>:<gear>     单根副竿的状态快照（JSON）
+//   fishing-rods-index:<uid>     该玩家所有副竿的 gear 列表（JSON 数组）
+//
+// 这样重启/重连后，newFishState 能把副竿连同 Pending、CastActive、
+// CastTs、BiteAt 一起恢复，并按原来的咬钩时刻重排定时器。
+
+const (
+	sideRodKeyPrefix  = "fishing-rod:%d:%s"
+	sideRodIndexKey   = "fishing-rods-index:%d"
+)
+
+func (s *Server) saveSideRodSnapshot(uid int64, gear, raw string) error {
+	if s == nil || s.DB == nil || uid == 0 || gear == "" {
+		return nil
+	}
+	return s.DB.KVSet(s.dbCtx(), fmt.Sprintf(sideRodKeyPrefix, uid, gear), raw)
+}
+
+// writeSideRodIndex 写入该玩家副竿 gear 列表。
+// gears 由调用方在自己持锁的临界区里算好传进来，函数本身不再取任何锁。
+func (s *Server) writeSideRodIndex(uid int64, gears []string) {
+	if s == nil || s.DB == nil || uid == 0 {
+		return
+	}
+	slices.Sort(gears)
+	raw, err := json.Marshal(gears)
+	if err != nil {
+		return
+	}
+	if err := s.DB.KVSet(s.dbCtx(), fmt.Sprintf(sideRodIndexKey, uid), string(raw)); err != nil {
+		s.log.Warn("副竿索引写入失败", "uid", uid, "err", err)
+	}
+}
+
+// loadSideRodStates 按索引把副竿状态读回内存（只读 DB，不碰 s.sideRods）。
+// 调用方负责在持有 s.fishMu 的临界区里把返回值合并进 sideRods。
+func (s *Server) loadSideRodStates(uid int64) []*FishState {
+	if s == nil || s.DB == nil || uid == 0 {
+		return nil
+	}
+	out := make([]*FishState, 0, 4)
+	raw, ok, err := s.DB.KVGet(s.dbCtx(), fmt.Sprintf(sideRodIndexKey, uid))
+	if err != nil || !ok || raw == "" {
+		return out
+	}
+	var gears []string
+	if err := json.Unmarshal([]byte(raw), &gears); err != nil {
+		return out
+	}
+	for _, gear := range gears {
+		if gear == "" {
+			continue
+		}
+		snapRaw, found, err := s.DB.KVGet(s.dbCtx(), fmt.Sprintf(sideRodKeyPrefix, uid, gear))
+		if err != nil || !found || snapRaw == "" {
+			continue
+		}
+		var saved store.FishingState
+		if err := json.Unmarshal([]byte(snapRaw), &saved); err != nil {
+			continue
+		}
+		st := &FishState{Loc: "loc1_02", Spot: 573, Bait: "worm_01", Bonus: fishingSkillBonus{BiteSpeed: 1}}
+		st.mu.state = st
+		applyPersistedFishingState(st, &saved)
+		st.GearGuid = gear
+		st.ActiveRod = false
+		st.persist.server = s
+		st.persist.uid = uid
+		st.persist.side = true
+		st.persist.gear = gear
+		st.persist.lastSnapshot = snapRaw
+		st.persist.recoverPending = saved.Pending != nil
+		out = append(out, st)
+	}
+	return out
 }

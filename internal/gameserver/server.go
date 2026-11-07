@@ -54,6 +54,11 @@ type Server struct {
 
 	// 钓鱼/业务状态
 	fishStates             map[int64]*FishState
+	// sideRods 保存"当前没在观察"的其它鱼竿状态（多竿同时等口用）。
+	// 每根竿有自己的 FishState 与咬钩定时器，切竿时与 fishStates 交换。
+	sideRods         map[int64]map[string]*FishState
+	// sideRodsHydrated 记录该玩家的副竿是否已从 DB 读回，避免重复读。
+	sideRodsHydrated map[int64]bool
 	fishMu                 sync.Mutex
 	levelMap               map[int64]string
 	levelMu                sync.Mutex
@@ -99,6 +104,8 @@ func NewServer(cfg config.Game, log *slog.Logger, obs *metrics.Server) *Server {
 		byToken:    map[string]*Session{},
 		callSeq:    map[string]uint64{},
 		fishStates: map[int64]*FishState{},
+		sideRods:         map[int64]map[string]*FishState{},
+		sideRodsHydrated: map[int64]bool{},
 		levelMap:   map[int64]string{},
 	}
 	s.dispatch = NewDispatch(s)
