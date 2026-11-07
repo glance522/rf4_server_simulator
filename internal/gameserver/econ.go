@@ -318,6 +318,10 @@ func (s *Server) fishingKeep(ctx *Ctx) ([]byte, bool) {
 		if err2 != nil {
 			return nil, false
 		}
+		// 入护后 catch_log 才写入本次鱼获，诱饵广度类成就在这一刻判定。
+		s.evaluateAchievements(ctx, achievementEvent{
+			Kind: evFishKept, DistinctBaits: s.distinctCatchBaits(cctx, uid),
+		})
 		return body, true
 	}
 	st.mu.Unlock()
@@ -431,6 +435,9 @@ func (s *Server) fishingRelease(ctx *Ctx) ([]byte, bool) {
 			}
 		}
 		s.notifyFishReleased(ctx.Sess, pending)
+		s.evaluateAchievements(ctx, achievementEvent{
+			Kind: evFishReleased, Grade: pending.Grade,
+		})
 	}
 	// 响应 807：{null, null, 307, null, null, null}
 	profileTree, err := s.BuildProfile307W(ctx.Sess.pushCtx(), uid, worldTotalGameMin(time.Now()))

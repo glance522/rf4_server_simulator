@@ -37,5 +37,8 @@ tools/*
 !tools/*.ps1
 !tools/*.py
 !tools/genwire/
+
+# WorkBuddy 本地会话数据与备份（含 exe 备份），不入库
+/.workbuddy/
 # 版本更新检测的本地状态
 /update_state.json

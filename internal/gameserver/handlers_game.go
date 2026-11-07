@@ -983,6 +983,8 @@ func hCast(ctx *Ctx) ([]byte, bool) {
 	if err != nil {
 		return nil, false
 	}
+	// 抛投事件交给成就规则判断一次；2/8 弹窗排在 800 应答之后。
+	srv.evaluateAchievements(ctx, achievementEvent{Kind: evCast, DistanceM: requestedM})
 	return body, true
 }
 

@@ -195,6 +195,7 @@ func (s *Server) tryBaitDig(ctx *Ctx) ([]byte, bool) {
 		ctx.Sess.Push2_4SkillTree("挖饵 " + baitKey)
 		ctx.Sess.Push(4, 22, proto.Args(proto.S("61"), tree))
 	})
+	s.evaluateAchievements(ctx, achievementEvent{Kind: evBaitDug, BaitKey: baitKey})
 	return body, true
 }
 
