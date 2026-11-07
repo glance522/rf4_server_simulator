@@ -23,6 +23,7 @@ func hAchievements305(ctx *Ctx) ([]byte, bool) {
 		ctx.Log.Error("3/3 成就编码失败", "err", err)
 		return encodeArgsCode(ctx, "114")
 	}
+	// 纯查询：不判定、不写库、不推送。成就解锁与弹窗只发生在玩法事件后。
 	return body, true
 }
 

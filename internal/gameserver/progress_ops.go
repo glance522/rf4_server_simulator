@@ -336,6 +336,7 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 	hooked := st.Hooked
 	rigType := st.RigType
 	gearGUID := st.GearGuid
+	bait := st.Bait
 	st.mu.Unlock()
 
 	cctx := ctx.Sess.pushCtx()
@@ -430,6 +431,12 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 	}
 	if hasFish && !res.replayed {
 		ctx.Sess.Push2_1()
+	}
+	// 上鱼事件交给成就规则判断一次；2/8 弹窗排在 801 应答之后。
+	if hasFish {
+		s.evaluateAchievements(ctx, achievementEvent{
+			Kind: evFishLanded, WeightG: pending.WeightG, RigType: rigType, Bait: bait,
+		})
 	}
 	if hasFish && res.droppedCardGUID != "" {
 		if card, err := s.DB.GetItemByGUID(cctx, res.droppedCardGUID); err == nil && card.UID == uid && card.Container == tradingCardContainer {

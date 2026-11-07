@@ -652,10 +652,14 @@ func TestBaitRefillsWhenFishIsLanded(t *testing.T) {
 	if !ok || len(body) == 0 {
 		t.Fatalf("14/4 未处理: ok=%v bytes=%d", ok, len(body))
 	}
-	if len(ctx14.afterResponse) != 1 {
+	// 上鱼还会注册成就解锁推送（2/8），补饵回调不再固定是第一个；
+	// 逐个执行应答后回调，两者互不干扰。
+	if len(ctx14.afterResponse) < 1 {
 		t.Fatalf("补饵推送应在 801 回包后执行，回调数 = %d", len(ctx14.afterResponse))
 	}
-	ctx14.afterResponse[0]()
+	for _, fn := range ctx14.afterResponse {
+		fn()
+	}
 	if got := len(s.currentBaits(ctx, rod)); got != 1 {
 		t.Fatalf("收竿后钩上应补挂 1 份同种饵，实际 %d", got)
 	}

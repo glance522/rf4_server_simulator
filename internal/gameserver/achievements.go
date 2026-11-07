@@ -18,6 +18,9 @@ func unixToFiletime100ns(ts float64) uint64 {
 	return uint64(int64(ts*10_000_000 + 116444736000000000))
 }
 
+// buildAchievements305 返回 3/3 响应体，是**纯查询**：既不判定成就，
+// 也不推送弹窗、不写状态。成就状态只在玩法事件发生时由
+// evaluateAchievements 更新，打开面板永远不会改变任何东西。
 func (s *Server) buildAchievements305(ctx context.Context, uid int64) (*proto.Value, error) {
 	defs, err := s.DB.AchievementDefinitions(ctx)
 	if err != nil {
@@ -27,6 +30,7 @@ func (s *Server) buildAchievements305(ctx context.Context, uid int64) (*proto.Va
 	if err != nil {
 		return nil, err
 	}
+	// 只读已持久化的状态，不在这里做任何补齐。
 	items := make([]*proto.Value, 0, len(defs))
 	for _, achID := range defs {
 		st := states[achID]

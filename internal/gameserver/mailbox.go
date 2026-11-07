@@ -698,12 +698,14 @@ type AdminCommand struct {
 	GUIDs        []string            `json:"guids,omitempty"`
 	Keepnet      *store.KeepnetEntry `json:"keepnet,omitempty"`
 	KeepnetGUIDs []string            `json:"keepnet_guids,omitempty"`
-	Species      string              `json:"species,omitempty"`  // arm_fish：鱼种（空=默认池随机）
-	WeightG      int64               `json:"weight_g,omitempty"` // arm_fish：克重（空=默认池范围内）
-	Grade        int64               `json:"grade,omitempty"`    // 兼容旧指令；实际档位按结算尺和重量计算。
-	Channel      int64               `json:"channel,omitempty"`  // fish_tv_test：聊天推送通道 24..31
-	Kind         int64               `json:"kind,omitempty"`     // fish_tv_test：401.f0 消息类型；负值为参数位探测
-	KVShape      int64               `json:"kv_shape,omitempty"` // fish_tv_test：401.f4 模板 KV 形状或外层参数探测编号
+	Species      string              `json:"species,omitempty"`     // arm_fish：鱼种（空=默认池随机）
+	WeightG      int64               `json:"weight_g,omitempty"`    // arm_fish：克重（空=默认池范围内）
+	Grade        int64               `json:"grade,omitempty"`       // 兼容旧指令；实际档位按结算尺和重量计算。
+	Channel      int64               `json:"channel,omitempty"`     // fish_tv_test：聊天推送通道 24..31
+	Kind         int64               `json:"kind,omitempty"`        // fish_tv_test：401.f0 消息类型；负值为参数位探测
+	KVShape      int64               `json:"kv_shape,omitempty"`    // fish_tv_test：401.f4 模板 KV 形状或外层参数探测编号
+	AchID        int64               `json:"ach_id,omitempty"`      // achievement_push_test：成就 id
+	NotifyType   int64               `json:"notify_type,omitempty"` // achievement_push_test：2/9 的 306.f0 取值
 }
 
 // StartAdminSubscriber 轮询共享 SQLite 队列，每 2 秒处理一批管理指令。
@@ -897,6 +899,36 @@ func (s *Server) execAdminCmd(cmd *AdminCommand) {
 		}
 		s.log.Info("管理指令：鱼汛通道测试", "uid", cmd.UID,
 			"channel", cmd.Channel, "kind", cmd.Kind, "kv_shape", cmd.KVShape, "targets", len(targets))
+	case "achievement_push_test":
+		// 成就解锁弹窗探测：向指定玩家（0=全部在线）发一种候选推送。
+		variant := cmd.Text
+		if variant == "" {
+			variant = "3_3"
+		}
+		achID := cmd.AchID
+		if achID == 0 {
+			achID = 101
+		}
+		var targets []*Session
+		if cmd.UID != 0 {
+			targets = s.sessionsForUID(cmd.UID)
+		} else {
+			s.mu.Lock()
+			for _, sess := range s.sessions {
+				if sess != nil && !sess.Closed() {
+					targets = append(targets, sess)
+				}
+			}
+			s.mu.Unlock()
+		}
+		sent := 0
+		for _, sess := range targets {
+			if sess.pushAchievementProbe(variant, achID, cmd.NotifyType) {
+				sent++
+			}
+		}
+		s.log.Info("管理指令：成就推送探针", "uid", cmd.UID, "variant", variant,
+			"ach_id", achID, "notify_type", cmd.NotifyType, "targets", len(targets), "sent", sent)
 	case "refresh_player":
 		for _, sess := range s.sessionsForUID(cmd.UID) {
 			sess.Push2_1()
