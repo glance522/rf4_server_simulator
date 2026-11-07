@@ -16,6 +16,21 @@ func gbDeposit(t *testing.T, s *Server, uid int64, itemID string, portions float
 	s.groundbaitDeposit(t.Context(), uid, "gb-test-loc", 100, 100, true, 7, itemID, portions, channel, txn, "")
 }
 
+func gbRecordRecipe(t *testing.T, s *Server, guid string, mats []string) {
+	t.Helper()
+	tx, err := s.DB.SQL.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := groundbaitRecordInstanceMaterialsTx(t.Context(), tx, guid, mats); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func gbSpotState(t *testing.T, s *Server, uid int64) groundbaitSpotState {
 	t.Helper()
 	return s.groundbaitSpot(t.Context(), uid, "gb-test-loc",
@@ -64,7 +79,7 @@ func TestGroundbaitLedgerPortionTimeAndOverdose(t *testing.T) {
 		t.Fatalf("10 份窝料应得 N=10，实得 %.3f", got)
 	}
 	if got := st.hoursLeft; got < 5.99 || got > 6.01 {
-		t.Fatalf("10 份窝料应得 T=6 游戏小时（少爷指示：10 份=6 小时），实得 %.3f", got)
+		t.Fatalf("10 份窝料应得 T=6 游戏小时（产品口径：10 份=6 小时），实得 %.3f", got)
 	}
 	if p := s.groundbaitOverdoseP(st.units); p != 1 {
 		t.Fatalf("15 份以内不该死窝，实得 P=%.2f", p)
@@ -221,12 +236,18 @@ func TestGroundbaitCatapultThrowDepositsSpot(t *testing.T) {
 		t.Fatalf("创建弹弓失败: %v", err)
 	}
 	// 弹药格挂的是窝料（cat46），扣的那一份就是投出去的那一份。
-	stack, err := s.CreateItem(ctx, uid, "feedcompleted", "rig", 1)
+	// 必须走真实的装填拆实例路径，不能把来源堆 GUID 直接塞进弹弓。
+	stack, err := s.CreateItem(ctx, uid, "feedcompleted", "backpack", 1)
 	if err != nil {
 		t.Fatalf("创建窝料失败: %v", err)
 	}
 	s.setStackCount(ctx, stack, 5)
-	s.setHanditemLoadedRef(ctx, hand.GUID, stack.GUID)
+	gbRecordRecipe(t, s, stack.GUID, []string{"mix_groundpeas", "feedadds_corn", "aroma_vanila"})
+	loaded, _ := s.materializeHanditemChild(ctx, uid, hand.GUID, stack.GUID)
+	if got := s.groundbaitInstanceMaterials(ctx, loaded); len(got) != 3 {
+		t.Fatalf("装填子实例没有继承窝料配方: %v", got)
+	}
+	s.setHanditemLoadedRef(ctx, hand.GUID, loaded)
 
 	st := s.stateFor(uid)
 	st.mu.Lock()
@@ -245,12 +266,63 @@ func TestGroundbaitCatapultThrowDepositsSpot(t *testing.T) {
 	if gate.units < 0.99 || gate.units > 1.01 {
 		t.Fatalf("弹弓一弹应投进 1 份窝料，实得 %.3f", gate.units)
 	}
-	var channel, itemID string
-	if err := s.DB.SQL.QueryRowContext(ctx, `SELECT channel,item_id FROM groundbait_deposit WHERE uid=?`, uid).Scan(&channel, &itemID); err != nil {
+	var channel, itemID, matsJSON string
+	if err := s.DB.SQL.QueryRowContext(ctx, `SELECT channel,item_id,materials_json FROM groundbait_deposit WHERE uid=?`, uid).Scan(&channel, &itemID, &matsJSON); err != nil {
 		t.Fatalf("弹弓投放没落账: %v", err)
 	}
 	if channel != "catapult" || itemID != "feedcompleted" {
 		t.Fatalf("投放通道/物品不符: %s %s", channel, itemID)
+	}
+	mats := groundbaitDecodeMaterials(matsJSON)
+	if len(mats) != 3 || mats[0] != "mix_groundpeas" || mats[1] != "feedadds_corn" || mats[2] != "aroma_vanila" {
+		t.Fatalf("弹弓窝账丢失实际用料: %v", mats)
+	}
+}
+
+// 食笼/PVA 挂饵会拆分出新的计件实例；配方必须跟着子实例走。
+func TestGroundbaitRecipeFollowsSplitMountableChild(t *testing.T) {
+	s, _ := newRigTestServer(t)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	stack, err := s.CreateItem(ctx, uid, "feedcompleted", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.setStackCount(ctx, stack, 5)
+	gbRecordRecipe(t, s, stack.GUID, []string{"mix_groundpeas", "feedadds_corn"})
+	parent, err := s.CreateItem(ctx, uid, "wh_pc_gb", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, _ := s.splitMountableChild(ctx, uid, parent.GUID, stack.GUID, 2)
+	if child == stack.GUID {
+		t.Fatal("测试前提失败：没有拆出新实例")
+	}
+	got := s.groundbaitInstanceMaterials(ctx, child)
+	if len(got) != 2 || got[0] != "mix_groundpeas" || got[1] != "feedadds_corn" {
+		t.Fatalf("拆分子实例没有继承窝料配方: %v", got)
+	}
+}
+
+// keepalive 每拍推进在线窝料钟，避免超过 30 秒无人判鱼时整段在线时间被丢掉。
+func TestGroundbaitKeepaliveAdvancesOnlineClock(t *testing.T) {
+	s, _ := newRigTestServer(t)
+	ctx := t.Context()
+	setWeatherTestTunable(t, s, "groundbait_enabled", "1")
+	const uid = int64(1000001)
+	oldTS := float64(time.Now().Add(-20 * time.Second).Unix())
+	if _, err := s.DB.SQL.ExecContext(ctx, `INSERT INTO groundbait_clock(uid,real_ts,game_hours,updated_ts)
+		VALUES(?,?,?,?)`, uid, oldTS, 1.0, oldTS); err != nil {
+		t.Fatal(err)
+	}
+	sess := newSession(s, 1, "groundbait-clock-test", uid, nil)
+	sess.advanceGroundbaitClock()
+	var acc float64
+	if err := s.DB.SQL.QueryRowContext(ctx, `SELECT game_hours FROM groundbait_clock WHERE uid=?`, uid).Scan(&acc); err != nil {
+		t.Fatal(err)
+	}
+	if acc < 1.10 || acc > 1.16 {
+		t.Fatalf("在线 20 秒应推进约 0.133 游戏小时，实得 %.3f", acc)
 	}
 }
 
@@ -385,7 +457,7 @@ func TestGroundbaitSpodDeductsOnSplashDown(t *testing.T) {
 
 // 先打窝、后抛竿的顺序实测过：弹弓与手抛只上报距离、不上报落点坐标，
 // 这种窝记在「落点未知」那一格。玩家抛竿后判鱼用的是浮标落点格子，两者不同格——
-// 这份窝必须按衰减系数继续生效（否则少爷「先用弹弓打窝再抛竿」等于白打），
+// 这份窝必须按衰减系数继续生效（否则实机「先用弹弓打窝再抛竿」等于白打），
 // 但抬升要低于同一份数、落点正好压在浮标格上的窝；衰减调 0 退回「只认同格」。
 func TestGroundbaitUnknownLandingStillWorks(t *testing.T) {
 	s, _ := newRigTestServer(t)
@@ -693,7 +765,7 @@ func TestGroundbaitThrowFallsBackToPlayerCell(t *testing.T) {
 }
 
 // TestGroundbaitHandThrowConsumesAndDeposits 手抛（12/1）必须真扣一份并记进窝账。
-// 实测少爷扔两发后背包数字减少，但库里 qty 一动不动：客户端只扣本地，
+// 实机实测扔两发后背包数字减少，但库里 qty 一动不动：客户端只扣本地，
 // 服务端不接就会在下次全量快照里把这两份补回来（幽灵窝料）。
 // 请求形态实测：args(物件实例 GUID, obj19)，f0=f1=投距（6.108 / 7.567 米），f3=钓点串。
 func TestGroundbaitHandThrowConsumesAndDeposits(t *testing.T) {

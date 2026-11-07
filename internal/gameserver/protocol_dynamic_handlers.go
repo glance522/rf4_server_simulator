@@ -74,13 +74,13 @@ func hDynamicHanditemThrow(ctx *Ctx) ([]byte, bool) {
 			break
 		}
 	}
-	// 弹弓抛饵前先把弹药格里的物品号取出来：投放账本要按它查窝料档案，
-	// 消耗完之后这个引用会被清掉，所以必须在扣料之前读。
-	baitItemID := ""
+	// 弹弓抛饵前先把弹药格里的物品实例取出来：窝账必须绑定真正被消耗的
+	// 子实例 GUID，不能用弹弓自己的 GUID。消耗完之后引用会被清掉，所以必须在扣料之前读。
+	baitItemID, baitGUID := "", ""
 	if handGUID != "" && handGUID != zeroGUID {
 		if loaded := srv.handitemLoadedGuid(ctx.Sess.pushCtx(), handGUID); loaded != "" && loaded != zeroGUID {
 			if row, rerr := srv.DB.GetItemByGUID(ctx.Sess.pushCtx(), loaded); rerr == nil && row != nil {
-				baitItemID = row.ItemID
+				baitItemID, baitGUID = row.ItemID, row.GUID
 			}
 		}
 	}
@@ -122,7 +122,7 @@ func hDynamicHanditemThrow(ctx *Ctx) ([]byte, bool) {
 				ctx.Log.Info("手持工具窝料落点", "src", gbSrc, "x", gbX, "z", gbZ,
 					"has_pos", gbHas, "dist", dist)
 				srv.groundbaitDeposit(ctx.Sess.pushCtx(), uid, gbLoc, gbX, gbZ, gbHas, gbSpot,
-					baitItemID, 1, "catapult", handitemThrowTxn(handGUID, ctx.Sess.ID, ctx.CallID), handGUID)
+					baitItemID, 1, "catapult", handitemThrowTxn(handGUID, ctx.Sess.ID, ctx.CallID), baitGUID)
 			}
 		}
 	}
@@ -848,7 +848,7 @@ func throwLandingIfOn(s *Server, land throwLanding) *throwLanding {
 
 // groundbaitThrowCell 决定这一份窝料记在哪一格，调用方必须持有 st.mu。
 //
-//  1. 已经有浮标落点：记在浮标那一格（少爷「先打窝后抛竿」实测走的就是这条）；
+//  1. 已经有浮标落点：记在浮标那一格（实机「先打窝后抛竿」实测走的就是这条）；
 //  2. 一竿都没抛过：记在玩家自己站的格子，坐标来自 3/9 每 5 秒的世界坐标上报，
 //     实测与 14/2 落点数值逐条吻合（loc10_12 x=362.76 z=236.92 = 3/9 f0/f2）；
 //  3. 开关 handitem_throw_land_cell 打开：改用「玩家坐标 + 出手方向 + 距离」算出的格子；

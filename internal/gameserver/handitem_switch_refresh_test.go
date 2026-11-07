@@ -79,7 +79,7 @@ func handitemCompCtx(t *testing.T, sess *Session, parentGUID, itemGUID string) *
 	}
 }
 
-// TestHanditemSwitchReAddsOldAmmoToBackpack 锁定少爷 2026-11-07 实测的问题：
+// TestHanditemSwitchReAddsOldAmmoToBackpack 锁定实机发现的换弹问题：
 // 弹药格里已有 A 时直接装 B，旧弹药 A 只作为 f1 更新回传时客户端不会动，
 // 弹药格里仍留着 A（看起来「切换无效」）。必须回包后 4/21 移除 + 4/22 重加。
 func TestHanditemSwitchReAddsOldAmmoToBackpack(t *testing.T) {
@@ -244,7 +244,7 @@ func TestHanditemThrowSelfcleanRemovesProjectileInstance(t *testing.T) {
 }
 
 // TestHanditemThrowKeepsProjectileWhenSelfcleanOff 锁定缺省行为不变：
-// 开关关着时抛出物不进 f5（少爷实测「饵能飞出去」依赖这个形状）。
+// 开关关着时抛出物不进 f5（实机实测「饵能飞出去」依赖这个形状）。
 func TestHanditemThrowKeepsProjectileWhenSelfcleanOff(t *testing.T) {
 	srv, _ := newRigTestServer(t)
 	ctx := t.Context()

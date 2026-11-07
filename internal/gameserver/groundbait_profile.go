@@ -1,6 +1,6 @@
 package gameserver
 
-// 窝料成分与逐鱼种食性亲和（设计稿 docs/groundbait-design.md 第 4 节）。
+// 窝料成分与逐鱼种食性亲和（spec specs/changes/groundbait-system/spec.md）。
 //
 // 分两步算，免得「配方」和「鱼口」两套口径互相漂移：
 //  1. 原料表 → 食性向量：按实际投的原料加权，再按食性族归一成百分比；
