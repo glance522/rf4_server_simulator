@@ -184,7 +184,9 @@ func TestBaitDigInventoryPushKeepsStackTotal(t *testing.T) {
 	hctx := &Ctx{Sess: newSession(srv, 1, "baitdig-push-test", uid, conn), Main: 9, Sub: 3,
 		Tree: proto.Args524(proto.Guid(tool.GUID)), DecodeOK: true, Log: logging.Discard()}
 	body, handled := hCraftMine2(hctx)
-	if !handled || len(body) == 0 || len(hctx.afterResponse) != 1 {
+	// 挖饵成功后除了背包推送，成就解锁也可能注册一个应答后回调；这里只要求
+	// 背包推送（第一个回调）存在，不断言回调总数。
+	if !handled || len(body) == 0 || len(hctx.afterResponse) < 1 {
 		t.Fatalf("digging did not register inventory push: handled=%t callbacks=%d", handled, len(hctx.afterResponse))
 	}
 	done := make(chan struct{})
