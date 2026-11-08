@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
 	"path/filepath"
 	"testing"
 	"time"
@@ -26,8 +25,7 @@ func newDrinkUseTestServer(t *testing.T, paths ...string) *Server {
 	if _, err := db.EnsureProfile(t.Context(), 1000001); err != nil {
 		t.Fatal(err)
 	}
-	for i, itemID := range []string{"tungus_vodka", "rd_red_vine", "ff_wheat_flour",
-		"carrot", "ab_tea_can", "big_coffee", "food_cacao"} {
+	for i, itemID := range []string{"tungus_vodka", "rd_red_vine", "cake_rf4"} {
 		if _, err := db.SQL.Exec(`INSERT INTO item_def(numeric_id,item_id,category,attrs_json)
 			VALUES(?,?,26,'{"ljnnpokapig":1}') ON CONFLICT(numeric_id) DO NOTHING`, 900000+i, itemID); err != nil {
 			t.Fatal(err)
@@ -106,7 +104,6 @@ func drinkUseTestCount(t *testing.T, s *Server, query string, want int) {
 }
 
 func TestDrinkUseAtomicQuantityAndF13(t *testing.T) {
-	t.Parallel()
 	for _, f13 := range []uint64{0, 7} {
 		t.Run(fmt.Sprint(f13), func(t *testing.T) {
 			s := newDrinkUseTestServer(t)
@@ -141,7 +138,6 @@ func TestDrinkUseAtomicQuantityAndF13(t *testing.T) {
 }
 
 func TestDrinkUseRejectsUnavailableInventory(t *testing.T) {
-	t.Parallel()
 	for _, scenario := range []string{"empty", "quantity-mismatch", "other-owner", "other-container", "other-storage", "wrong-class"} {
 		t.Run(scenario, func(t *testing.T) {
 			s := newDrinkUseTestServer(t)
@@ -184,7 +180,6 @@ func TestDrinkUseRejectsUnavailableInventory(t *testing.T) {
 }
 
 func TestDrinkUseReplayAfterExhaustionAndRestart(t *testing.T) {
-	t.Parallel()
 	path := filepath.Join(t.TempDir(), "restart.db")
 	s := newDrinkUseTestServer(t, path)
 	row := drinkUseTestItem(t, s, "tungus_vodka", 1, 0)
@@ -242,7 +237,6 @@ func TestDrinkUseReplayAfterExhaustionAndRestart(t *testing.T) {
 }
 
 func TestDrinkUseDifferentCallsRefreshSameCategory(t *testing.T) {
-	t.Parallel()
 	s := newDrinkUseTestServer(t)
 	row := drinkUseTestItem(t, s, "tungus_vodka", 3, 0)
 	ctx := drinkUseTestCtx(t, s, 20, row.GUID, 0)
@@ -255,6 +249,12 @@ func TestDrinkUseDifferentCallsRefreshSameCategory(t *testing.T) {
 		t.Fatal("same call did not replay")
 	}
 	drinkUseTestQty(t, s, row.GUID, 2, 0)
+	// 第二次饮酒前把食物条调低，避开“吃饱”拦截，单独验证刷新语义。
+	if _, err := s.DB.SQL.Exec(`INSERT INTO player_condition(uid, primary_value, secondary_value, updated_ts)
+		VALUES(1000001, 1.0, 0.5, 0)
+		ON CONFLICT(uid) DO UPDATE SET secondary_value=0.5`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.DB.SQL.Exec(`UPDATE drink_bonus_effect SET remaining_millis=1`); err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,6 @@ func TestDrinkUseDifferentCallsRefreshSameCategory(t *testing.T) {
 }
 
 func TestDrinkUseClosedSessionCannotConsumeOrRestartClock(t *testing.T) {
-	t.Parallel()
 	s := newDrinkUseTestServer(t)
 	row := drinkUseTestItem(t, s, "tungus_vodka", 3, 0)
 	first := drinkUseTestCtx(t, s, 25, row.GUID, 0)
@@ -301,7 +300,6 @@ func TestDrinkUseClosedSessionCannotConsumeOrRestartClock(t *testing.T) {
 }
 
 func TestDrinkUseRollsBackConsumptionEffectAndReceipt(t *testing.T) {
-	t.Parallel()
 	for _, stage := range []string{"effect", "receipt"} {
 		for _, qty := range []int64{1, 2} {
 			t.Run(fmt.Sprintf("%s/%d", stage, qty), func(t *testing.T) {
@@ -329,18 +327,17 @@ func TestDrinkUseRollsBackConsumptionEffectAndReceipt(t *testing.T) {
 }
 
 func TestDrinkUseLeavesOtherItemsAndMoveRouteUnchanged(t *testing.T) {
-	t.Parallel()
 	s := newDrinkUseTestServer(t)
-	// 面粉是烹饪材料，不在消耗品恢复白名单内，必须维持旧落回行为。
-	flour := drinkUseTestItem(t, s, "ff_wheat_flour", 4, 0)
-	ctx := drinkUseTestCtx(t, s, 40, flour.GUID, 0)
+	food := drinkUseTestItem(t, s, "cake_rf4", 4, 0)
+	ctx := drinkUseTestCtx(t, s, 40, food.GUID, 0)
 	if body, handled := s.useAlcoholDrink(ctx); handled || body != nil {
-		t.Fatal("non-whitelisted item must use existing handler")
+		t.Fatal("ordinary food must use existing handler")
 	}
 	if body, handled := hItemUse(ctx); !handled || len(body) == 0 {
 		t.Fatal("existing ordinary-food response changed")
 	}
-	drinkUseTestQty(t, s, flour.GUID, 4, 0)
+	// 普通食物由 useFoodConsumable 接管：使用一份后数量 -1。
+	drinkUseTestQty(t, s, food.GUID, 3, 0)
 	unknown := drinkUseTestCtx(t, s, 41, NewItemGUID(), 0)
 	if body, handled := s.useAlcoholDrink(unknown); handled || body != nil {
 		t.Fatal("unknown item must use existing handler")
@@ -362,7 +359,6 @@ func TestDrinkUseLeavesOtherItemsAndMoveRouteUnchanged(t *testing.T) {
 }
 
 func TestDrinkUseReceiptCleanup(t *testing.T) {
-	t.Parallel()
 	s := newDrinkUseTestServer(t)
 	if _, err := s.DB.SQL.Exec(`
 		INSERT INTO kv(k,v) VALUES
@@ -376,144 +372,4 @@ func TestDrinkUseReceiptCleanup(t *testing.T) {
 	drinkUseTestCount(t, s, `SELECT COUNT(*) FROM kv WHERE k='drink-use:old' OR k='drink-use:malformed'`, 0)
 	drinkUseTestCount(t, s, `SELECT COUNT(*) FROM kv WHERE k='drink-use:fresh'`, 1)
 	drinkUseTestCount(t, s, `SELECT COUNT(*) FROM kv WHERE k='unrelated'`, 1)
-}
-
-// TestConsumableRestoreClassification 消耗品恢复分类：三类热饮各归各位，
-// 食品进 food；烹饪材料、酒类（走经验规则）和未知物品不进白名单。
-func TestConsumableRestoreClassification(t *testing.T) {
-	t.Parallel()
-	for item, want := range map[string]string{
-		"big_coffee": "coffee", "thermos_coffee": "coffee", "brand_coffe": "coffee",
-		"ab_tea_can": "tea", "thermos_tea": "tea",
-		"food_cacao": "cocoa", "thermos_cacao": "cocoa",
-		"carrot": "food", "apples": "food", "cake_rf4": "food", "cf_squid": "food",
-	} {
-		if got, ok := consumableRestoreForItem(item); !ok || got != want {
-			t.Fatalf("%s 分类错误: got=%q ok=%v", item, got, ok)
-		}
-	}
-	for _, item := range []string{"ff_wheat_flour", "ff_sugar", "ff_ins_coffe", "ff_black_tea",
-		"kvas_bottle", "tungus_vodka", "barrel_honey", "unknown_item"} {
-		if _, ok := consumableRestoreForItem(item); ok {
-			t.Fatalf("%s 不应进消耗品恢复白名单", item)
-		}
-	}
-}
-
-// TestConsumableUseRestoresCondition 食品使用：扣 1 份、饱食度恢复、
-// 精力/舒适度不动、使用后补推 2/2（变更推送 + 2/2 共两个回调）。
-func TestConsumableUseRestoresCondition(t *testing.T) {
-	t.Parallel()
-	s := newDrinkUseTestServer(t)
-	ctx0 := t.Context()
-	const uid = int64(1000001)
-	if err := s.DB.UpsertPlayerCondition(ctx0, store.PlayerCondition{
-		UID: uid, Primary: 0.50, Secondary: 0.30, Comfort: 0.10,
-		UpdatedTS: float64(time.Now().Unix()) + 3600,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	carrot := drinkUseTestItem(t, s, "carrot", 2, 0)
-	ctx := drinkUseTestCtx(t, s, 50, carrot.GUID, 0)
-	body, handled := s.useAlcoholDrink(ctx)
-	if !handled || len(body) == 0 {
-		t.Fatalf("食品 4/8 应被消耗通道处理: handled=%v body=%d", handled, len(body))
-	}
-	drinkUseTestQty(t, s, carrot.GUID, 1, 0)
-	row, err := s.DB.EnsurePlayerCondition(ctx0, uid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if math.Abs(row.Secondary-0.55) > 1e-9 {
-		t.Fatalf("食品应恢复饱食度 0.30+0.25: %v", row.Secondary)
-	}
-	if row.Primary != 0.50 || row.Comfort != 0.10 {
-		t.Fatalf("食品不应改动精力/舒适度: %+v", row)
-	}
-	if len(ctx.afterResponse) != 2 {
-		t.Fatalf("食品使用后应补推 2/2: pushes=%d", len(ctx.afterResponse))
-	}
-}
-
-// TestDrinkRestoreCategories 三类热饮各回各条，互不串扰。
-func TestDrinkRestoreCategories(t *testing.T) {
-	t.Parallel()
-	s := newDrinkUseTestServer(t)
-	ctx0 := t.Context()
-	const uid = int64(1000001)
-	reset := func() {
-		if err := s.DB.UpsertPlayerCondition(ctx0, store.PlayerCondition{
-			UID: uid, Primary: 0.50, Secondary: 0.30, Comfort: 0.10,
-			UpdatedTS: float64(time.Now().Unix()) + 3600,
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// 茶→舒适度。
-	reset()
-	tea := drinkUseTestItem(t, s, "ab_tea_can", 1, 0)
-	if body, handled := s.useAlcoholDrink(drinkUseTestCtx(t, s, 51, tea.GUID, 0)); !handled || len(body) == 0 {
-		t.Fatal("茶应被消耗通道处理")
-	}
-	row, err := s.DB.EnsurePlayerCondition(ctx0, uid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if math.Abs(row.Comfort-0.40) > 1e-9 {
-		t.Fatalf("茶应恢复舒适度 0.10+0.30: %v", row.Comfort)
-	}
-	if row.Secondary != 0.30 || row.Primary != 0.50 {
-		t.Fatalf("茶不应动饱食/精力: %+v", row)
-	}
-	// 咖啡→精力。
-	reset()
-	coffee := drinkUseTestItem(t, s, "big_coffee", 1, 0)
-	if body, handled := s.useAlcoholDrink(drinkUseTestCtx(t, s, 52, coffee.GUID, 0)); !handled || len(body) == 0 {
-		t.Fatal("咖啡应被消耗通道处理")
-	}
-	row, err = s.DB.EnsurePlayerCondition(ctx0, uid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if math.Abs(row.Primary-0.65) > 1e-9 {
-		t.Fatalf("咖啡应恢复精力 0.50+0.15: %v", row.Primary)
-	}
-	if row.Secondary != 0.30 || row.Comfort != 0.10 {
-		t.Fatalf("咖啡不应动饱食/舒适度: %+v", row)
-	}
-	// 可可→饱食 + 少量精力。
-	reset()
-	cocoa := drinkUseTestItem(t, s, "food_cacao", 1, 0)
-	if body, handled := s.useAlcoholDrink(drinkUseTestCtx(t, s, 53, cocoa.GUID, 0)); !handled || len(body) == 0 {
-		t.Fatal("可可应被消耗通道处理")
-	}
-	row, err = s.DB.EnsurePlayerCondition(ctx0, uid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if math.Abs(row.Secondary-0.65) > 1e-9 || math.Abs(row.Primary-0.55) > 1e-9 {
-		t.Fatalf("可可应恢复饱食 0.30+0.35 / 精力 0.50+0.05: %+v", row)
-	}
-	if row.Comfort != 0.10 {
-		t.Fatalf("可可不应动舒适度: %+v", row)
-	}
-}
-
-// TestConsumableUseGateOffFallsThrough 总开关关闭：食品维持旧行为（不扣不恢复）。
-func TestConsumableUseGateOffFallsThrough(t *testing.T) {
-	t.Parallel()
-	s := newDrinkUseTestServer(t)
-	if _, err := s.DB.SQL.Exec(`INSERT INTO tunables(key,value) VALUES('player_condition_enabled','0')`); err != nil {
-		t.Fatal(err)
-	}
-	// tunableF 有 30 秒缓存，服务器装配期间可能已预热；强制下次重读。
-	s.tunMu.Lock()
-	s.tunCache, s.tunAt = nil, time.Time{}
-	s.tunMu.Unlock()
-	carrot := drinkUseTestItem(t, s, "carrot", 2, 0)
-	ctx := drinkUseTestCtx(t, s, 54, carrot.GUID, 0)
-	if body, handled := s.useAlcoholDrink(ctx); handled || body != nil {
-		t.Fatal("开关关闭时食品应落回通用 handler")
-	}
-	drinkUseTestQty(t, s, carrot.GUID, 2, 0)
 }

@@ -6,52 +6,30 @@ import (
 	"time"
 )
 
-// conditionDBTX 同时被 *sql.DB 与 *sql.Tx 满足，让状态条读写可以在
-// 经济事务内复用同一实现。
-type conditionDBTX interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
-// 玩家状态条默认值：对应 308 的 f0/f1/f3/f4。
-// f0/f1 抓包锚定（官服静止样本）；f3/f4 官服观测恒 1.0/0。
 const (
-	DefaultPlayerConditionPrimary     = 0.85
-	DefaultPlayerConditionSecondary   = 0.9946
-	DefaultPlayerConditionComfort     = 1.0
-	DefaultPlayerConditionLuckPenalty = 0.0
+	DefaultPlayerConditionPrimary   = 0.85
+	DefaultPlayerConditionSecondary = 0.9946
 )
 
-// PlayerCondition 玩家状态条持久化行。
-// Primary=f0 精力比例、Secondary=f1 饱食度、Comfort=f3 舒适度、
-// LuckPenalty=f4 幸运惩罚（客户端 HUD 显示 1-f4）。
 type PlayerCondition struct {
-	UID         int64
-	Primary     float64
-	Secondary   float64
-	Comfort     float64
-	LuckPenalty float64
-	UpdatedTS   float64
+	UID       int64
+	Primary   float64
+	Secondary float64
+	UpdatedTS float64
 }
 
 func (d *DB) EnsurePlayerCondition(ctx context.Context, uid int64) (*PlayerCondition, error) {
-	return ensurePlayerConditionQ(ctx, d.SQL, uid)
-}
-
-func ensurePlayerConditionQ(ctx context.Context, q conditionDBTX, uid int64) (*PlayerCondition, error) {
-	_, err := q.ExecContext(ctx, `
-		INSERT INTO player_condition(uid, primary_value, secondary_value, comfort_value, luck_penalty, updated_ts)
-		VALUES(?,?,?,?,?,?) ON CONFLICT(uid) DO NOTHING`,
-		uid, DefaultPlayerConditionPrimary, DefaultPlayerConditionSecondary,
-		DefaultPlayerConditionComfort, DefaultPlayerConditionLuckPenalty, float64(time.Now().Unix()))
+	_, err := d.SQL.ExecContext(ctx, `
+		INSERT INTO player_condition(uid, primary_value, secondary_value, updated_ts)
+		VALUES(?,?,?,?) ON CONFLICT(uid) DO NOTHING`,
+		uid, DefaultPlayerConditionPrimary, DefaultPlayerConditionSecondary, float64(time.Now().Unix()))
 	if err != nil {
 		return nil, err
 	}
 	var v PlayerCondition
-	err = q.QueryRowContext(ctx, `
-		SELECT uid, primary_value, secondary_value, comfort_value, luck_penalty, updated_ts
-		FROM player_condition WHERE uid=?`, uid).Scan(
-		&v.UID, &v.Primary, &v.Secondary, &v.Comfort, &v.LuckPenalty, &v.UpdatedTS)
+	err = d.SQL.QueryRowContext(ctx, `
+		SELECT uid, primary_value, secondary_value, updated_ts
+		FROM player_condition WHERE uid=?`, uid).Scan(&v.UID, &v.Primary, &v.Secondary, &v.UpdatedTS)
 	if err != nil {
 		return nil, err
 	}
@@ -59,45 +37,55 @@ func ensurePlayerConditionQ(ctx context.Context, q conditionDBTX, uid int64) (*P
 }
 
 func (d *DB) UpsertPlayerCondition(ctx context.Context, v PlayerCondition) error {
-	return upsertPlayerConditionQ(ctx, d.SQL, v)
-}
-
-func upsertPlayerConditionQ(ctx context.Context, q conditionDBTX, v PlayerCondition) error {
 	if v.Primary < 0 {
 		v.Primary = 0
 	}
 	if v.Secondary < 0 {
 		v.Secondary = 0
 	}
-	v.Comfort = clampUnit(v.Comfort)
-	v.LuckPenalty = clampUnit(v.LuckPenalty)
 	if v.UpdatedTS <= 0 {
 		v.UpdatedTS = float64(time.Now().Unix())
 	}
-	_, err := q.ExecContext(ctx, `
-		INSERT INTO player_condition(uid, primary_value, secondary_value, comfort_value, luck_penalty, updated_ts)
-		VALUES(?,?,?,?,?,?)
+	_, err := d.SQL.ExecContext(ctx, `
+		INSERT INTO player_condition(uid, primary_value, secondary_value, updated_ts)
+		VALUES(?,?,?,?)
 		ON CONFLICT(uid) DO UPDATE SET
 			primary_value=excluded.primary_value,
 			secondary_value=excluded.secondary_value,
-			comfort_value=excluded.comfort_value,
-			luck_penalty=excluded.luck_penalty,
-			updated_ts=excluded.updated_ts`,
-		v.UID, v.Primary, v.Secondary, v.Comfort, v.LuckPenalty, v.UpdatedTS)
+			updated_ts=excluded.updated_ts`, v.UID, v.Primary, v.Secondary, v.UpdatedTS)
 	return err
 }
 
-// EnsurePlayerConditionTx / UpsertPlayerConditionTx：经济事务内使用的同实现版本。
-func EnsurePlayerConditionTx(ctx context.Context, tx *sql.Tx, uid int64) (*PlayerCondition, error) {
-	return ensurePlayerConditionQ(ctx, tx, uid)
+// GetConditionTx 读取玩家状态条（primary=饱食度，secondary=体力）。
+func (d *DB) GetConditionTx(ctx context.Context, tx *sql.Tx, uid int64) (float64, float64, error) {
+	var p, s float64
+	err := tx.QueryRowContext(ctx,
+		`SELECT COALESCE(primary_value,0), COALESCE(secondary_value,0) FROM player_condition WHERE uid=?`,
+		uid).Scan(&p, &s)
+	if err == sql.ErrNoRows {
+		return DefaultPlayerConditionPrimary, DefaultPlayerConditionSecondary, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	return p, s, nil
 }
 
-func UpsertPlayerConditionTx(ctx context.Context, tx *sql.Tx, v PlayerCondition) error {
-	return upsertPlayerConditionQ(ctx, tx, v)
+// AddConditionTx 在当前事务内调整状态条并截断到 [0,1]。
+func (d *DB) AddConditionTx(ctx context.Context, tx *sql.Tx, uid int64, dPrimary, dSecondary float64) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO player_condition(uid, primary_value, secondary_value, updated_ts)
+		VALUES(?, ?, ?, ?)
+		ON CONFLICT(uid) DO UPDATE SET
+			primary_value   = MIN(1.0, MAX(0.0, COALESCE(primary_value,0) + ?)),
+			secondary_value = MIN(1.0, MAX(0.0, COALESCE(secondary_value,0) + ?)),
+			updated_ts      = excluded.updated_ts`,
+		uid, clamp01(DefaultPlayerConditionPrimary+dPrimary), clamp01(DefaultPlayerConditionSecondary+dSecondary), float64(time.Now().Unix()),
+		dPrimary, dSecondary)
+	return err
 }
 
-// clampUnit 把比例值钳到 [0,1]；comfort/luck_penalty 是纯比例字段。
-func clampUnit(v float64) float64 {
+func clamp01(v float64) float64 {
 	if v < 0 {
 		return 0
 	}
@@ -105,4 +93,91 @@ func clampUnit(v float64) float64 {
 		return 1
 	}
 	return v
+}
+
+// AddCondition 与 AddConditionTx 相同，但在独立语句中执行（供高频调用点节流使用）。
+func (d *DB) AddCondition(ctx context.Context, uid int64, dPrimary, dSecondary float64) error {
+	_, err := d.SQL.ExecContext(ctx, `
+		INSERT INTO player_condition(uid, primary_value, secondary_value, updated_ts)
+		VALUES(?, ?, ?, ?)
+		ON CONFLICT(uid) DO UPDATE SET
+			primary_value   = MIN(1.0, MAX(0.0, COALESCE(primary_value,0) + ?)),
+			secondary_value = MIN(1.0, MAX(0.0, COALESCE(secondary_value,0) + ?)),
+			updated_ts      = excluded.updated_ts`,
+		uid, clamp01(DefaultPlayerConditionPrimary+dPrimary), clamp01(DefaultPlayerConditionSecondary+dSecondary), float64(time.Now().Unix()),
+		dPrimary, dSecondary)
+	return err
+}
+
+// energyRegenRate 按食物条给出每秒体力恢复量（分段线性，命中实测目标）：
+//
+//	食物条 1.00 → 0.1000/秒（10 秒回满）
+//	食物条 0.50 → 0.0167/秒（60 秒回满）
+//	食物条 0.25 → 0.0111/秒（90 秒回满）
+func energyRegenRate(food float64) float64 {
+	switch {
+	case food >= 1:
+		return 0.1
+	case food >= 0.5:
+		return 0.0167 + (0.1-0.0167)*(food-0.5)/0.5
+	case food >= 0.25:
+		return 0.0111 + (0.0167-0.0111)*(food-0.25)/0.25
+	default:
+		return 0.0111 * food / 0.25
+	}
+}
+
+// RegenEnergyFromFood 按食物条（secondary）回复体力（primary），同时按恢复量消耗食物条。
+// 逐秒积分：每秒用“当时的食物条”算恢复速率，所以食物条掉下去后恢复也会随之变慢，
+// 而不是一直按满食物条的速率补。
+// 按“距上次更新经过的秒数”累计，调用方在任何请求前调用即可；单次最多补 maxRegenSeconds 秒。
+func (d *DB) RegenEnergyFromFood(ctx context.Context, uid int64, fullRate float64) error {
+	const maxRegenSeconds = 300.0
+	// energyRegenFoodCost 是恢复 1 点体力消耗的食物条数量。
+	const energyRegenFoodCost = 0.5
+	var p, s, ts float64
+	err := d.SQL.QueryRowContext(ctx,
+		`SELECT COALESCE(primary_value,0), COALESCE(secondary_value,0), COALESCE(updated_ts,0)
+		 FROM player_condition WHERE uid=?`,
+		uid).Scan(&p, &s, &ts)
+	if err != nil {
+		return err
+	}
+	if s <= 0 || p >= 1 {
+		return nil
+	}
+	now := float64(time.Now().Unix())
+	elapsed := now - ts
+	if elapsed < 1 {
+		return nil
+	}
+	if elapsed > maxRegenSeconds {
+		elapsed = maxRegenSeconds
+	}
+	scale := 1.0
+	if fullRate > 0 {
+		scale = fullRate / 0.1
+	}
+	for i := 0; i < int(elapsed); i++ {
+		if s <= 0 || p >= 1 {
+			break
+		}
+		rate := energyRegenRate(s) * scale
+		if rate <= 0 {
+			break
+		}
+		gain := rate
+		if p+gain > 1 {
+			gain = 1 - p
+		}
+		p += gain
+		s -= gain * energyRegenFoodCost
+		if s < 0 {
+			s = 0
+		}
+	}
+	_, err = d.SQL.ExecContext(ctx,
+		`UPDATE player_condition SET primary_value=?, secondary_value=?, updated_ts=? WHERE uid=?`,
+		p, s, now, uid)
+	return err
 }

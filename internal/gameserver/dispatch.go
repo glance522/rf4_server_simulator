@@ -190,6 +190,18 @@ func (s *Server) handleEnvelopePayload(sess *Session, payload []byte) {
 		sess.log.Info("TRACE 收", "cmd", cmd, "expect", expect,
 			"len", len(env.Body), "hex", traceHexHead(env.Body, traceHexMax))
 	}
+	s.regenEnergyPaced(sess)
 
 	s.dispatchRequest(ctx)
+}
+
+// regenEnergyPaced 在每次请求入口按“距上次更新经过的秒数”补算体力恢复，
+// 这样即使玩家没抛竿（没有 14/7 帧）也能按食物条缓慢回体力。
+func (s *Server) regenEnergyPaced(sess *Session) {
+	if s.DB == nil || sess == nil || sess.Userid <= 0 {
+		return
+	}
+	if err := s.DB.RegenEnergyFromFood(sess.pushCtx(), sess.Userid, 0.1); err != nil {
+		sess.log.Warn("体力缓慢恢复失败", "err", err)
+	}
 }

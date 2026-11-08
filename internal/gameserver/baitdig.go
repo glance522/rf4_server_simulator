@@ -21,6 +21,8 @@ const (
 	baitScoopItemID    = "tool_scoop"
 	baitMasteryStep    = 0.1
 	baitMasteryCap     = 100.0
+	// baitDigEnergyCost 是挖一次饵的体力消耗（player_condition.secondary，0~1）。
+	baitDigEnergyCost = 0.8
 )
 
 type baitLootEntry struct {
@@ -152,9 +154,18 @@ func (s *Server) tryBaitDig(ctx *Ctx) ([]byte, bool) {
 		return s.replyBaitDigFailed(ctx, "挖饵事务开启失败: "+err.Error()), true
 	}
 	defer func() { _ = tx.Rollback() }()
+	// 挖饵是一次性体力消耗：体力太低时先拒绝，避免把饵挖到一半没体力。
+	if energy, _, cerr := s.DB.GetConditionTx(cctx, tx, ctx.Sess.Userid); cerr == nil {
+		if energy < baitDigEnergyCost {
+			return s.replyBaitDigFailed(ctx, "体力不足，休息一下再来挖饵"), true
+		}
+	}
 	row, merged, err := grantPreparedItemTx(cctx, tx, prepared, true)
 	if err != nil {
 		return s.replyBaitDigFailed(ctx, "饵入包失败: "+err.Error()), true
+	}
+	if err := s.DB.AddConditionTx(cctx, tx, ctx.Sess.Userid, -baitDigEnergyCost, 0); err != nil {
+		return s.replyBaitDigFailed(ctx, "体力结算失败: "+err.Error()), true
 	}
 	if err := addTxnTx(cctx, tx, ctx.Sess.Userid, "baitdig", baitKey, row.GUID, 0, 0,
 		fmt.Sprintf("tool=%s qty=%d merged=%t", tool.ItemID, qty, merged)); err != nil {
@@ -195,7 +206,6 @@ func (s *Server) tryBaitDig(ctx *Ctx) ([]byte, bool) {
 		ctx.Sess.Push2_4SkillTree("挖饵 " + baitKey)
 		ctx.Sess.Push(4, 22, proto.Args(proto.S("61"), tree))
 	})
-	s.evaluateAchievements(ctx, achievementEvent{Kind: evBaitDug, BaitKey: baitKey})
 	return body, true
 }
 

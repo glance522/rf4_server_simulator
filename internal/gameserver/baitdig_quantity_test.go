@@ -62,6 +62,11 @@ func TestBaitDigReportsGainAndKeepsStackTotal(t *testing.T) {
 				}
 			}
 			for dig := 1; dig <= 2; dig++ {
+				// 每次挖饵消耗固定体力，测试里逐次回满，避免第二次被“体力不足”拦住。
+				if _, err := db.SQL.Exec(`INSERT INTO player_condition(uid, primary_value, secondary_value, updated_ts)
+					VALUES(?, 1.0, 1.0, 0) ON CONFLICT(uid) DO UPDATE SET primary_value=1.0`, uid); err != nil {
+					t.Fatal(err)
+				}
 				hctx := &Ctx{Sess: newProbeSess(srv), Main: 9, Sub: 3,
 					Tree: proto.Args524(proto.Guid(tool.GUID)), DecodeOK: true, Log: logging.Discard()}
 				body, handled := hCraftMine2(hctx)
@@ -184,9 +189,7 @@ func TestBaitDigInventoryPushKeepsStackTotal(t *testing.T) {
 	hctx := &Ctx{Sess: newSession(srv, 1, "baitdig-push-test", uid, conn), Main: 9, Sub: 3,
 		Tree: proto.Args524(proto.Guid(tool.GUID)), DecodeOK: true, Log: logging.Discard()}
 	body, handled := hCraftMine2(hctx)
-	// 挖饵成功后除了背包推送，成就解锁也可能注册一个应答后回调；这里只要求
-	// 背包推送（第一个回调）存在，不断言回调总数。
-	if !handled || len(body) == 0 || len(hctx.afterResponse) < 1 {
+	if !handled || len(body) == 0 || len(hctx.afterResponse) != 1 {
 		t.Fatalf("digging did not register inventory push: handled=%t callbacks=%d", handled, len(hctx.afterResponse))
 	}
 	done := make(chan struct{})
