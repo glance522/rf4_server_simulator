@@ -219,6 +219,9 @@ func hItemUse(ctx *Ctx) ([]byte, bool) {
 	if body, handled := srv.useGiftBox(ctx); handled {
 		return body, true
 	}
+	if body, handled := srv.useFoodConsumable(ctx); handled {
+		return body, true
+	}
 	guids := deepGUIDs(ctx.Tree)
 	out := proto.Args(proto.S("61"))
 	if len(guids) > 0 {
