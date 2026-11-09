@@ -725,6 +725,20 @@ func (s *Server) repairPartsOf(ctx context.Context, it *store.Item) []repairPart
 		if v == nil || v.Kind != proto.KindObj {
 			return 1.0
 		}
+		// 摩擦片的权威状态是制动力 csDragForce，耐久字段只是它的显示镜像
+		// （见 degradeFrictionWasherFields）：只读镜像会让磨穿的摩擦片报成
+		// 100% 完好，工坊显示"零件没有磨损。无需更换"，永远修不回来。
+		if nidx := fieldIdxByCS(v.Class, csNumericID); nidx >= 0 && nidx < v.FieldCount() {
+			if cur, present, _ := frictionWasherDrag(v); present {
+				if def, derr := s.DB.GetItemDef(ctx, int64(u64Of(v.Fields[nidx].Num))); derr == nil &&
+					def != nil && def.Category == reelPartCatWasher {
+					if rated := itemDefF32(def, gearAttrDragMax); rated > 0 {
+						return clampUnit(cur / rated)
+					}
+					return clampUnit(cur)
+				}
+			}
+		}
 		// 子件耐久字段按类名查（竿件在下标 15，渔轮件在下标 6），值以 f32 位形存放。
 		if idx := fieldIdxByCS(v.Class, csDurability); idx >= 0 && idx < v.FieldCount() {
 			if f := v.Field(idx); f.Num != nil {
@@ -1324,11 +1338,29 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		if installed := srv.childSystemID(cctx, fields[idx].Val); installed != "" &&
 			strings.EqualFold(installed, o.SysID) {
 			ch := fields[idx].Val
-			if didx := fieldIdxByCS(ch.Class, csDurability); didx >= 0 && didx < ch.FieldCount() {
-				old := float64(math.Float32frombits(ch.Fields[didx].U32()))
-				ch.Fields[didx].Num = ptrU64(uint64(math.Float32bits(1.0)))
-				silver += int64(math.Round(math.Max(0, 1-old) * 500))
+			// 渔轮零件的权威状态不是耐久镜像：摩擦片的 csDragForce=0 才是
+			// "已磨穿"，csDurability 只是它的显示镜像（见 degradeFrictionWasherFields）。
+			// 只把镜像写回 1.0 会让轮子停在"外表修好、制动力仍是 0、本体聚合按
+			// 0 判损坏"的坏状态：工坊反复点修理都扣 0 元且毫无变化。
+			wear := math.Max(0, 1-reelChildDurability(ch))
+			if int64(o.Cat) == reelPartCatWasher {
+				cur, present, _ := frictionWasherDrag(ch)
+				if def := srv.reelPartDef(cctx, ch); def != nil {
+					if rated := itemDefF32(def, gearAttrDragMax) * row.Workmanship; rated > 0 {
+						if !present {
+							// 字段缺失（新件/历史存档）按额定值起算，不是已磨穿。
+							cur = rated
+						}
+						wear = clampUnit(1 - cur/rated)
+						if cur < rated {
+							setWireFloat(ch.Fields, ch.Class,
+								fieldIdxByCS(ch.Class, csDragForce), rated)
+						}
+					}
+				}
 			}
+			setReelChildDurability(ch, 1)
+			silver += int64(math.Round(wear * 500))
 			changed = true
 			continue
 		}
