@@ -322,6 +322,13 @@ const TUNABLE_DEFS=[
   ['event_anniversary_enabled','周年纪念任务',0,'开启后下发周年活动分支；开启会自动关闭新年活动；关闭后只保留永久资格'],
   ['event_branches','活动分支',EVENT_BRANCHES_DEFAULT,'逗号分隔的分支 ID（9~20）；留空表示不下发任何活动分支'],
   ['event_anniversary_end_unix','活动结束时间',1825632000,'UTC 日期时间，新年与周年面板共用的倒计时终点；默认 2027-11-08 00:00 UTC'],
+  ['hook_escape_enabled','脱钩开关',0,'1=启用下方脱钩规则；0=永不脱钩（所有鱼都能拉上来）'],
+  ['hook_escape_species_allow','只要这些鱼','','逗号分隔的鱼种 key，如 c.carp,c.roach。填了就只留名单内的鱼，其它全部脱钩；留空表示不限制'],
+  ['hook_escape_species_deny','不要这些鱼','','逗号分隔的鱼种 key。名单内的鱼一律脱钩，其余照常'],
+  ['hook_escape_over_kg','大于多少公斤脱钩',0,'单位公斤。0=不启用。超过这个重量的鱼直接脱钩'],
+  ['hook_escape_under_kg','小于多少公斤脱钩',0,'单位公斤。0=不启用。低于这个重量的鱼直接脱钩'],
+  ['hook_escape_star_only','只要星鱼以上',0,'1=未达标/合格档的鱼全部脱钩，只留奖杯与超级稀有'],
+  ['hook_escape_qualified_only','只要达标鱼',0,'1=未达标档的鱼全部脱钩，合格以上保留'],
 ];
 let BAIT_ROWS=[];
 let BAIT_OPEN=new Set();
@@ -382,6 +389,17 @@ async function loadTunables(){
    const on=parseFloat(String(t[key]??def))>0;
    return `<div class="tunable-field"><div><label for="tun_fish_hooked_chat">${esc(label)}</label><div class="tunable-hint">${esc(hint)}</div></div><div><button class="btn sm" id="tun_fish_hooked_chat" style="min-width:230px;${on?'background:#2f7d4f;border-color:#2f7d4f':'opacity:.6'}" onclick="saveTunableVal('fish_hooked_chat',${on?0:1})">${on?'上钩播报：开（点击关闭）':'上钩播报：关（点击开启）'}</button></div></div>`;
   }
+  if(key==='hook_escape_enabled'||key==='hook_escape_star_only'||key==='hook_escape_qualified_only'||key==='hook_escape_species_allow'||key==='hook_escape_species_deny'){
+   const [,label2,def2,hint2]=TUNABLE_DEFS.find(x=>x[0]===key);
+   const raw=String(t[key]??'');
+   if(key==='hook_escape_species_allow'||key==='hook_escape_species_deny'){
+    const ph=key==='hook_escape_species_allow'?'例如 c.carp,c.roach（留空=不限）':'例如 vjun,perch（留空=不拉黑）';
+    return `<div class="tunable-field"><div><label for="tun_${key}">${esc(label2)}</label><div class="tunable-hint">${esc(hint2)}；当前 <b>${esc(raw)||'（空）'}</b></div></div><div><input type="text" id="tun_${key}" value="${esc(raw)}" style="min-width:230px" placeholder="${esc(ph)}"><button class="btn sm" onclick="saveTunable('${key}')">保存</button><button class="btn alt sm" onclick="saveTunableVal('${key}','')">清空</button></div></div>`;
+   }
+   const on=parseFloat(raw)>0;
+   const tag=key==='hook_escape_enabled'?'脱钩规则':(key==='hook_escape_star_only'?'只要星鱼以上':'只要达标鱼');
+   return `<div class="tunable-field"><div><label for="tun_${key}">${esc(label2)}</label><div class="tunable-hint">${esc(hint2)}</div></div><div><button class="btn sm" id="tun_${key}" style="min-width:230px;${on?'background:#2f7d4f;border-color:#2f7d4f':'opacity:.6'}" onclick="saveTunableVal('${key}',${on?0:1})">${on?tag+'：开（点击关闭）':tag+'：关（点击开启）'}</button></div></div>`;
+  }
   if(key==='fish_escape_taunt'){
    const on=parseFloat(String(t[key]??'1'))>0;
    return `<div class="tunable-field"><div><label for="tun_fish_escape_taunt">${esc(label)}</label><div class="tunable-hint">${esc(hint)}</div></div><div><button class="btn sm" id="tun_fish_escape_taunt" style="min-width:230px;${on?'background:#2f7d4f;border-color:#2f7d4f':'opacity:.6'}" onclick="saveTunableVal('fish_escape_taunt',${on?0:1})">${on?'嘲讽文案：开（点击关闭）':'官方“鱼脱钩了”（点击开启嘲讽）'}</button></div></div>`;
@@ -396,7 +414,8 @@ async function loadTunables(){
   +group('鱼获档位比例','按四档占比出鱼；缺某档阈值时其余档自动归一',['grade_ratio_enabled','grade_pct_below','grade_pct_qualified','grade_pct_trophy','grade_pct_super'])
   +group('钓获礼包','钓上鱼当场开箱，奖励直接进背包并播报',['loot_box_enabled','loot_box_chance','loot_box_trophy_guarantee'])
   +group('聊天通知','跑鱼提示与上钩播报分别设置；保存后最多 30 秒生效',['fish_escape_taunt','fish_hooked_chat'])
-  +group('限时活动','同一时间只允许开启一个活动 · 分支 ID 可在下方任意组合，开关决定挂到新年还是周年面板 · 改完都要完整退出游戏重登',['event_newyear_enabled','event_anniversary_enabled','event_branches','event_anniversary_end_unix']);
+  +group('限时活动','同一时间只允许开启一个活动 · 分支 ID 可在下方任意组合，开关决定挂到新年还是周年面板 · 改完都要完整退出游戏重登',['event_newyear_enabled','event_anniversary_enabled','event_branches','event_anniversary_end_unix'])
+  +group('脱钩配置','按鱼种 / 重量 / 档位把不要的鱼放走；规则只在抬竿确认（14/11）时判一次，默认全关=永不脱钩',['hook_escape_enabled','hook_escape_species_allow','hook_escape_species_deny','hook_escape_over_kg','hook_escape_under_kg','hook_escape_star_only','hook_escape_qualified_only']);
 }
 async function saveEventSwitch(key,val){
   await api('/api/tunables',{method:'POST',body:JSON.stringify({key,value:String(val)})});
