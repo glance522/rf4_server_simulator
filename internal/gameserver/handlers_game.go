@@ -1311,6 +1311,15 @@ func hFishingHooked(ctx *Ctx) ([]byte, bool) {
 		pending.BiteQuality = "nibble"
 		nibble = true
 	}
+	// 后台可配的脱钩规则：命中就让这尾鱼放走（复用 nibble 的放走路径，
+	// 不计入鱼护、不算跑鱼）。默认关闭，等于永不脱钩。
+	if !nibble {
+		if escape, why := srv.hookEscapeDecision(pending); escape {
+			nibble = true
+			ctx.Log.Info("14/11 按脱钩规则放走", "fish", shortGUID(pending.FishGUID),
+				"species", pending.Species, "weight_g", pending.WeightG, "原因", why)
+		}
+	}
 	if !nibble {
 		st.Hooked = true
 		if pending != nil {
