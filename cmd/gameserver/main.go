@@ -75,6 +75,11 @@ func main() {
 	} else {
 		log.Info("旧商店购买凭据恢复完成", "restored", n)
 	}
+	if n, err := srv.ConsolidateNonReturnableItemStacks(ctx); err != nil {
+		log.Warn("旧计件物品堆整理失败，已回滚", "removed", n, "err", err)
+	} else if n > 0 {
+		log.Info("旧计件物品堆整理完成", "duplicates_removed", n)
+	}
 	if n, path, err := srv.LoadCompatTable(); err != nil {
 		log.Info("工坊兼容表未加载", "err", err)
 	} else {

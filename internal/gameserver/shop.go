@@ -102,6 +102,30 @@ func (s *Server) prepareStoreGoods(ctx context.Context, uid int64, itemID string
 	return []*store.Item{it}, false, nil
 }
 
+// storeGoodsReturnable 在事务前按客户端退货品类白名单判断整批产出。
+// 购买即展开的盒子以实际内容物为准；只要有一件可退，整批都必须保持独立，
+// 让退货时能够精确撤销本次购买而不碰购买前的库存。
+func (s *Server) storeGoodsReturnable(ctx context.Context, items []*store.Item) (bool, error) {
+	seen := make(map[string]bool, len(items))
+	for _, it := range items {
+		if it == nil || it.ItemID == "" {
+			return false, errors.New("商店产出物品不完整")
+		}
+		if seen[it.ItemID] {
+			continue
+		}
+		seen[it.ItemID] = true
+		def, err := s.DB.GetItemDefByItemID(ctx, it.ItemID)
+		if err != nil || def == nil {
+			return false, fmt.Errorf("读取商店产出定义 %s: %w", it.ItemID, err)
+		}
+		if storeReturnCategoryAllowed(def.Category) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // hStoreBuy 处理 22/2 银币购买和 22/3 金币购买：
 // 校验价格、构造物品，并在同一事务内扣款、记流水和入库。
 func hStoreBuy(goldCol bool) Handler {
@@ -136,6 +160,11 @@ func hStoreBuy(goldCol bool) Handler {
 			ctx.Log.Warn("商店商品不可构造", "item", itemID, "err", err)
 			return fail("购买未完成，请刷新商店后重试")
 		}
+		returnable, err := srv.storeGoodsReturnable(cctx, prepared)
+		if err != nil {
+			ctx.Log.Warn("商店商品退货属性不可判定", "item", itemID, "err", err)
+			return fail("购买未完成，请刷新商店后重试")
+		}
 
 		tx, err := beginEconomyTx(cctx, srv.DB)
 		if err != nil {
@@ -162,17 +191,19 @@ func hStoreBuy(goldCol bool) Handler {
 
 		granted := make([]*store.Item, 0, len(prepared))
 		for _, it := range prepared {
-			// 按购买批次独立存放，避免退一件商品时连带删除原有堆叠。
-			row, _, gerr := grantPreparedItemTx(cctx, tx, it, false)
+			// 可退批次独立存放；不可退计件产出按精确 item_id 并入同容器已有堆。
+			row, _, gerr := grantPreparedItemTx(cctx, tx, it, !returnable)
 			if gerr != nil {
 				ctx.Log.Warn("商店入库失败", "item", it.ItemID, "err", gerr)
 				return fail("购买未完成，请刷新商店后重试")
 			}
 			granted = append(granted, row)
 		}
-		if err := srv.saveStorePurchaseTx(cctx, tx, uid, storeID, itemID, price, goldCol, granted); err != nil {
-			ctx.Log.Warn("商店购买凭据保存失败", "err", err)
-			return fail("购买未完成，请刷新商店后重试")
+		if returnable {
+			if err := srv.saveStorePurchaseTx(cctx, tx, uid, storeID, itemID, price, goldCol, granted); err != nil {
+				ctx.Log.Warn("商店购买凭据保存失败", "err", err)
+				return fail("购买未完成，请刷新商店后重试")
+			}
 		}
 		// 纸质地图（category 40）只是可阅读的地图道具，购买它不等于买断地点：
 		// 旧实现会在这里写 place_access(kind='buyout')，导致"买张地图就变成无限访问"。
