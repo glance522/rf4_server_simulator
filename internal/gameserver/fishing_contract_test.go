@@ -84,3 +84,65 @@ func TestFish27UnknownSpeciesFallback(t *testing.T) {
 		t.Fatalf("未知鱼 f20=%f，期望0.997804", got)
 	}
 }
+
+// TestFish27PreservesOfficialF19ProbabilityCalibration 验证 27.f19 保持官方
+// 14/14 样本对应的概率量级，不能把行为 105 的概率门控放大成恒定成功。
+func TestFish27PreservesOfficialF19ProbabilityCalibration(t *testing.T) {
+	srv := NewServer(config.Game{Tunnel: config.Tunnel{PSK: "contract"}}, logging.Discard(), nil)
+	for _, tc := range []struct {
+		species string
+		weightG int64
+		want    float64
+		tol     float64
+	}{
+		{species: "c.roach", weightG: 635, want: 0.00309, tol: 0.00005},
+		{species: "perch", weightG: 78, want: 0.00067, tol: 0.00005},
+		{species: "e.chub", weightG: 723, want: 0.00313, tol: 0.00005},
+		{species: "not_in_calib", weightG: 94, want: 0.00060, tol: 0.00001},
+	} {
+		f := &RolledFish{
+			FishGUID: "66666666666666666666666666666666",
+			Species:  tc.species,
+			Grade:    1,
+			WeightG:  tc.weightG,
+			LengthM:  0.1981,
+		}
+		if got := f32At(srv.buildFish27(f, "", ""), 19); math.Abs(got-tc.want) > tc.tol {
+			t.Fatalf("%s %dg 的 27.f19=%f，期望官方校准概率约 %f", tc.species, tc.weightG, got, tc.want)
+		}
+	}
+}
+
+// TestFish27IncludesBehavior105Candidate 把自动上钩调度的服务端前置条件单独锁定：
+// 27.f21 必须包含正权重、正时长的行为 105。客户端是否抽中仍由 f19 概率决定。
+func TestFish27IncludesBehavior105Candidate(t *testing.T) {
+	srv, _ := newRigTestServer(t)
+	for _, species := range []string{"c.roach", "perch", "e.chub", "not_in_calib"} {
+		f := &RolledFish{
+			FishGUID: "77777777777777777777777777777777",
+			Species:  species,
+			Grade:    1,
+			WeightG:  635,
+			LengthM:  0.1981,
+		}
+		curves := srv.buildFish27(f, "", "").Field(21).Val
+		if curves == nil {
+			t.Fatalf("%s 的 27.f21 为空", species)
+		}
+		found := false
+		for _, row := range curves.Items {
+			stage := row.Field(0)
+			if stage.U32() != 105 {
+				continue
+			}
+			weight, minDuration, maxDuration := f32At(row, 1), f32At(row, 2), f32At(row, 3)
+			if weight > 0 && minDuration > 0 && maxDuration >= minDuration {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("%s 的 27.f21 缺少可调度的行为 105 候选", species)
+		}
+	}
+}
