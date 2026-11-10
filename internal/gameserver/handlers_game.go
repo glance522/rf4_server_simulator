@@ -1265,7 +1265,7 @@ func hFishingPull(ctx *Ctx) ([]byte, bool) {
 			ctx.Log.Info("14/9 海钓抬竿只走真服 14/11 路径，跳过 14/15/4/22")
 		}
 		if ctx.Sess.marineHookItemSync() {
-			ctx.Sess.Push4_22Hook(gear)
+			ctx.Sess.Push4_22Hook(false, gear)
 		}
 		ctx.Log.Info("14/9 海钓抬竿确认", "rod", shortGUID(gear), "fish", shortGUID(pending.FishGUID),
 			"rig_type", rigType, "14/15", bound)
@@ -1349,10 +1349,11 @@ func hFishingHooked(ctx *Ctx) ([]byte, bool) {
 			ctx.Sess.Push14_15(gear, pending.FishGUID)
 		}
 		if ctx.Sess.marineHookItemSync() {
-			ctx.Sess.Push4_22Hook(gear)
+			ctx.Sess.Push4_22Hook(false, gear)
 		}
 	} else {
-		ctx.Sess.Push4_22Hook(gear)
+		// 挂竿位仅按沉底族证据开启（官方抓包 rig_type=24）；浮钓/路亚待验证。
+		ctx.Sess.Push4_22Hook(bottomRigTypes[rigType], gear)
 	}
 	if announce {
 		srv.notifyFishHooked(ctx.Sess, hookedFish, gear)

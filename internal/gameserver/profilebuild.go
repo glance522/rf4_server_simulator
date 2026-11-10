@@ -510,11 +510,27 @@ func (s *Session) Push4_22Full() {
 	s.Push(4, 22, proto.Args(proto.S("61"), items...))
 }
 
+// hookMountedFlag 中鱼挂竿运行位：官方真服抓包（2026-11-10，淡水沉底 rig_type=24）
+// 中鱼后 4/22 单钩的 hgaijieklek = 定义基值（钩 20992）| 1024；缺位时客户端钩
+// 实体不进搏鱼态，表现为浮漂无咬钩演出、左下角无搏鱼指示。
+// 证据仅覆盖沉底族：浮钓/路亚/海钓的官方口径未抓包验证，不挂位。
+const hookMountedFlag = uint64(1024)
+
 // Push4_22Hook 刺中后单钩同步：args("61")[131钩]。
-func (s *Session) Push4_22Hook(gears ...string) {
+// mounted=true 时钩 flags 附挂竿位（仅沉底族调用方传 true）。
+func (s *Session) Push4_22Hook(mounted bool, gears ...string) {
 	items, err := s.Srv.buildFightItems(s.pushCtx(), s.Userid, false, gears...)
 	if err != nil || len(items) == 0 {
 		return
+	}
+	if mounted {
+		if idx := fieldIdxByCS("agedjipcnpe", csStateEnum); idx >= 0 {
+			for _, it := range items {
+				if it.Class == "agedjipcnpe" && idx < len(it.Fields) && it.Fields[idx].Num != nil {
+					*it.Fields[idx].Num |= hookMountedFlag
+				}
+			}
+		}
 	}
 	s.Push(4, 22, proto.Args(proto.S("61"), items...))
 }
