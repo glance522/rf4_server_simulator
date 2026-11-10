@@ -232,7 +232,7 @@ func TestSelectedHookPushUsesSelectedHookAndConsumesOnlyItsBait(t *testing.T) {
 		}
 	}()
 	f := &RolledFish{FishGUID: newFishGUID(), HookGUID: groups[1].hookGUID, BaitGUIDs: strings.Join(groups[1].baitGUIDs, " "), BaitsKnown: true, Species: "crucian", WeightG: 200, Grade: 1, LengthM: .2}
-	s.pushBaitedFish(sess, f, rod)
+	s.pushBaitedFish(sess, f, rod, 24)
 	select {
 	case env := <-pushes:
 		if env.Main != 14 || env.Sub != 14 {
@@ -260,7 +260,7 @@ func TestSelectedHookPushUsesSelectedHookAndConsumesOnlyItsBait(t *testing.T) {
 	if row, _ := db.GetItemByGUID(t.Context(), groups[1].baitGUIDs[0]); row != nil {
 		t.Fatal("selected hook bait was not consumed after hook confirmation")
 	}
-	s.pushBaitedFish(sess, f, rod)
+	s.pushBaitedFish(sess, f, rod, 24)
 	if err := s.consumeHookedBait(sess, f, rod); err != nil {
 		t.Fatal(err)
 	}

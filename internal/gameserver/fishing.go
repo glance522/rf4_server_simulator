@@ -1612,7 +1612,15 @@ func (s *Server) fishInitialStaminaRatio() float64 {
 	return math.Max(0.05, math.Min(1.0, ratio))
 }
 
-func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string) *proto.Value {
+// buildFish27 构造 27 判鱼对象。
+// rigType 决定 27.f19 口径：官方真服抓包（2026-11-10/11，11 个 14/14）显示
+// 沉底/海钓/路亚的 f19 恒为 1.0（精确值 0x3f800000），浮钓族则是 0.001~0.0024
+// 的连续小值、随鱼种/重量上行——f19 是客户端行为 105 自动上钩尝试的强度输入，
+// 不是布尔启用位。浮钓官方低值下自动上钩仍发生但时延拉长（+4.4~11.6s vs 其他
+// 钓法 +0.3~1.1s），故浮钓族保留按鱼种/重量校准的曲线值，其余钓法固定 1。
+// tunable float_f19_force_one 非 0 时浮钓族也强制 1.0（回滚到全钓法 1 的口径，
+// 用于浮钓静置不上钩的应急恢复）。
+func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string, rigType int64) *proto.Value {
 	w := float64(f.WeightG)
 	st := officialSpeciesStatics[f.Species]
 	var f9, f10, f11, f12v, f13v, f14v, f15v, f16v, f17v, f18v, f19v, f20v float64
@@ -1635,6 +1643,9 @@ func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string) *proto.Va
 		f12v, f13v, f14v, f15v = fb[12], fb[13], fb[14], fb[15]
 		f16v, f17v, f18v = fb[16], fb[17], fb[18]
 		f19v, f20v = fb[19], fb[20]
+	}
+	if !floatRigTypes[rigType] || s.tunableF("float_f19_force_one", 0) != 0 {
+		f19v = 1
 	}
 	profile := s.fishFightProfileFor(f)
 	stamina := s.fishStaminaForProfile(f, profile)
@@ -1736,7 +1747,8 @@ func scaleFishStaminaForEnergy(base, energyRatio, penalty float64) float64 {
 }
 
 // Push14_14 发判鱼推送：args("524")[guid(钓组), 27]。
-func (s *Session) Push14_14(f *RolledFish, hookGUID, gearGuid string) bool {
+// rigType 决定 27.f19 的钓法口径（见 buildFish27 注释）。
+func (s *Session) Push14_14(f *RolledFish, hookGUID, gearGuid string, rigType int64) bool {
 	if f == nil {
 		return false
 	}
@@ -1768,7 +1780,7 @@ func (s *Session) Push14_14(f *RolledFish, hookGUID, gearGuid string) bool {
 		"冲刺倍率", profile.ForceScale, "耐力倍率", profile.StaminaScale)
 	return s.Push(14, 14, proto.Args524(
 		proto.Guid(gearGuid),
-		s.Srv.buildFish27(f, hookGUID, gearGuid),
+		s.Srv.buildFish27(f, hookGUID, gearGuid, rigType),
 	)) != 0
 }
 
@@ -2136,9 +2148,10 @@ func (s *Server) pushPendingBite(sess *Session, st *FishState, f *RolledFish, ge
 	if f.GearGUID == "" {
 		f.GearGUID = gear
 	}
+	rigType := st.RigType
 	st.persist.recoverPending = false
 	st.mu.Unlock()
-	sent := s.pushBaitedFish(sess, f, gear)
+	sent := s.pushBaitedFish(sess, f, gear, rigType)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if generation != st.castGeneration {

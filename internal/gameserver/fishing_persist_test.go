@@ -234,7 +234,7 @@ func TestBuildFish27MissingHookFallsBackToFishGUID(t *testing.T) {
 		WeightG:  186,
 		LengthM:  0.1981,
 	}
-	obj := srv.buildFish27(f, "", "11111111111111111111111111111111")
+	obj := srv.buildFish27(f, "", "11111111111111111111111111111111", 24)
 	if got := obj.Field(23).Hex; got != f.FishGUID {
 		t.Fatalf("27.f23 缺 hook 时应回退鱼 GUID %s，实得 %s", f.FishGUID, got)
 	}
