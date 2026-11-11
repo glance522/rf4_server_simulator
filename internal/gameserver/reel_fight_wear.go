@@ -37,9 +37,6 @@ const (
 	// reelSlipDeadbandRatioDefault 是打滑门槛倍率（tunable reel_slip_deadband_ratio）：
 	// 拉力 ≤ 泄力×该值不算打滑。官服边界样本：1.04× 零磨损，缺省取 1.05。
 	reelSlipDeadbandRatioDefault = 1.05
-	// defaultFightWearStreamSeconds 是搏鱼中受力账中途落库/下发的节流间隔秒数
-	// （tunable wear_stress_stream_seconds），对齐官服搏鱼 4/22 帧节奏。
-	defaultFightWearStreamSeconds = 2.0
 	// leaderStressWearPerSecDefault 是前导受力磨损速率（百分点/受力秒，
 	// tunable wear_leader_per_stress_sec）：底钓2 单场实测 ≈0.000047（412s 磨 0.019%）。
 	leaderStressWearPerSecDefault = 0.00005
@@ -260,21 +257,9 @@ func (s *Server) leaderStressWearPerSec() float64 {
 	return v
 }
 
-// fightWearStreamEnabled 搏鱼中受力账逐帧落库/下发开关（tunable
-// wear_stress_stream，缺省开）。关掉后磨损只在结算点落库，无中途表演。
-func (s *Server) fightWearStreamEnabled() bool {
-	return s.tunableF("wear_stress_stream", 1) != 0
-}
-
-// fightWearStreamInterval 返回中途落库的节流间隔秒数（tunable
-// wear_stress_stream_seconds，缺省 2s，对齐官服搏鱼帧节奏）。
-func (s *Server) fightWearStreamInterval() float64 {
-	v := s.tunableF("wear_stress_stream_seconds", defaultFightWearStreamSeconds)
-	if v < 1 || v > 30 || math.IsNaN(v) || math.IsInf(v, 0) {
-		return defaultFightWearStreamSeconds
-	}
-	return v
-}
+// fightWearStreamIntervalSeconds 是搏鱼中受力账中途落库/下发的节流间隔秒数，
+// 对齐官服搏鱼 4/22 帧节奏（~2s/帧）。
+const fightWearStreamIntervalSeconds = 2.0
 
 // fightReelTickWear 把一条 14/8 折算成受力磨损增量，tick 是它与上一条上报之间的真实秒数。
 //
@@ -327,7 +312,7 @@ func (s *Server) resolveRigLeaderGUID(ctx context.Context, rodGUID string) (stri
 
 // recordFightReelLoad 结算一条 14/8 负载上报：只有正在搏鱼的那根竿算账。
 // 查库放在锁外，写回只加本条增量，避免并发上报互相覆盖。
-// 受力账按官服帧节奏中途落库并下发裸零件树（tunable wear_stress_stream* 可关）；
+// 受力账按官服帧节奏（2s 节流）中途落库并下发裸零件树；
 // 损伤日志每竿仍只写最终一笔。
 func (s *Server) recordFightReelLoad(ctx *Ctx) {
 	if s == nil || s.DB == nil || ctx == nil || ctx.Sess == nil {
@@ -394,11 +379,11 @@ func (s *Server) recordFightReelLoad(ctx *Ctx) {
 		// 范围写进损伤日志，攒够凭据再决定要不要用它。
 		cur.loadProbe.observe(ctx.Tree, ctx.DecodeOK)
 	}
-	// 按官服帧节奏中途落库：节流 ~2s，取走账本立即重开新账（继承时间边界与
+	// 按官服帧节奏中途落库：节流 2s，取走账本立即重开新账（继承时间边界与
 	// 承力缓存），损伤日志留给最终结算一笔汇总。
 	flush, doFlush := fightReelWear{}, false
-	if s.fightWearStreamEnabled() && cur.StressSecs > 0 &&
-		now.Sub(cur.lastFlushAt).Seconds() >= s.fightWearStreamInterval() {
+	if cur.StressSecs > 0 &&
+		now.Sub(cur.lastFlushAt).Seconds() >= fightWearStreamIntervalSeconds {
 		if pending, has := cur.claimLocked(); has {
 			reopen := pending
 			reopen.SlipTicks, reopen.SlipSecs, reopen.SlipWear = 0, 0, 0

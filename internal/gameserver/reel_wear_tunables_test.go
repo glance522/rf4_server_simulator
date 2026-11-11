@@ -57,11 +57,8 @@ func TestReelSlipCalibrationDefaults(t *testing.T) {
 	if got := srv.leaderStressWearPerSec(); math.Abs(got-leaderStressWearPerSecDefault) > 1e-12 {
 		t.Errorf("默认前导受力速率=%.6f，期望 %.6f", got, leaderStressWearPerSecDefault)
 	}
-	if !srv.fightWearStreamEnabled() {
-		t.Error("搏鱼中受力落库/下发缺省应开启")
-	}
-	if got := srv.fightWearStreamInterval(); math.Abs(got-defaultFightWearStreamSeconds) > 1e-12 {
-		t.Errorf("默认节流间隔=%.4f，期望 %.4f", got, defaultFightWearStreamSeconds)
+	if math.Abs(fightWearStreamIntervalSeconds-2.0) > 1e-12 {
+		t.Errorf("中途落库节流间隔应固定为官服帧节奏 2s，实得 %.4f", fightWearStreamIntervalSeconds)
 	}
 }
 

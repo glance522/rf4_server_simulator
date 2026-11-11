@@ -344,9 +344,6 @@ var reelWearTunableRanges = map[string]tunableRange{
 	"wear_stress_guides_per_s":   {min: 0, max: 0.01},
 	"wear_stress_rodblank_per_s": {min: 0, max: 0.01},
 	"wear_leader_per_stress_sec": {min: 0, max: 0.01},
-	// 搏鱼中受力落库/下发：0=关 1=开；节流间隔秒数。
-	"wear_stress_stream":         {min: 0, max: 1},
-	"wear_stress_stream_seconds": {min: 1, max: 30},
 	// 负载节拍：太小会让每次上报折算成极短时长，磨损几乎不涨。
 	"reel_load_tick_seconds":     {min: 0.01, max: 600},
 	"reel_load_max_tick_seconds": {min: 0.01, max: 600},

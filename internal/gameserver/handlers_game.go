@@ -1556,11 +1556,9 @@ func hFishingLeft(ctx *Ctx) ([]byte, bool) {
 func hFishingGen(ctx *Ctx) ([]byte, bool) { return nil, true } // fire-and-forget
 func hFishingLoad(ctx *Ctx) ([]byte, bool) {
 	// 14/8 是持续发送的钓组负载/姿态遥测，不是中钩确认。
-	// 全量 4/22 会重建鱼实体并打断冲刺、体力阶段；真实报文后没有这条推送。
-	if ctx.Sess.Srv.tunableF("fight_load_full_sync", 0) != 0 {
-		ctx.Sess.Push4_22Full()
-	}
-	// 一条负载上报折算一次判定：未锁轮超泄力算打滑磨摩擦片，锁轮超承力按发热曲线烧。
+	// 一条负载上报折算一次受力账：受力秒按真实间隔累计、达到打滑门槛磨摩擦片；
+	// 磨损按官服帧节奏中途落库并经 Push4_22Trees 下发裸部件子树。
+	// 严禁在这里做全量 4/22 同步——全量会重建鱼实体，打断冲刺与体力阶段。
 	ctx.Sess.Srv.recordFightReelLoad(ctx)
 	return nil, true
 }

@@ -152,13 +152,12 @@ Status: done
 
 - 无表结构变更（子件耐久在竿 fields JSON，前导走既有 Durability 列）；迁移零。
 - 协议侧：4/22 命令与 args code 不变，新增的下发形状（裸部件子树）以官服真实帧为据
-  （46+274 帧逐帧验证）；客户端基线 4.0.25034 不受影响。回滚保险：tunable
-  `wear_stress_stream=0` 一键回到"仅结算点推送"。
+  （46+274 帧逐帧验证）；客户端基线 4.0.25034 不受影响。
 - 旧档兼容：轮/竿缺子件按满耐久（`reelChildDurability` 既有口径），首笔磨损才
   物化落库；无前导装配跳过。
-- 回滚 = 还原矩阵字面量 + 还原三个 tunable（`reel_slip_calibration_seconds`、
-  `reel_slip_deadband_ratio`、`wear_leader_per_stress_sec`）缺省值；中途落库与
-  逐帧推送由 tunable `wear_stress_stream`（缺省开）一键关闭。
+- 回滚 = 还原矩阵字面量与三个校准 tunable（`reel_slip_calibration_seconds`、
+  `reel_slip_deadband_ratio`、`wear_leader_per_stress_sec`）缺省值。行为开关一律
+  不设：实机若发现下发形状有问题，修代码，不留运行时后门（2026-11-11 用户裁定）。
 - 文档回填：`specs/capabilities/`（结算与装备契约）、`docs/mechanism-map.md`
   磨损入口、`docs/实测博鱼过程对装备磨损的影响分析.md` §7 状态行。
 
