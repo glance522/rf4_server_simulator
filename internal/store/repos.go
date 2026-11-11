@@ -24,6 +24,8 @@ type Profile struct {
 	Banned        bool
 	CreatedTS     float64
 	UpdatedTS     float64
+	// PlaySeconds 累计在线秒数（gameserver 会话期间累加），简介页天数用它。
+	PlaySeconds int64
 }
 
 // EnsureProfile 无档案时创建默认档案。默认昵称为 "player"；不要生成
@@ -56,6 +58,11 @@ func (d *DB) GetProfile(ctx context.Context, uid int64) (*Profile, error) {
 		return nil, err
 	}
 	p.Banned = banned != 0
+	// play_seconds 是后加的列（迁移 00058）。老库/只跑到旧迁移的库没有这一列，
+	// 单独容错查询：查不到就当 0，不能让整个档案读取失败。
+	p.PlaySeconds = 0
+	_ = d.SQL.QueryRowContext(ctx, `SELECT COALESCE(play_seconds,0) FROM profile WHERE uid=?`, uid).
+		Scan(&p.PlaySeconds)
 	return &p, nil
 }
 
@@ -64,6 +71,16 @@ func (d *DB) UpdateBalance(ctx context.Context, uid, silver, gold, bank int64) e
 	_, err := d.SQL.ExecContext(ctx, `
 		UPDATE profile SET silver=?, gold=?, bank=?, updated_ts=? WHERE uid=?`,
 		silver, gold, bank, float64(time.Now().Unix()), uid)
+	return err
+}
+
+// AddPlaySeconds 累加在线秒数（会话期间定时调用，单条 UPDATE 原子累加）。
+func (d *DB) AddPlaySeconds(ctx context.Context, uid, secs int64) error {
+	if uid == 0 || secs <= 0 {
+		return nil
+	}
+	_, err := d.SQL.ExecContext(ctx, `
+		UPDATE profile SET play_seconds = COALESCE(play_seconds,0) + ? WHERE uid=?`, secs, uid)
 	return err
 }
 
