@@ -393,7 +393,7 @@ func hPlaceBuyout(ctx *Ctx) ([]byte, bool) {
 		ctx.Log.Info("3/37 价格与静态表不符，不扣款", "place", place,
 			"packet", packet, "price", price, "tiers", tiers)
 	}
-	p, err := srv.BuildProfile307W(cctx, uid, worldTotalGameMin(time.Now()))
+	p, err := srv.BuildProfile307W(cctx, uid, srv.profileClockBase(cctx, uid, time.Now()))
 	if err != nil {
 		ctx.Log.Warn("3/37 档案构造失败", "err", err)
 		return nil, false
