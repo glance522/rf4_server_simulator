@@ -170,14 +170,6 @@ func TestGroundbaitWeatherSofteningLiftsWithinBaseline(t *testing.T) {
 	const uid = int64(1000001)
 	gbDeposit(t, s, uid, "feed_karp", 8, "feeder", "gb:s1")
 
-	warm := fishRollContext{uid: uid, loc: "gb-test-loc", x: 100, z: 100, hasPos: true, spot: 7,
-		now: time.Now(), rigType: 1, depthCM: 100, cache: newFishingRollCache(),
-		weather: fishingWeather{known: true, kind: fishingWeatherClear, airTemp: 18, previousAirTemp: 18, wind: 3}}
-	cold := warm
-	// 深冬傍晚 + 大雨：季节、水温、天气三重不利，是软门最差的一档。
-	cold.now = time.Date(2027, 1, 15, 17, 0, 0, 0, time.UTC)
-	cold.weather = fishingWeather{known: true, kind: fishingWeatherHeavyRain, airTemp: -4, previousAirTemp: -4, wind: 6}
-
 	mult := func(c fishRollContext) (float64, float64) {
 		keys := []string{"carp"}
 		on := []float64{100}
@@ -189,16 +181,33 @@ func TestGroundbaitWeatherSofteningLiftsWithinBaseline(t *testing.T) {
 		return on[0] / 100, base[0] / 100
 	}
 
-	hotM, hotBase := mult(warm)
-	coldM, coldBase := mult(cold)
-	if coldM <= coldBase {
-		t.Fatalf("烂天气里软化应把乘子抬起来：软化后 %.3f vs 关闭 %.3f", coldM, coldBase)
-	}
-	if hotM < hotBase-1e-9 {
-		t.Fatalf("软化不能把天气带来的优势吃掉：暖 %.3f < 关软化 %.3f", hotM, hotBase)
-	}
-	if coldM > hotM {
-		t.Fatalf("「深冬烂天气 + 一锅好料」不能打过「好天气」：冷 %.3f > 暖 %.3f", coldM, hotM)
+	// 暖/冷必须落在同一游戏时刻：游戏历 24 倍速，若暖场景取真实时间、冷场景写死
+	// 日期，比较的就是季节而不是天气。这里遍历四季，确认「软化抬高坏天气、但不
+	// 超过同季节好天气」在四季都成立，而不是挑一个季节碰运气。
+	for _, season := range []struct {
+		name string
+		day  int64
+	}{
+		{"春", 90}, {"夏", 180}, {"秋", 270}, {"冬", 350},
+	} {
+		now := time.Unix(worldDayEpochUnix+season.day*24*realSecPerGameHour+12*realSecPerGameHour, 0)
+		warm := fishRollContext{uid: uid, loc: "gb-test-loc", x: 100, z: 100, hasPos: true, spot: 7,
+			now: now, rigType: 1, depthCM: 100, cache: newFishingRollCache(),
+			weather: fishingWeather{known: true, kind: fishingWeatherClear, airTemp: 18, previousAirTemp: 18, wind: 3}}
+		cold := warm
+		cold.weather = fishingWeather{known: true, kind: fishingWeatherHeavyRain, airTemp: -4, previousAirTemp: -4, wind: 6}
+
+		hotM, hotBase := mult(warm)
+		coldM, coldBase := mult(cold)
+		if coldM <= coldBase {
+			t.Fatalf("%s: 烂天气里软化应把乘子抬起来：软化后 %.3f vs 关闭 %.3f", season.name, coldM, coldBase)
+		}
+		if hotM < hotBase-1e-9 {
+			t.Fatalf("%s: 软化不能把天气带来的优势吃掉：暖 %.3f < 关软化 %.3f", season.name, hotM, hotBase)
+		}
+		if coldM > hotM {
+			t.Fatalf("%s: 「烂天气 + 一锅好料」不能打过「好天气」：冷 %.3f > 暖 %.3f", season.name, coldM, hotM)
+		}
 	}
 }
 
