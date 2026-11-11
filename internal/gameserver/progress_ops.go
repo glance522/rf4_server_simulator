@@ -376,7 +376,7 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 			return nil, true
 		}
 		stats813 = s.buildSettle813(cctx, uid, pending, res)
-		profileTree, _ = s.BuildProfile307W(cctx, uid, worldTotalGameMin(time.Now()))
+		profileTree, _ = s.BuildProfile307W(cctx, uid, s.profileClockBase(cctx, uid, time.Now()))
 		skill312 = s.buildSingleSkill312(cctx, uid, res.skillID)
 		st.mu.Lock()
 		st.LastSkill = res.skillID

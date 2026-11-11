@@ -114,7 +114,7 @@ func (s *Server) fishingEnd(ctx *Ctx) ([]byte, bool) {
 		st.mu.Unlock()
 
 		stats813 = s.build813(cctx, uid, pending, prevBest, skillGain, levelsGained)
-		profileTree, _ = s.BuildProfile307W(cctx, uid, worldTotalGameMin(time.Now()))
+		profileTree, _ = s.BuildProfile307W(cctx, uid, s.profileClockBase(cctx, uid, time.Now()))
 		skill312 = s.buildSingleSkill312(cctx, uid, skillID)
 	}
 
@@ -492,7 +492,7 @@ func (s *Server) fishingRelease(ctx *Ctx) ([]byte, bool) {
 	}
 	// 响应 807：{null, [811礼物行], 307, null, null, null}；未升级时 f1=null
 	//（官服未升级放流样本形态，见 monitor docs/LEVEL_UP_GIFT_CARDS.md）。
-	profileTree, err := s.BuildProfile307W(ctx.Sess.pushCtx(), uid, worldTotalGameMin(time.Now()))
+	profileTree, err := s.BuildProfile307W(ctx.Sess.pushCtx(), uid, s.profileClockBase(ctx.Sess.pushCtx(), uid, time.Now()))
 	if err != nil {
 		profileTree = proto.Null()
 	}
