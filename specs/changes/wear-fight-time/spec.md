@@ -1,6 +1,6 @@
 # 装备磨损对齐官服：按搏鱼受力时间扣磨损（完整方案）
 
-Status: in-progress
+Status: done
 
 <!-- 状态取值：draft | ready | in-progress | done | cancelled
      完成时原地改这里，不要归档、不要搬家、不要另开第二份。 -->
