@@ -338,7 +338,7 @@ func (s *Server) buildTravelBodyAt(sess *Session, key string, nowUnix int64) ([]
 		proto.Field{Op: "VAL", Val: nullVal()},
 		proto.Field{Op: "VAL", Val: nullVal()},
 	)
-	prof, err := s.BuildProfile307W(ctx, sess.Userid, worldTotalGameMin(time.Now()))
+	prof, err := s.BuildProfile307W(ctx, sess.Userid, s.profileClockBase(ctx, sess.Userid, time.Now()))
 	if err != nil {
 		return nil, fmt.Errorf("profile 307: %w", err)
 	}

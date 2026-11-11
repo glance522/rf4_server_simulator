@@ -96,6 +96,22 @@ func buildStats322W(wNow int64) *proto.Value {
 	})
 }
 
+// profileClockBase 返回 307 档案状态块 f13.f0（以及欢乐时光 f1）共用的游戏分钟基准。
+//
+// 客户端对 f0 有两个消费者：
+//   - 世界时钟：按 f0 % 1440 取「游戏日内分钟」校时，所以低位必须是当前日内分钟；
+//   - 「N 天 游戏中」：直接 f0 / 1440，所以高位写「累计在线小时」，
+//     于是满 60 分钟显示 1、满 2 小时显示 2。
+//
+// 欢乐时光按 f1 − (f0 + 已过真实分钟×24) 算剩余；只要 f1 与 f0 用同一基准就不会错。
+func (s *Server) profileClockBase(ctx context.Context, uid int64, now time.Time) int64 {
+	hours := int64(0)
+	if s != nil && s.DB != nil {
+		hours = s.DB.PlaySeconds(ctx, uid) / 3600
+	}
+	return hours*1440 + int64(gameMinuteOfDayAt(now))
+}
+
 // build745 构造通行证/欢乐时光状态块。
 // f0=状态枚举、f1=欢乐时光结束的世界游戏分钟坐标、f2=结束墙钟（FILETIME）。
 // 客户端主页倒计时（RUIHappyHourWidget.kanomlofomo）按
@@ -442,7 +458,7 @@ func (s *Server) BuildShortcutList(ctx context.Context, uid int64) *proto.Value 
 
 // Push2_1 推送当前档案，用于刷新货币与等级。
 func (s *Session) Push2_1() {
-	p, err := s.Srv.BuildProfile307W(s.pushCtx(), s.Userid, worldTotalGameMin(time.Now()))
+	p, err := s.Srv.BuildProfile307W(s.pushCtx(), s.Userid, s.Srv.profileClockBase(s.pushCtx(), s.Userid, time.Now()))
 	if err != nil {
 		s.log.Warn("2/1 构造失败", "err", err)
 		return
