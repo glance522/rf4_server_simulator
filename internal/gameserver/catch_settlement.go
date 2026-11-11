@@ -172,10 +172,6 @@ func (s *Server) settleCatchOnceWithQualification(ctx context.Context, uid int64
 	if sess := s.liveSessionByUID(uid); sess != nil {
 		sess.updateHappyHour(time.Now(), false)
 	}
-	if happy {
-		// 57 才是客户端结算面板的「欢乐时光」加成行；56 是另一类加成，客户端不会显示。
-		bonuses = append(bonuses, catchXPBonus{Kind: 57, GUID: zeroGUID, Multiplier: .5, XP: int64(math.Round(float64(xp) * .5))})
-	}
 	card, err := s.prepareCatchCard(ctx, uid, f, bait)
 	if err != nil {
 		return nil, err
@@ -212,6 +208,20 @@ func (s *Server) settleCatchOnceWithQualification(ctx context.Context, uid int64
 		return nil, err
 	} else if bonus != nil {
 		bonuses = append(bonuses, *bonus)
+	}
+	// 欢乐时光：结算面板上「欢乐时光」那一行 = 点数经验 + ML 渔具 + 酒兴 + 高级会员 的合计，
+	// 相当于把所有已有加成整体再翻一倍。必须等 premiumXP 与酒兴都算完再求和，
+	// 否则少算一项（旧实现只按点数经验的 50% 给，面板数值和实发经验都对不上）。
+	if happy {
+		happyXP := xp + premiumXP
+		for _, bonus := range bonuses {
+			happyXP += bonus.XP
+		}
+		if happyXP < 0 {
+			return nil, fmt.Errorf("钓获经验超出范围")
+		}
+		// 57 才是客户端结算面板的「欢乐时光」加成行；56 是另一类加成，客户端不会显示。
+		bonuses = append(bonuses, catchXPBonus{Kind: 57, GUID: zeroGUID, Multiplier: 1, XP: happyXP})
 	}
 	for _, bonus := range bonuses {
 		if bonus.XP > math.MaxInt64-totalXP {

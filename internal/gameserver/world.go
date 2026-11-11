@@ -326,7 +326,7 @@ func hPlaceBuyoutTx(ctx *Ctx) ([]byte, bool) {
 	if bundleGrant {
 		srv.grantPremiumBundle(cctx, ctx, uid, place, tier)
 	}
-	p, err := srv.BuildProfile307W(cctx, uid, worldTotalGameMin(time.Now()))
+	p, err := srv.BuildProfile307W(cctx, uid, srv.profileClockBase(cctx, uid, time.Now()))
 	if err != nil {
 		ctx.Log.Warn("3/37 档案构造失败", "err", err)
 		return nil, false
@@ -429,7 +429,7 @@ func hBuyHouseTx(ctx *Ctx) ([]byte, bool) {
 	}
 	ctx.Log.Info("3/33 购买房屋", "item", itemID, "silver", -int64(price))
 
-	p, err := srv.BuildProfile307W(cctx, uid, worldTotalGameMin(time.Now()))
+	p, err := srv.BuildProfile307W(cctx, uid, srv.profileClockBase(cctx, uid, time.Now()))
 	if err != nil {
 		ctx.Log.Warn("3/33 档案构造失败", "err", err)
 		return nil, false
@@ -643,7 +643,7 @@ func hPlaceTripTx(ctx *Ctx) ([]byte, bool) {
 	// 装备包不在购票时发放：官方生命周期（用户 2026-11-05 口头修正）为
 	// "进图发放/离图回收"（含下线），见 trip_equip.go syncTripEquipment。
 
-	p, err := srv.BuildProfile307W(cctx, uid, worldTotalGameMin(time.Now()))
+	p, err := srv.BuildProfile307W(cctx, uid, srv.profileClockBase(cctx, uid, time.Now()))
 	if err != nil {
 		ctx.Log.Warn("3/38 档案构造失败", "err", err)
 		return nil, false

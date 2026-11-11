@@ -31,7 +31,7 @@ func hProfile(ctx *Ctx) ([]byte, bool) {
 	// 稀有鱼 / 超级稀有鱼鱼种数里程碑：覆盖离线期间跨档与历史存档，幂等。
 	pushRarityMilestoneItems(ctx.Sess, ctx.Sess.Srv.ensureRarityMilestones(ctx.Sess.pushCtx(), ctx.Sess.Userid))
 	p, err := ctx.Sess.Srv.BuildProfile307W(ctx.Sess.pushCtx(), ctx.Sess.Userid,
-		worldTotalGameMin(time.Now()))
+		ctx.Sess.Srv.profileClockBase(ctx.Sess.pushCtx(), ctx.Sess.Userid, time.Now()))
 	if err != nil {
 		ctx.Log.Warn("3/1 构造失败", "err", err)
 		return nil, false
@@ -398,7 +398,7 @@ func hPlaceBuyout(ctx *Ctx) ([]byte, bool) {
 		ctx.Log.Info("3/37 价格与静态表不符，不扣款", "place", place,
 			"packet", packet, "price", price, "tiers", tiers)
 	}
-	p, err := srv.BuildProfile307W(cctx, uid, worldTotalGameMin(time.Now()))
+	p, err := srv.BuildProfile307W(cctx, uid, srv.profileClockBase(cctx, uid, time.Now()))
 	if err != nil {
 		ctx.Log.Warn("3/37 档案构造失败", "err", err)
 		return nil, false

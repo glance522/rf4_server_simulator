@@ -2,7 +2,6 @@ package gameserver
 
 import (
 	"context"
-	"math"
 	"sync"
 	"testing"
 	"time"
@@ -42,9 +41,12 @@ func TestHappyHourXPAddsToBaseAndReplaysOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := r.baseXP + int64(math.Round(float64(r.baseXP)*.5))
-	if r.totalXP != want || len(r.bonuses) != 1 || r.bonuses[0].Kind != 57 {
-		t.Fatalf("breakdown %+v", r)
+	// 欢乐时光那一行 = 点数经验 + ML渔具 + 酒兴 + 高级会员；本例三者都没有，等于点数经验本身，
+	// 总经验因此是基数的一倍加成（原来的 50% 口径已废弃）。
+	wantHappy := r.baseXP
+	want := r.baseXP + wantHappy
+	if r.totalXP != want || len(r.bonuses) != 1 || r.bonuses[0].Kind != 57 || r.bonuses[0].XP != wantHappy {
+		t.Fatalf("breakdown %+v want happy=%d total=%d", r, wantHappy, want)
 	}
 	entry := s.buildSettle813(ctx, uid, f, r).Field(8).Val.Field(6).Val.ArgItem(0)
 	if u32Of(entry.Field(4).Num) != 57 {
