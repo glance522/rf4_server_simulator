@@ -170,12 +170,13 @@ func TestGroundbaitWeatherSofteningLiftsWithinBaseline(t *testing.T) {
 	const uid = int64(1000001)
 	gbDeposit(t, s, uid, "feed_karp", 8, "feeder", "gb:s1")
 
+	// 暖/冷必须落在同一游戏时刻：游戏历 24 倍速，暖场景取真实时间而冷场景写死
+	// 日期时，比较的是季节而不是天气。这里固定游戏夏季正午，只让天气不同。
+	now := time.Unix(worldDayEpochUnix+180*24*realSecPerGameHour+12*realSecPerGameHour, 0)
 	warm := fishRollContext{uid: uid, loc: "gb-test-loc", x: 100, z: 100, hasPos: true, spot: 7,
-		now: time.Now(), rigType: 1, depthCM: 100, cache: newFishingRollCache(),
+		now: now, rigType: 1, depthCM: 100, cache: newFishingRollCache(),
 		weather: fishingWeather{known: true, kind: fishingWeatherClear, airTemp: 18, previousAirTemp: 18, wind: 3}}
 	cold := warm
-	// 深冬傍晚 + 大雨：季节、水温、天气三重不利，是软门最差的一档。
-	cold.now = time.Date(2027, 1, 15, 17, 0, 0, 0, time.UTC)
 	cold.weather = fishingWeather{known: true, kind: fishingWeatherHeavyRain, airTemp: -4, previousAirTemp: -4, wind: 6}
 
 	mult := func(c fishRollContext) (float64, float64) {

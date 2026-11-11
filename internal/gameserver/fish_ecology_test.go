@@ -47,8 +47,11 @@ func TestFishEcologySeedsSpeciesAndMatchesWaterLayers(t *testing.T) {
 	srv.tunCache = map[string]float64{"fish_ecology_enabled": 1}
 	srv.tunAt = time.Now()
 
-	surface := fishRollContext{rigType: 1, depthCM: 50, now: time.Now()}
-	bottom := fishRollContext{rigType: 12, depthCM: 500, now: time.Now()}
+	// 鱼口权重随游戏内季节/时段变化，而游戏历是 24 倍速（1 真实小时 = 1 游戏天）；
+	// 固定到游戏夏季正午，避免真实日期漂移导致断言在秋冬失效。
+	now := time.Unix(worldDayEpochUnix+180*24*realSecPerGameHour+12*realSecPerGameHour, 0)
+	surface := fishRollContext{rigType: 1, depthCM: 50, now: now}
+	bottom := fishRollContext{rigType: 12, depthCM: 500, now: now}
 	pikeSurface := srv.fishBiteEnvironmentWeight(ctx, "n.pike", surface)
 	pikeBottom := srv.fishBiteEnvironmentWeight(ctx, "n.pike", bottom)
 	catSurface := srv.fishBiteEnvironmentWeight(ctx, "w_catfish", surface)
