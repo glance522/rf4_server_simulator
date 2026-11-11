@@ -210,6 +210,14 @@ func TestCalibratedLengthKP(t *testing.T) {
 			{weight: 8958, want: 0.91},
 			{weight: 1455, want: 0.40},
 		}},
+		// 大鳞麻哈鱼：玩家 2026-11-11 抄的官服四点（40.9~65.9kg = 1.46~1.63m），
+		// 线性残差 ≤0.07cm。旧 k=0.029240 立方律在 45kg 只给 1.04m，短 45cm。
+		{"chavycha", 0.029240, defaultSpeciesLengthP, 0.005, []lengthAnchor{
+			{weight: 40875, want: 1.46},
+			{weight: 43891, want: 1.48},
+			{weight: 45174, want: 1.49},
+			{weight: 65862, want: 1.63},
+		}},
 	} {
 		gotK, gotP := calibratedLengthKP(c.key, defaultSpeciesLengthK, defaultSpeciesLengthP)
 		if math.Abs(gotK-c.k) > 1e-6 || math.Abs(gotP-c.p) > 1e-9 {
@@ -294,6 +302,11 @@ func TestCalibratedLengthKP(t *testing.T) {
 		{"salvel_l", 0.004837, 0.575668, 500, 0.304},
 		{"palia_kr", 0.014075, 0.454245, 400, 0.275},
 		{"palia_lud", 0.015791, 0.442256, 500, 0.282},
+		// 本服大鳞麻哈鱼的采样区间（档位线 40/60kg ×1.25）常越过实测上限 65.9kg，
+		// 上界外延必须走立方根：80kg 线性外推给 1.73m，与延拓结果只差 2mm，
+		// 但 20kg 处线性外推给 1.32m（比 40.9kg 的 1.46m 只短 14cm），延拓给 1.15m 才合理。
+		{"chavycha", 0.029240, defaultSpeciesLengthP, 20000, 1.151},
+		{"chavycha", 0.029240, defaultSpeciesLengthP, 80000, 1.739},
 	} {
 		if got := speciesLengthM(c.key, c.k, c.p, c.weight); math.Abs(got-c.want) > 0.01 {
 			t.Fatalf("%s 在 %.2fkg 时应按立方根延拓到 %.3fm: got=%.3fm",
