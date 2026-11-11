@@ -1,0 +1,6392 @@
+{
+ "fetchedAt": "2026-06-10T07:20:09.583Z",
+ "catch_count": 90622,
+ "mapped": 246,
+ "source_mix": {
+  "Weekly rec": 54700,
+  "UL rec": 31796,
+  "rf4stat": 4126
+ },
+ "results": [
+  {
+   "fish_key": "crucian",
+   "name_zh": "银鲫﻿",
+   "name_en": "Gibel Carp",
+   "trophy_g": 400,
+   "trophy_line_g": 1900,
+   "super_trophy_line_g": 3200,
+   "db_avg_g": 730,
+   "db_min_g": 30,
+   "db_max_g": 1644,
+   "spawn_hi_g": 4000,
+   "almanac": {
+    "n": 542,
+    "mean_g": 2049,
+    "median_g": 2120,
+    "p10_g": 718,
+    "max_g": 3994,
+    "mean_by_source_g": {
+     "UL rec": 1445,
+     "Weekly rec": 2725,
+     "rf4stat": 2219
+    }
+   },
+   "almanac_max_over_hi": 0.999,
+   "rf4stat_max_g": 3998,
+   "rf4stat_over_almanac": 1.0,
+   "bias_alm_over_dbavg": 2.81,
+   "bias_p10_over_dbavg": 0.98
+  },
+  {
+   "fish_key": "c.roach",
+   "name_zh": "常见拟鲤",
+   "name_en": "Common Roach",
+   "trophy_g": 318,
+   "trophy_line_g": 1200,
+   "super_trophy_line_g": 2000,
+   "db_avg_g": 572,
+   "db_min_g": 30,
+   "db_max_g": 600,
+   "spawn_hi_g": 2500,
+   "almanac": {
+    "n": 613,
+    "mean_g": 1375,
+    "median_g": 1388,
+    "p10_g": 635,
+    "max_g": 2495,
+    "mean_by_source_g": {
+     "UL rec": 1076,
+     "Weekly rec": 1732,
+     "rf4stat": 1329
+    }
+   },
+   "almanac_max_over_hi": 0.998,
+   "bias_alm_over_dbavg": 2.4,
+   "bias_p10_over_dbavg": 1.11
+  },
+  {
+   "fish_key": "perch",
+   "name_zh": "鲈鱼",
+   "name_en": "Perch",
+   "trophy_g": 340,
+   "trophy_line_g": 1600,
+   "super_trophy_line_g": 2700,
+   "db_avg_g": 262,
+   "db_min_g": 30,
+   "db_max_g": 800,
+   "spawn_hi_g": 3375,
+   "almanac": {
+    "n": 689,
+    "mean_g": 1839,
+    "median_g": 1855,
+    "p10_g": 997,
+    "max_g": 3315,
+    "mean_by_source_g": {
+     "UL rec": 1489,
+     "Weekly rec": 2262,
+     "rf4stat": 1882
+    }
+   },
+   "almanac_max_over_hi": 0.982,
+   "rf4stat_max_g": 3498,
+   "rf4stat_over_almanac": 1.06,
+   "bias_alm_over_dbavg": 7.02,
+   "bias_p10_over_dbavg": 3.81
+  },
+  {
+   "fish_key": "s.bream",
+   "name_zh": "银鲷鱼",
+   "name_en": "White Bream",
+   "trophy_g": 350,
+   "trophy_line_g": 800,
+   "super_trophy_line_g": 1200,
+   "db_avg_g": null,
+   "db_min_g": 50,
+   "db_max_g": 700,
+   "spawn_hi_g": 1500,
+   "almanac": {
+    "n": 556,
+    "mean_g": 786,
+    "median_g": 829,
+    "p10_g": 390,
+    "max_g": 1329,
+    "mean_by_source_g": {
+     "UL rec": 700,
+     "Weekly rec": 882,
+     "rf4stat": 860
+    }
+   },
+   "almanac_max_over_hi": 0.886
+  },
+  {
+   "fish_key": "freshwater_mussel",
+   "name_zh": "珠蚌",
+   "name_en": "River mussel",
+   "trophy_g": 80,
+   "trophy_line_g": 190,
+   "super_trophy_line_g": 280,
+   "db_avg_g": null,
+   "db_min_g": 30,
+   "db_max_g": 150,
+   "spawn_hi_g": 350,
+   "almanac": {
+    "n": 498,
+    "mean_g": 175,
+    "median_g": 187,
+    "p10_g": 74,
+    "max_g": 346,
+    "mean_by_source_g": {
+     "UL rec": 136,
+     "Weekly rec": 204,
+     "rf4stat": 202
+    }
+   },
+   "almanac_max_over_hi": 0.989
+  },
+  {
+   "fish_key": "ruffe",
+   "name_zh": "梅花鲈",
+   "name_en": "Ruffe",
+   "trophy_g": 84,
+   "trophy_line_g": 140,
+   "super_trophy_line_g": 220,
+   "db_avg_g": null,
+   "db_min_g": 20,
+   "db_max_g": 300,
+   "spawn_hi_g": 275,
+   "almanac": {
+    "n": 602,
+    "mean_g": 150,
+    "median_g": 154,
+    "p10_g": 86,
+    "max_g": 249,
+    "mean_by_source_g": {
+     "UL rec": 126,
+     "Weekly rec": 175,
+     "rf4stat": 152
+    }
+   },
+   "almanac_max_over_hi": 0.905,
+   "rf4stat_max_g": 249,
+   "rf4stat_over_almanac": 1.0
+  },
+  {
+   "fish_key": "roach",
+   "name_zh": "",
+   "name_en": null,
+   "trophy_g": 250,
+   "trophy_line_g": null,
+   "super_trophy_line_g": null,
+   "db_avg_g": null,
+   "db_min_g": 30,
+   "db_max_g": 500,
+   "spawn_hi_g": null
+  },
+  {
+   "fish_key": "bream",
+   "name_zh": "欧鳊﻿",
+   "name_en": "Bream",
+   "trophy_g": 700,
+   "trophy_line_g": 4400,
+   "super_trophy_line_g": 7000,
+   "db_avg_g": null,
+   "db_min_g": 100,
+   "db_max_g": 1500,
+   "spawn_hi_g": 8750,
+   "almanac": {
+    "n": 623,
+    "mean_g": 3959,
+    "median_g": 4542,
+    "p10_g": 1004,
+    "max_g": 7433,
+    "mean_by_source_g": {
+     "UL rec": 2085,
+     "Weekly rec": 5368,
+     "rf4stat": 4709
+    }
+   },
+   "almanac_max_over_hi": 0.849,
+   "rf4stat_max_g": 7977,
+   "rf4stat_over_almanac": 1.07
+  },
+  {
+   "fish_key": "c.carp",
+   "name_zh": "金鲫﻿",
+   "name_en": "Crucian Carp",
+   "trophy_g": 374,
+   "trophy_line_g": 1800,
+   "super_trophy_line_g": 2900,
+   "db_avg_g": 411,
+   "db_min_g": 20,
+   "db_max_g": 900,
+   "spawn_hi_g": 3625,
+   "almanac": {
+    "n": 580,
+    "mean_g": 1844,
+    "median_g": 1939,
+    "p10_g": 533,
+    "max_g": 3439,
+    "mean_by_source_g": {
+     "UL rec": 1195,
+     "Weekly rec": 2517,
+     "rf4stat": 2048
+    }
+   },
+   "almanac_max_over_hi": 0.949,
+   "bias_alm_over_dbavg": 4.49,
+   "bias_p10_over_dbavg": 1.3
+  },
+  {
+   "fish_key": "a.sleeper",
+   "name_zh": "葛氏鲈塘鳢",
+   "name_en": "Chinese Sleeper",
+   "trophy_g": 104,
+   "trophy_line_g": 400,
+   "super_trophy_line_g": 700,
+   "db_avg_g": null,
+   "db_min_g": 20,
+   "db_max_g": 300,
+   "spawn_hi_g": 875,
+   "almanac": {
+    "n": 550,
+    "mean_g": 432,
+    "median_g": 455,
+    "p10_g": 184,
+    "max_g": 796,
+    "mean_by_source_g": {
+     "UL rec": 399,
+     "Weekly rec": 496,
+     "rf4stat": 453
+    }
+   },
+   "almanac_max_over_hi": 0.91
+  },
+  {
+   "fish_key": "vjun",
+   "name_zh": "泥鳅鱼",
+   "name_en": "Loach",
+   "trophy_g": null,
+   "trophy_line_g": 200,
+   "super_trophy_line_g": 250,
+   "db_avg_g": null,
+   "db_min_g": 10,
+   "db_max_g": 150,
+   "spawn_hi_g": 312,
+   "almanac": {
+    "n": 373,
+    "mean_g": 127,
+    "median_g": 118,
+    "p10_g": 49,
+    "max_g": 287,
+    "mean_by_source_g": {
+     "UL rec": 118,
+     "Weekly rec": 138,
+     "rf4stat": 209
+    }
+   },
+   "almanac_max_over_hi": 0.918
+  },
+  {
+   "fish_key": "sig_ludoga",
+   "name_zh": "莱芒湖白鲑",
+   "name_en": "Ludoga Whitefish",
+   "trophy_g": 2895,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 5000,
+   "db_avg_g": 3217,
+   "db_min_g": 3217,
+   "db_max_g": 3217,
+   "spawn_hi_g": 6250,
+   "almanac": {
+    "n": 456,
+    "mean_g": 2644,
+    "median_g": 2827,
+    "p10_g": 969,
+    "max_g": 5931,
+    "mean_by_source_g": {
+     "UL rec": 2254,
+     "Weekly rec": 2941,
+     "rf4stat": 3354
+    }
+   },
+   "almanac_max_over_hi": 0.949,
+   "bias_alm_over_dbavg": 0.82,
+   "bias_p10_over_dbavg": 0.3
+  },
+  {
+   "fish_key": "vendace",
+   "name_zh": "欧白鲑",
+   "name_en": "Vendace",
+   "trophy_g": 114,
+   "trophy_line_g": 500,
+   "super_trophy_line_g": 800,
+   "db_avg_g": 230,
+   "db_min_g": 53,
+   "db_max_g": 433,
+   "spawn_hi_g": 1000,
+   "almanac": {
+    "n": 553,
+    "mean_g": 483,
+    "median_g": 493,
+    "p10_g": 239,
+    "max_g": 922,
+    "mean_by_source_g": {
+     "UL rec": 426,
+     "Weekly rec": 568,
+     "rf4stat": 566
+    }
+   },
+   "almanac_max_over_hi": 0.922,
+   "rf4stat_max_g": 998,
+   "rf4stat_over_almanac": 1.08,
+   "bias_alm_over_dbavg": 2.1,
+   "bias_p10_over_dbavg": 1.04
+  },
+  {
+   "fish_key": "ripus",
+   "name_zh": "拉多加白鲑",
+   "name_en": "Ripus",
+   "trophy_g": 236,
+   "trophy_line_g": 1200,
+   "super_trophy_line_g": 1700,
+   "db_avg_g": 396,
+   "db_min_g": 137,
+   "db_max_g": 870,
+   "spawn_hi_g": 2125,
+   "almanac": {
+    "n": 492,
+    "mean_g": 909,
+    "median_g": 947,
+    "p10_g": 404,
+    "max_g": 1973,
+    "mean_by_source_g": {
+     "UL rec": 799,
+     "Weekly rec": 1064,
+     "rf4stat": 1292
+    }
+   },
+   "almanac_max_over_hi": 0.928,
+   "rf4stat_max_g": 1998,
+   "rf4stat_over_almanac": 1.01,
+   "bias_alm_over_dbavg": 2.3,
+   "bias_p10_over_dbavg": 1.02
+  },
+  {
+   "fish_key": "c_bleak",
+   "name_zh": "欧鲌",
+   "name_en": "Bleak",
+   "trophy_g": 30,
+   "trophy_line_g": 110,
+   "super_trophy_line_g": 160,
+   "db_avg_g": 41,
+   "db_min_g": 21,
+   "db_max_g": 68,
+   "spawn_hi_g": 200,
+   "almanac": {
+    "n": 385,
+    "mean_g": 120,
+    "median_g": 126,
+    "p10_g": 70,
+    "max_g": 196,
+    "mean_by_source_g": {
+     "UL rec": 115,
+     "Weekly rec": 135,
+     "rf4stat": 125
+    }
+   },
+   "almanac_max_over_hi": 0.98,
+   "bias_alm_over_dbavg": 2.92,
+   "bias_p10_over_dbavg": 1.71
+  },
+  {
+   "fish_key": "s.orfe",
+   "name_zh": "圆腹雅罗鱼﻿",
+   "name_en": "Ide",
+   "trophy_g": 648,
+   "trophy_line_g": 4000,
+   "super_trophy_line_g": 6500,
+   "db_avg_g": 1148,
+   "db_min_g": 105,
+   "db_max_g": 4261,
+   "spawn_hi_g": 8125,
+   "almanac": {
+    "n": 627,
+    "mean_g": 3658,
+    "median_g": 3849,
+    "p10_g": 1552,
+    "max_g": 7090,
+    "mean_by_source_g": {
+     "UL rec": 2820,
+     "Weekly rec": 4435,
+     "rf4stat": 4386
+    }
+   },
+   "almanac_max_over_hi": 0.873,
+   "bias_alm_over_dbavg": 3.19,
+   "bias_p10_over_dbavg": 1.35
+  },
+  {
+   "fish_key": "sig_vouksa",
+   "name_zh": "武克希白鲑",
+   "name_en": "Vuoksa Whitefish",
+   "trophy_g": 750,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 5000,
+   "db_avg_g": 995,
+   "db_min_g": 834,
+   "db_max_g": 1157,
+   "spawn_hi_g": 6250,
+   "almanac": {
+    "n": 400,
+    "mean_g": 1979,
+    "median_g": 1841,
+    "p10_g": 617,
+    "max_g": 4960,
+    "mean_by_source_g": {
+     "UL rec": 1500,
+     "Weekly rec": 2391,
+     "rf4stat": 2760
+    }
+   },
+   "almanac_max_over_hi": 0.794,
+   "bias_alm_over_dbavg": 1.99,
+   "bias_p10_over_dbavg": 0.62
+  },
+  {
+   "fish_key": "golyan",
+   "name_zh": "湖鱥",
+   "name_en": "Common Minnow",
+   "trophy_g": 38,
+   "trophy_line_g": 100,
+   "super_trophy_line_g": 160,
+   "db_avg_g": 46,
+   "db_min_g": 32,
+   "db_max_g": 62,
+   "spawn_hi_g": 200,
+   "almanac": {
+    "n": 358,
+    "mean_g": 74,
+    "median_g": 64,
+    "p10_g": 29,
+    "max_g": 163,
+    "mean_by_source_g": {
+     "UL rec": 63,
+     "Weekly rec": 88,
+     "rf4stat": 133
+    }
+   },
+   "almanac_max_over_hi": 0.815,
+   "rf4stat_max_g": 199,
+   "rf4stat_over_almanac": 1.22,
+   "bias_alm_over_dbavg": 1.61,
+   "bias_p10_over_dbavg": 0.63
+  },
+  {
+   "fish_key": "gc_smelt",
+   "name_zh": "湖鳟鱼",
+   "name_en": "Lake Trout",
+   "trophy_g": 1431,
+   "trophy_line_g": 10000,
+   "super_trophy_line_g": 15000,
+   "db_avg_g": 1044,
+   "db_min_g": 119,
+   "db_max_g": 1648,
+   "spawn_hi_g": 18750,
+   "almanac": {
+    "n": 578,
+    "mean_g": 8514,
+    "median_g": 9293,
+    "p10_g": 2352,
+    "max_g": 17921,
+    "mean_by_source_g": {
+     "UL rec": 6312,
+     "Weekly rec": 10659,
+     "rf4stat": 11237
+    }
+   },
+   "almanac_max_over_hi": 0.956,
+   "bias_alm_over_dbavg": 8.16,
+   "bias_p10_over_dbavg": 2.25
+  },
+  {
+   "fish_key": "e.chub",
+   "name_zh": "诸子鲦",
+   "name_en": "Chub",
+   "trophy_g": 783,
+   "trophy_line_g": 4000,
+   "super_trophy_line_g": 7000,
+   "db_avg_g": 788,
+   "db_min_g": 75,
+   "db_max_g": 3446,
+   "spawn_hi_g": 8750,
+   "almanac": {
+    "n": 671,
+    "mean_g": 4162,
+    "median_g": 4338,
+    "p10_g": 1889,
+    "max_g": 7951,
+    "mean_by_source_g": {
+     "UL rec": 3507,
+     "Weekly rec": 4929,
+     "rf4stat": 4551
+    }
+   },
+   "almanac_max_over_hi": 0.909,
+   "bias_alm_over_dbavg": 5.28,
+   "bias_p10_over_dbavg": 2.4
+  },
+  {
+   "fish_key": "tench",
+   "name_zh": "丁鱥﻿",
+   "name_en": "Tench",
+   "trophy_g": 594,
+   "trophy_line_g": 4000,
+   "super_trophy_line_g": 6000,
+   "db_avg_g": 1540,
+   "db_min_g": 660,
+   "db_max_g": 2108,
+   "spawn_hi_g": 7500,
+   "almanac": {
+    "n": 624,
+    "mean_g": 3728,
+    "median_g": 4241,
+    "p10_g": 738,
+    "max_g": 7293,
+    "mean_by_source_g": {
+     "UL rec": 1398,
+     "Weekly rec": 5399,
+     "rf4stat": 4509
+    }
+   },
+   "almanac_max_over_hi": 0.972,
+   "rf4stat_max_g": 7492,
+   "rf4stat_over_almanac": 1.03,
+   "bias_alm_over_dbavg": 2.42,
+   "bias_p10_over_dbavg": 0.48
+  },
+  {
+   "fish_key": "shemaya_cha",
+   "name_zh": "黑海欧白鱼",
+   "name_en": "Black Sea Shemaya",
+   "trophy_g": 85,
+   "trophy_line_g": 500,
+   "super_trophy_line_g": 700,
+   "db_avg_g": 163,
+   "db_min_g": 42,
+   "db_max_g": 438,
+   "spawn_hi_g": 875,
+   "almanac": {
+    "n": 349,
+    "mean_g": 410,
+    "median_g": 438,
+    "p10_g": 181,
+    "max_g": 749,
+    "mean_by_source_g": {
+     "UL rec": 401,
+     "Weekly rec": 435,
+     "rf4stat": 468
+    }
+   },
+   "almanac_max_over_hi": 0.856,
+   "bias_alm_over_dbavg": 2.52,
+   "bias_p10_over_dbavg": 1.11
+  },
+  {
+   "fish_key": "taran",
+   "name_zh": "亚速海拟鲤",
+   "name_en": "Taran",
+   "trophy_g": 254,
+   "trophy_line_g": 1300,
+   "super_trophy_line_g": 1800,
+   "db_avg_g": 369,
+   "db_min_g": 114,
+   "db_max_g": 805,
+   "spawn_hi_g": 2250,
+   "almanac": {
+    "n": 344,
+    "mean_g": 972,
+    "median_g": 1043,
+    "p10_g": 446,
+    "max_g": 1692,
+    "mean_by_source_g": {
+     "UL rec": 932,
+     "Weekly rec": 1080,
+     "rf4stat": 1364
+    }
+   },
+   "almanac_max_over_hi": 0.752,
+   "rf4stat_max_g": 1998,
+   "rf4stat_over_almanac": 1.18,
+   "bias_alm_over_dbavg": 2.63,
+   "bias_p10_over_dbavg": 1.21
+  },
+  {
+   "fish_key": "pumps_sunfish",
+   "name_zh": "驼背太阳鱼",
+   "name_en": "Pumpkinseed Sunfish",
+   "trophy_g": 88,
+   "trophy_line_g": 450,
+   "super_trophy_line_g": 600,
+   "db_avg_g": 74,
+   "db_min_g": 35,
+   "db_max_g": 165,
+   "spawn_hi_g": 750,
+   "almanac": {
+    "n": 375,
+    "mean_g": 329,
+    "median_g": 364,
+    "p10_g": 105,
+    "max_g": 620,
+    "mean_by_source_g": {
+     "UL rec": 318,
+     "Weekly rec": 353,
+     "rf4stat": 460
+    }
+   },
+   "almanac_max_over_hi": 0.827,
+   "bias_alm_over_dbavg": 4.44,
+   "bias_p10_over_dbavg": 1.42
+  },
+  {
+   "fish_key": "sabrefish",
+   "name_zh": "欧飘鱼",
+   "name_en": "Sichel",
+   "trophy_g": 294,
+   "trophy_line_g": 1500,
+   "super_trophy_line_g": 2000,
+   "db_avg_g": 341,
+   "db_min_g": 145,
+   "db_max_g": 479,
+   "spawn_hi_g": 2500,
+   "almanac": {
+    "n": 360,
+    "mean_g": 1353,
+    "median_g": 1426,
+    "p10_g": 749,
+    "max_g": 2333,
+    "mean_by_source_g": {
+     "UL rec": 1299,
+     "Weekly rec": 1488,
+     "rf4stat": 1409
+    }
+   },
+   "almanac_max_over_hi": 0.933,
+   "rf4stat_max_g": 2485,
+   "rf4stat_over_almanac": 1.07,
+   "bias_alm_over_dbavg": 3.97,
+   "bias_p10_over_dbavg": 2.2
+  },
+  {
+   "fish_key": "tiulka",
+   "name_zh": "棱鲱",
+   "name_en": "Clupeonella",
+   "trophy_g": 9,
+   "trophy_line_g": 24,
+   "super_trophy_line_g": 28,
+   "db_avg_g": 12,
+   "db_min_g": 12,
+   "db_max_g": 13,
+   "spawn_hi_g": 35,
+   "almanac": {
+    "n": 403,
+    "mean_g": 18,
+    "median_g": 19,
+    "p10_g": 13,
+    "max_g": 28,
+    "mean_by_source_g": {
+     "UL rec": 18,
+     "Weekly rec": 19
+    }
+   },
+   "almanac_max_over_hi": 0.8,
+   "rf4stat_max_g": 29,
+   "rf4stat_over_almanac": 1.04,
+   "bias_alm_over_dbavg": 1.54,
+   "bias_p10_over_dbavg": 1.08
+  },
+  {
+   "fish_key": "e_smelt",
+   "name_zh": "胡瓜鱼",
+   "name_en": "Smelt",
+   "trophy_g": 56,
+   "trophy_line_g": 130,
+   "super_trophy_line_g": 200,
+   "db_avg_g": 64,
+   "db_min_g": 63,
+   "db_max_g": 66,
+   "spawn_hi_g": 250,
+   "almanac": {
+    "n": 441,
+    "mean_g": 139,
+    "median_g": 140,
+    "p10_g": 81,
+    "max_g": 247,
+    "mean_by_source_g": {
+     "UL rec": 131,
+     "Weekly rec": 153,
+     "rf4stat": 144
+    }
+   },
+   "almanac_max_over_hi": 0.988,
+   "bias_alm_over_dbavg": 2.17,
+   "bias_p10_over_dbavg": 1.27
+  },
+  {
+   "fish_key": "a_grayling",
+   "name_zh": "茴鱼",
+   "name_en": "Grayling",
+   "trophy_g": 784,
+   "trophy_line_g": 3200,
+   "super_trophy_line_g": 5500,
+   "db_avg_g": 750,
+   "db_min_g": 183,
+   "db_max_g": 1626,
+   "spawn_hi_g": 6875,
+   "almanac": {
+    "n": 572,
+    "mean_g": 2766,
+    "median_g": 2883,
+    "p10_g": 1232,
+    "max_g": 5704,
+    "mean_by_source_g": {
+     "UL rec": 2446,
+     "Weekly rec": 3193,
+     "rf4stat": 3518
+    }
+   },
+   "almanac_max_over_hi": 0.83,
+   "bias_alm_over_dbavg": 3.69,
+   "bias_p10_over_dbavg": 1.64
+  },
+  {
+   "fish_key": "riv_brown_trout",
+   "name_zh": "鳟鱼﻿",
+   "name_en": "Brown Trout",
+   "trophy_g": 674,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 5000,
+   "db_avg_g": 478,
+   "db_min_g": 85,
+   "db_max_g": 925,
+   "spawn_hi_g": 6250,
+   "almanac": {
+    "n": 568,
+    "mean_g": 2805,
+    "median_g": 2919,
+    "p10_g": 913,
+    "max_g": 6298,
+    "mean_by_source_g": {
+     "UL rec": 2531,
+     "Weekly rec": 3123,
+     "rf4stat": 3319
+    }
+   },
+   "almanac_max_over_hi": 1.008,
+   "bias_alm_over_dbavg": 5.87,
+   "bias_p10_over_dbavg": 1.91
+  },
+  {
+   "fish_key": "zs_grayling",
+   "name_zh": "北极茴鱼﻿",
+   "name_en": "Arctic Grayling",
+   "trophy_g": 525,
+   "trophy_line_g": 2000,
+   "super_trophy_line_g": 2500,
+   "db_avg_g": 532,
+   "db_min_g": 251,
+   "db_max_g": 827,
+   "spawn_hi_g": 3125,
+   "almanac": {
+    "n": 457,
+    "mean_g": 1651,
+    "median_g": 1722,
+    "p10_g": 759,
+    "max_g": 2807,
+    "mean_by_source_g": {
+     "UL rec": 1573,
+     "Weekly rec": 1769,
+     "rf4stat": 2166
+    }
+   },
+   "almanac_max_over_hi": 0.898,
+   "bias_alm_over_dbavg": 3.1,
+   "bias_p10_over_dbavg": 1.43
+  },
+  {
+   "fish_key": "dace",
+   "name_zh": "雅罗鱼",
+   "name_en": "Dace",
+   "trophy_g": 138,
+   "trophy_line_g": 250,
+   "super_trophy_line_g": 390,
+   "db_avg_g": 154,
+   "db_min_g": 154,
+   "db_max_g": 154,
+   "spawn_hi_g": 487,
+   "almanac": {
+    "n": 379,
+    "mean_g": 244,
+    "median_g": 254,
+    "p10_g": 147,
+    "max_g": 394,
+    "mean_by_source_g": {
+     "UL rec": 236,
+     "Weekly rec": 262,
+     "rf4stat": 277
+    }
+   },
+   "almanac_max_over_hi": 0.808,
+   "rf4stat_max_g": 448,
+   "rf4stat_over_almanac": 1.14,
+   "bias_alm_over_dbavg": 1.58,
+   "bias_p10_over_dbavg": 0.95
+  },
+  {
+   "fish_key": "cha_herring",
+   "name_zh": "长体西鲱",
+   "name_en": "Pontic shad",
+   "trophy_g": 161,
+   "trophy_line_g": 650,
+   "super_trophy_line_g": 900,
+   "db_avg_g": 179,
+   "db_min_g": 179,
+   "db_max_g": 179,
+   "spawn_hi_g": 1125,
+   "almanac": {
+    "n": 412,
+    "mean_g": 442,
+    "median_g": 447,
+    "p10_g": 170,
+    "max_g": 928,
+    "mean_by_source_g": {
+     "UL rec": 407,
+     "Weekly rec": 523,
+     "rf4stat": 712
+    }
+   },
+   "almanac_max_over_hi": 0.825,
+   "bias_alm_over_dbavg": 2.47,
+   "bias_p10_over_dbavg": 0.95
+  },
+  {
+   "fish_key": "menek",
+   "name_zh": "单鳍鳕﻿",
+   "name_en": "Cusk",
+   "trophy_g": 2022,
+   "trophy_line_g": 18000,
+   "super_trophy_line_g": 24000,
+   "db_avg_g": 4138,
+   "db_min_g": 1438,
+   "db_max_g": 7715,
+   "spawn_hi_g": 30000,
+   "almanac": {
+    "n": 444,
+    "mean_g": 16521,
+    "median_g": 17408,
+    "p10_g": 6214,
+    "max_g": 29877,
+    "mean_by_source_g": {
+     "UL rec": 8627,
+     "Weekly rec": 19412,
+     "rf4stat": 19865
+    }
+   },
+   "almanac_max_over_hi": 0.996,
+   "rf4stat_max_g": 29999,
+   "rf4stat_over_almanac": 1.0,
+   "bias_alm_over_dbavg": 3.99,
+   "bias_p10_over_dbavg": 1.5
+  },
+  {
+   "fish_key": "makrel",
+   "name_zh": "大西洋鲭﻿",
+   "name_en": "Atlantic mackerel",
+   "trophy_g": 541,
+   "trophy_line_g": 2000,
+   "super_trophy_line_g": 2800,
+   "db_avg_g": 598,
+   "db_min_g": 399,
+   "db_max_g": 712,
+   "spawn_hi_g": 3500,
+   "almanac": {
+    "n": 412,
+    "mean_g": 1944,
+    "median_g": 2203,
+    "p10_g": 553,
+    "max_g": 3486,
+    "mean_by_source_g": {
+     "UL rec": 645,
+     "Weekly rec": 2345,
+     "rf4stat": 2236
+    }
+   },
+   "almanac_max_over_hi": 0.996,
+   "rf4stat_max_g": 3498,
+   "rf4stat_over_almanac": 1.0,
+   "bias_alm_over_dbavg": 3.25,
+   "bias_p10_over_dbavg": 0.92
+  },
+  {
+   "fish_key": "rk_crab",
+   "name_zh": "帝王蟹",
+   "name_en": "Red king crab",
+   "trophy_g": 935,
+   "trophy_line_g": 7500,
+   "super_trophy_line_g": 9000,
+   "db_avg_g": 886,
+   "db_min_g": 435,
+   "db_max_g": 1337,
+   "spawn_hi_g": 11250,
+   "almanac": {
+    "n": 283,
+    "mean_g": 4199,
+    "median_g": 3544,
+    "p10_g": 1366,
+    "max_g": 10648,
+    "mean_by_source_g": {
+     "Weekly rec": 4199
+    }
+   },
+   "almanac_max_over_hi": 0.946,
+   "bias_alm_over_dbavg": 4.74,
+   "bias_p10_over_dbavg": 1.54
+  },
+  {
+   "fish_key": "m_scorpius",
+   "name_zh": "短角大杜父鱼﻿",
+   "name_en": "Shorthorn sculpin",
+   "trophy_g": 523,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": 566,
+   "db_min_g": 429,
+   "db_max_g": 788,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 418,
+    "mean_g": 2634,
+    "median_g": 2933,
+    "p10_g": 937,
+    "max_g": 4920,
+    "mean_by_source_g": {
+     "UL rec": 1323,
+     "Weekly rec": 3184,
+     "rf4stat": 3502
+    }
+   },
+   "almanac_max_over_hi": 0.984,
+   "bias_alm_over_dbavg": 4.65,
+   "bias_p10_over_dbavg": 1.66
+  },
+  {
+   "fish_key": "lh_kambala",
+   "name_zh": "长吻黄盖鲽﻿",
+   "name_en": "Longhead dab",
+   "trophy_g": 969,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": 713,
+   "db_min_g": 200,
+   "db_max_g": 1512,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 403,
+    "mean_g": 2375,
+    "median_g": 2635,
+    "p10_g": 546,
+    "max_g": 4954,
+    "mean_by_source_g": {
+     "UL rec": 967,
+     "Weekly rec": 2927,
+     "rf4stat": 3202
+    }
+   },
+   "almanac_max_over_hi": 0.991,
+   "bias_alm_over_dbavg": 3.33,
+   "bias_p10_over_dbavg": 0.77
+  },
+  {
+   "fish_key": "merluza",
+   "name_zh": "欧洲无须鳕﻿",
+   "name_en": "European hake",
+   "trophy_g": 1543,
+   "trophy_line_g": 9000,
+   "super_trophy_line_g": 12000,
+   "db_avg_g": 1267,
+   "db_min_g": 324,
+   "db_max_g": 3472,
+   "spawn_hi_g": 15000,
+   "almanac": {
+    "n": 337,
+    "mean_g": 6972,
+    "median_g": 7675,
+    "p10_g": 1091,
+    "max_g": 14512,
+    "mean_by_source_g": {
+     "UL rec": 2315,
+     "Weekly rec": 8143,
+     "rf4stat": 9640
+    }
+   },
+   "almanac_max_over_hi": 0.967,
+   "rf4stat_max_g": 14996,
+   "rf4stat_over_almanac": 1.03,
+   "bias_alm_over_dbavg": 5.5,
+   "bias_p10_over_dbavg": 0.86
+  },
+  {
+   "fish_key": "merlang",
+   "name_zh": "牙鳕﻿",
+   "name_en": "Whiting",
+   "trophy_g": 612,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": 407,
+   "db_min_g": 107,
+   "db_max_g": 905,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 347,
+    "mean_g": 2406,
+    "median_g": 2712,
+    "p10_g": 534,
+    "max_g": 4624,
+    "mean_by_source_g": {
+     "UL rec": 825,
+     "Weekly rec": 2863,
+     "rf4stat": 3456
+    }
+   },
+   "almanac_max_over_hi": 0.925,
+   "rf4stat_max_g": 4994,
+   "rf4stat_over_almanac": 1.08,
+   "bias_alm_over_dbavg": 5.91,
+   "bias_p10_over_dbavg": 1.31
+  },
+  {
+   "fish_key": "piksha",
+   "name_zh": "黑线鳕﻿",
+   "name_en": "Haddock",
+   "trophy_g": 1501,
+   "trophy_line_g": 11000,
+   "super_trophy_line_g": 13000,
+   "db_avg_g": 2878,
+   "db_min_g": 504,
+   "db_max_g": 5758,
+   "spawn_hi_g": 16250,
+   "almanac": {
+    "n": 412,
+    "mean_g": 9780,
+    "median_g": 10927,
+    "p10_g": 2846,
+    "max_g": 16853,
+    "mean_by_source_g": {
+     "UL rec": 4911,
+     "Weekly rec": 11673,
+     "rf4stat": 12944
+    }
+   },
+   "almanac_max_over_hi": 1.037,
+   "rf4stat_max_g": 16999,
+   "rf4stat_over_almanac": 1.01,
+   "bias_alm_over_dbavg": 3.4,
+   "bias_p10_over_dbavg": 0.99
+  },
+  {
+   "fish_key": "katran",
+   "name_zh": "白斑角鲨﻿",
+   "name_en": "Spiny dogfish",
+   "trophy_g": 3236,
+   "trophy_line_g": 7000,
+   "super_trophy_line_g": 10000,
+   "db_avg_g": 3596,
+   "db_min_g": 3596,
+   "db_max_g": 3596,
+   "spawn_hi_g": 12500,
+   "almanac": {
+    "n": 355,
+    "mean_g": 5499,
+    "median_g": 5972,
+    "p10_g": 1487,
+    "max_g": 11817,
+    "mean_by_source_g": {
+     "UL rec": 2012,
+     "Weekly rec": 6201,
+     "rf4stat": 7711
+    }
+   },
+   "almanac_max_over_hi": 0.945,
+   "rf4stat_max_g": 11998,
+   "rf4stat_over_almanac": 1.02,
+   "bias_alm_over_dbavg": 1.53,
+   "bias_p10_over_dbavg": 0.41
+  },
+  {
+   "fish_key": "polyprion",
+   "name_zh": "石斑鱼",
+   "name_en": "Atlantic wreckfish",
+   "trophy_g": 10041,
+   "trophy_line_g": 60000,
+   "super_trophy_line_g": 75000,
+   "db_avg_g": 11157,
+   "db_min_g": 11157,
+   "db_max_g": 11157,
+   "spawn_hi_g": 93750,
+   "almanac": {
+    "n": 254,
+    "mean_g": 32806,
+    "median_g": 29661,
+    "p10_g": 8231,
+    "max_g": 82470,
+    "mean_by_source_g": {
+     "UL rec": 9062,
+     "Weekly rec": 33793,
+     "rf4stat": 49149
+    }
+   },
+   "almanac_max_over_hi": 0.88,
+   "rf4stat_max_g": 99760,
+   "rf4stat_over_almanac": 1.21,
+   "bias_alm_over_dbavg": 2.94,
+   "bias_p10_over_dbavg": 0.74
+  },
+  {
+   "fish_key": "hippoglos_p",
+   "name_zh": "长拟庸鲽﻿",
+   "name_en": "American plaice",
+   "trophy_g": 382,
+   "trophy_line_g": 4000,
+   "super_trophy_line_g": 5000,
+   "db_avg_g": 502,
+   "db_min_g": 459,
+   "db_max_g": 546,
+   "spawn_hi_g": 6250,
+   "almanac": {
+    "n": 349,
+    "mean_g": 3039,
+    "median_g": 3269,
+    "p10_g": 1105,
+    "max_g": 5829,
+    "mean_by_source_g": {
+     "UL rec": 1273,
+     "Weekly rec": 3367,
+     "rf4stat": 4298
+    }
+   },
+   "almanac_max_over_hi": 0.933,
+   "bias_alm_over_dbavg": 6.05,
+   "bias_p10_over_dbavg": 2.2
+  },
+  {
+   "fish_key": "coalfish",
+   "name_zh": "绿青鳕﻿",
+   "name_en": "Saithe",
+   "trophy_g": 3418,
+   "trophy_line_g": 19000,
+   "super_trophy_line_g": 25000,
+   "db_avg_g": 3798,
+   "db_min_g": 3798,
+   "db_max_g": 3798,
+   "spawn_hi_g": 31250,
+   "almanac": {
+    "n": 447,
+    "mean_g": 17012,
+    "median_g": 18692,
+    "p10_g": 5328,
+    "max_g": 31736,
+    "mean_by_source_g": {
+     "UL rec": 7549,
+     "Weekly rec": 21218,
+     "rf4stat": 20868
+    }
+   },
+   "almanac_max_over_hi": 1.016,
+   "rf4stat_max_g": 31998,
+   "rf4stat_over_almanac": 1.01,
+   "bias_alm_over_dbavg": 4.48,
+   "bias_p10_over_dbavg": 1.4
+  },
+  {
+   "fish_key": "atl_cod",
+   "name_zh": "大西洋鳕﻿",
+   "name_en": "Atlantic cod",
+   "trophy_g": 7292,
+   "trophy_line_g": 50000,
+   "super_trophy_line_g": 65000,
+   "db_avg_g": 6730,
+   "db_min_g": 5605,
+   "db_max_g": 8671,
+   "spawn_hi_g": 81250,
+   "almanac": {
+    "n": 405,
+    "mean_g": 40637,
+    "median_g": 45434,
+    "p10_g": 7861,
+    "max_g": 95874,
+    "mean_by_source_g": {
+     "UL rec": 11046,
+     "Weekly rec": 50230,
+     "rf4stat": 59727
+    }
+   },
+   "almanac_max_over_hi": 1.18,
+   "bias_alm_over_dbavg": 6.04,
+   "bias_p10_over_dbavg": 1.17
+  },
+  {
+   "fish_key": "sig_ostr",
+   "name_zh": "奥斯特罗格白鲑",
+   "name_en": "Ostrog Whitefish",
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 172,
+    "mean_g": 1449,
+    "median_g": 1293,
+    "p10_g": 367,
+    "max_g": 3950,
+    "mean_by_source_g": {
+     "UL rec": 1097,
+     "Weekly rec": 1574,
+     "rf4stat": 3004
+    }
+   },
+   "almanac_max_over_hi": 0.79
+  },
+  {
+   "fish_key": "syb_elets",
+   "name_zh": "贝加尔雅罗鱼﻿",
+   "name_en": "Siberian Dace",
+   "trophy_g": null,
+   "trophy_line_g": 250,
+   "super_trophy_line_g": 390,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 487,
+   "almanac": {
+    "n": 284,
+    "mean_g": 143,
+    "median_g": 123,
+    "p10_g": 54,
+    "max_g": 387,
+    "mean_by_source_g": {
+     "UL rec": 139,
+     "Weekly rec": 152
+    }
+   },
+   "almanac_max_over_hi": 0.794
+  },
+  {
+   "fish_key": "chlamys_isl",
+   "name_zh": "冰岛海扇蛤",
+   "name_en": "Icelandic scallop",
+   "trophy_g": null,
+   "trophy_line_g": 350,
+   "super_trophy_line_g": 450,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 562,
+   "almanac": {
+    "n": 262,
+    "mean_g": 202,
+    "median_g": 172,
+    "p10_g": 100,
+    "max_g": 498,
+    "mean_by_source_g": {
+     "Weekly rec": 202
+    }
+   },
+   "almanac_max_over_hi": 0.885
+  },
+  {
+   "fish_key": "wa_bream",
+   "name_zh": "白眼欧鳊",
+   "name_en": "White-eye Bream",
+   "trophy_g": null,
+   "trophy_line_g": 600,
+   "super_trophy_line_g": 900,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1125,
+   "almanac": {
+    "n": 586,
+    "mean_g": 511,
+    "median_g": 554,
+    "p10_g": 180,
+    "max_g": 1034,
+    "mean_by_source_g": {
+     "UL rec": 377,
+     "Weekly rec": 606,
+     "rf4stat": 646
+    }
+   },
+   "almanac_max_over_hi": 0.919
+  },
+  {
+   "fish_key": "b_herring",
+   "name_zh": "勃氏西鲱",
+   "name_en": "Brazhnikov Herring",
+   "trophy_g": null,
+   "trophy_line_g": 700,
+   "super_trophy_line_g": 1000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1250,
+   "almanac": {
+    "n": 290,
+    "mean_g": 370,
+    "median_g": 311,
+    "p10_g": 120,
+    "max_g": 942,
+    "mean_by_source_g": {
+     "UL rec": 348,
+     "Weekly rec": 396,
+     "rf4stat": 698
+    }
+   },
+   "almanac_max_over_hi": 0.754
+  },
+  {
+   "fish_key": "macrourus_b",
+   "name_zh": "北大西洋长尾鳕",
+   "name_en": "Roughhead grenadier",
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 188,
+    "mean_g": 1744,
+    "median_g": 1557,
+    "p10_g": 901,
+    "max_g": 4300,
+    "mean_by_source_g": {
+     "UL rec": 1549,
+     "Weekly rec": 1753,
+     "rf4stat": 1279
+    }
+   },
+   "almanac_max_over_hi": 0.86
+  },
+  {
+   "fish_key": "lycodes_s",
+   "name_zh": "半裸狼绵鳚",
+   "name_en": "Longear eelpout",
+   "trophy_g": null,
+   "trophy_line_g": 1200,
+   "super_trophy_line_g": 1500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1875,
+   "almanac": {
+    "n": 229,
+    "mean_g": 796,
+    "median_g": 758,
+    "p10_g": 440,
+    "max_g": 1588,
+    "mean_by_source_g": {
+     "UL rec": 428,
+     "Weekly rec": 802,
+     "rf4stat": 1280
+    }
+   },
+   "almanac_max_over_hi": 0.847
+  },
+  {
+   "fish_key": "b_omul",
+   "name_zh": "贝加尔白鲑﻿",
+   "name_en": "Baikal Omul",
+   "trophy_g": null,
+   "trophy_line_g": 6000,
+   "super_trophy_line_g": 7000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 8750,
+   "almanac": {
+    "n": 260,
+    "mean_g": 2446,
+    "median_g": 1983,
+    "p10_g": 841,
+    "max_g": 8999,
+    "mean_by_source_g": {
+     "UL rec": 1784,
+     "Weekly rec": 2773
+    }
+   },
+   "almanac_max_over_hi": 1.028
+  },
+  {
+   "fish_key": "alb_barbel",
+   "name_zh": "白化鲃鱼",
+   "name_en": "Albino barbel",
+   "trophy_g": null,
+   "trophy_line_g": 8000,
+   "super_trophy_line_g": 12000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 15000,
+   "almanac": {
+    "n": 165,
+    "mean_g": 4236,
+    "median_g": 3293,
+    "p10_g": 1443,
+    "max_g": 12498,
+    "mean_by_source_g": {
+     "UL rec": 1459,
+     "Weekly rec": 4257,
+     "rf4stat": 8120
+    }
+   },
+   "almanac_max_over_hi": 0.833
+  },
+  {
+   "fish_key": "sebastes_n",
+   "name_zh": "北海平鲉﻿",
+   "name_en": "Beaked redfish",
+   "trophy_g": null,
+   "trophy_line_g": 9000,
+   "super_trophy_line_g": 11000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 13750,
+   "almanac": {
+    "n": 330,
+    "mean_g": 4562,
+    "median_g": 4951,
+    "p10_g": 1843,
+    "max_g": 8884,
+    "mean_by_source_g": {
+     "UL rec": 2258,
+     "Weekly rec": 4937,
+     "rf4stat": 5866
+    }
+   },
+   "almanac_max_over_hi": 0.646
+  },
+  {
+   "fish_key": "kunja",
+   "name_zh": "白斑红点鲑",
+   "name_en": "Whitespotted Char",
+   "trophy_g": null,
+   "trophy_line_g": 10000,
+   "super_trophy_line_g": 14000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 17500,
+   "almanac": {
+    "n": 417,
+    "mean_g": 4340,
+    "median_g": 3746,
+    "p10_g": 1041,
+    "max_g": 12413,
+    "mean_by_source_g": {
+     "UL rec": 2627,
+     "Weekly rec": 5566
+    }
+   },
+   "almanac_max_over_hi": 0.709,
+   "rf4stat_max_g": 15815,
+   "rf4stat_over_almanac": 1.27
+  },
+  {
+   "fish_key": "a_char",
+   "name_zh": "北极红点鲑﻿",
+   "name_en": "Arctic Char",
+   "trophy_g": null,
+   "trophy_line_g": 11000,
+   "super_trophy_line_g": 16000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 20000,
+   "almanac": {
+    "n": 569,
+    "mean_g": 8106,
+    "median_g": 8440,
+    "p10_g": 2380,
+    "max_g": 19541,
+    "mean_by_source_g": {
+     "UL rec": 5195,
+     "Weekly rec": 10602,
+     "rf4stat": 10704
+    }
+   },
+   "almanac_max_over_hi": 0.977
+  },
+  {
+   "fish_key": "wfish",
+   "name_zh": "白鲑鱼",
+   "name_en": "Beloribitsa Whitefish",
+   "trophy_g": null,
+   "trophy_line_g": 15000,
+   "super_trophy_line_g": 25000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 31250,
+   "almanac": {
+    "n": 226,
+    "mean_g": 8324,
+    "median_g": 7072,
+    "p10_g": 3027,
+    "max_g": 20730,
+    "mean_by_source_g": {
+     "UL rec": 6262,
+     "Weekly rec": 9348
+    }
+   },
+   "almanac_max_over_hi": 0.663,
+   "rf4stat_max_g": 29936,
+   "rf4stat_over_almanac": 1.44
+  },
+  {
+   "fish_key": "nelma",
+   "name_zh": "白北鲑﻿",
+   "name_en": "Nelma",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 30000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 37500,
+   "almanac": {
+    "n": 287,
+    "mean_g": 5853,
+    "median_g": 4204,
+    "p10_g": 1071,
+    "max_g": 27388,
+    "mean_by_source_g": {
+     "UL rec": 3271,
+     "Weekly rec": 6983,
+     "rf4stat": 9318
+    }
+   },
+   "almanac_max_over_hi": 0.73,
+   "rf4stat_max_g": 31544,
+   "rf4stat_over_almanac": 1.15
+  },
+  {
+   "fish_key": "g_carp_albino",
+   "name_zh": "白化草鱼",
+   "name_en": "Albino Grass Carp",
+   "trophy_g": null,
+   "trophy_line_g": 28000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 96,
+    "mean_g": 11528,
+    "median_g": 9788,
+    "p10_g": 2960,
+    "max_g": 32805,
+    "mean_by_source_g": {
+     "Weekly rec": 11528
+    }
+   },
+   "almanac_max_over_hi": 0.656
+  },
+  {
+   "fish_key": "p_sturgeon",
+   "name_zh": "波斯鲟",
+   "name_en": "Persian Sturgeon",
+   "trophy_g": null,
+   "trophy_line_g": 100000,
+   "super_trophy_line_g": 150000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 187500,
+   "almanac": {
+    "n": 241,
+    "mean_g": 47005,
+    "median_g": 39390,
+    "p10_g": 21946,
+    "max_g": 116544,
+    "mean_by_source_g": {
+     "UL rec": 3818,
+     "Weekly rec": 47360,
+     "rf4stat": 26330
+    }
+   },
+   "almanac_max_over_hi": 0.622
+  },
+  {
+   "fish_key": "w_catfish_a",
+   "name_zh": "白化鲇鱼",
+   "name_en": "Albino Catfish",
+   "trophy_g": null,
+   "trophy_line_g": 100000,
+   "super_trophy_line_g": 200000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 250000,
+   "almanac": {
+    "n": 65,
+    "mean_g": 32623,
+    "median_g": 33756,
+    "p10_g": 14086,
+    "max_g": 58521,
+    "mean_by_source_g": {
+     "Weekly rec": 32608,
+     "rf4stat": 33078
+    }
+   },
+   "almanac_max_over_hi": 0.234
+  },
+  {
+   "fish_key": "lampris_g",
+   "name_zh": "斑点月鱼",
+   "name_en": "Opah",
+   "trophy_g": null,
+   "trophy_line_g": 140000,
+   "super_trophy_line_g": 200000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 250000,
+   "almanac": {
+    "n": 249,
+    "mean_g": 87387,
+    "median_g": 79620,
+    "p10_g": 21956,
+    "max_g": 219461,
+    "mean_by_source_g": {
+     "Weekly rec": 85951,
+     "rf4stat": 99699
+    }
+   },
+   "almanac_max_over_hi": 0.878
+  },
+  {
+   "fish_key": "osetr_balt",
+   "name_zh": "波罗的海鲟鱼",
+   "name_en": "Baltic Sturgeon",
+   "trophy_g": null,
+   "trophy_line_g": 200000,
+   "super_trophy_line_g": 300000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 375000,
+   "almanac": {
+    "n": 265,
+    "mean_g": 66297,
+    "median_g": 51849,
+    "p10_g": 15639,
+    "max_g": 240621,
+    "mean_by_source_g": {
+     "UL rec": 24844,
+     "Weekly rec": 75073,
+     "rf4stat": 70022
+    }
+   },
+   "almanac_max_over_hi": 0.642
+  },
+  {
+   "fish_key": "thynnus_t",
+   "name_zh": "北方蓝鳍金枪鱼",
+   "name_en": "Atlantic bluefin tuna",
+   "trophy_g": null,
+   "trophy_line_g": 250000,
+   "super_trophy_line_g": 400000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 500000,
+   "almanac": {
+    "n": 233,
+    "mean_g": 101204,
+    "median_g": 52733,
+    "p10_g": 13507,
+    "max_g": 377371,
+    "mean_by_source_g": {
+     "Weekly rec": 95525,
+     "rf4stat": 190040
+    }
+   },
+   "almanac_max_over_hi": 0.755
+  },
+  {
+   "fish_key": "ch_catfish",
+   "name_zh": "斑点叉尾鮰",
+   "name_en": "Channel catfish",
+   "trophy_g": null,
+   "trophy_line_g": 14000,
+   "super_trophy_line_g": 20000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 25000,
+   "almanac": {
+    "n": 553,
+    "mean_g": 9243,
+    "median_g": 9392,
+    "p10_g": 2322,
+    "max_g": 23789,
+    "mean_by_source_g": {
+     "UL rec": 5419,
+     "Weekly rec": 12598,
+     "rf4stat": 14962
+    }
+   },
+   "almanac_max_over_hi": 0.952
+  },
+  {
+   "fish_key": "sgar",
+   "name_zh": "斑点雀鳝",
+   "name_en": "Spotted Gar",
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 240,
+    "mean_g": 1000,
+    "median_g": 860,
+    "p10_g": 229,
+    "max_g": 3151,
+    "mean_by_source_g": {
+     "UL rec": 573,
+     "Weekly rec": 1123,
+     "rf4stat": 201
+    }
+   },
+   "almanac_max_over_hi": 0.63,
+   "rf4stat_max_g": 3905,
+   "rf4stat_over_almanac": 1.24
+  },
+  {
+   "fish_key": "walleye",
+   "name_zh": "玻璃梭鲈",
+   "name_en": "Walleye",
+   "trophy_g": null,
+   "trophy_line_g": 7000,
+   "super_trophy_line_g": 9000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 11250,
+   "almanac": {
+    "n": 574,
+    "mean_g": 4188,
+    "median_g": 4154,
+    "p10_g": 1202,
+    "max_g": 10194,
+    "mean_by_source_g": {
+     "UL rec": 2794,
+     "Weekly rec": 5166,
+     "rf4stat": 7781
+    }
+   },
+   "almanac_max_over_hi": 0.906,
+   "rf4stat_max_g": 11475,
+   "rf4stat_over_almanac": 1.13
+  },
+  {
+   "fish_key": "white_crappie",
+   "name_zh": "白刺盖太阳鱼",
+   "name_en": "White crappie",
+   "trophy_g": null,
+   "trophy_line_g": 1350,
+   "super_trophy_line_g": 2000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2500,
+   "almanac": {
+    "n": 545,
+    "mean_g": 1333,
+    "median_g": 1434,
+    "p10_g": 591,
+    "max_g": 2358,
+    "mean_by_source_g": {
+     "UL rec": 1093,
+     "Weekly rec": 1594,
+     "rf4stat": 1537
+    }
+   },
+   "almanac_max_over_hi": 0.943
+  },
+  {
+   "fish_key": "sp_bass",
+   "name_zh": "斑点黑鲈",
+   "name_en": "Spotted bass",
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 532,
+    "mean_g": 1801,
+    "median_g": 1735,
+    "p10_g": 566,
+    "max_g": 4538,
+    "mean_by_source_g": {
+     "UL rec": 1247,
+     "Weekly rec": 2368,
+     "rf4stat": 3178
+    }
+   },
+   "almanac_max_over_hi": 0.908
+  },
+  {
+   "fish_key": "trid_lamprey",
+   "name_zh": "叉牙楔齿七鳃鰻",
+   "name_en": "Siberian Lamprey",
+   "trophy_g": null,
+   "trophy_line_g": 70,
+   "super_trophy_line_g": null,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 101,
+   "almanac": {
+    "n": 8,
+    "mean_g": 15,
+    "median_g": 13,
+    "p10_g": 10,
+    "max_g": 29,
+    "mean_by_source_g": {
+     "UL rec": 12,
+     "Weekly rec": 15
+    }
+   },
+   "almanac_max_over_hi": 0.286
+  },
+  {
+   "fish_key": "gudgeon",
+   "name_zh": "常见鮈鱼",
+   "name_en": "Gudgeon",
+   "trophy_g": null,
+   "trophy_line_g": 100,
+   "super_trophy_line_g": 160,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 200,
+   "almanac": {
+    "n": 519,
+    "mean_g": 123,
+    "median_g": 127,
+    "p10_g": 69,
+    "max_g": 199,
+    "mean_by_source_g": {
+     "UL rec": 114,
+     "Weekly rec": 140,
+     "rf4stat": 114
+    }
+   },
+   "almanac_max_over_hi": 0.995,
+   "rf4stat_max_g": 199,
+   "rf4stat_over_almanac": 1.0
+  },
+  {
+   "fish_key": "ruffe_n",
+   "name_zh": "长吻梅花鲈",
+   "name_en": "Donets Ruffe",
+   "trophy_g": null,
+   "trophy_line_g": 250,
+   "super_trophy_line_g": 350,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 437,
+   "almanac": {
+    "n": 521,
+    "mean_g": 231,
+    "median_g": 251,
+    "p10_g": 104,
+    "max_g": 420,
+    "mean_by_source_g": {
+     "UL rec": 175,
+     "Weekly rec": 265,
+     "rf4stat": 275
+    }
+   },
+   "almanac_max_over_hi": 0.96
+  },
+  {
+   "fish_key": "palia_lud",
+   "name_zh": "粗壮红点鲑",
+   "name_en": null,
+   "trophy_g": null,
+   "trophy_line_g": 5000,
+   "super_trophy_line_g": 7600,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 9500
+  },
+  {
+   "fish_key": "c_barbel",
+   "name_zh": "常见鲃鱼﻿",
+   "name_en": "Common Barbel",
+   "trophy_g": null,
+   "trophy_line_g": 8000,
+   "super_trophy_line_g": 12000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 15000,
+   "almanac": {
+    "n": 433,
+    "mean_g": 6741,
+    "median_g": 7565,
+    "p10_g": 1376,
+    "max_g": 13421,
+    "mean_by_source_g": {
+     "UL rec": 1740,
+     "Weekly rec": 7898,
+     "rf4stat": 9478
+    }
+   },
+   "almanac_max_over_hi": 0.895
+  },
+  {
+   "fish_key": "asp",
+   "name_zh": "赤梢鱼",
+   "name_en": "Asp",
+   "trophy_g": null,
+   "trophy_line_g": 8000,
+   "super_trophy_line_g": 13000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 16250,
+   "almanac": {
+    "n": 610,
+    "mean_g": 5249,
+    "median_g": 5217,
+    "p10_g": 1688,
+    "max_g": 11802,
+    "mean_by_source_g": {
+     "UL rec": 3814,
+     "Weekly rec": 6643,
+     "rf4stat": 6590
+    }
+   },
+   "almanac_max_over_hi": 0.726,
+   "rf4stat_max_g": 14964,
+   "rf4stat_over_almanac": 1.27
+  },
+  {
+   "fish_key": "n.pike",
+   "name_zh": "常见狗鱼",
+   "name_en": "Pike",
+   "trophy_g": null,
+   "trophy_line_g": 12000,
+   "super_trophy_line_g": 20000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 25000,
+   "almanac": {
+    "n": 595,
+    "mean_g": 8615,
+    "median_g": 8348,
+    "p10_g": 2155,
+    "max_g": 22262,
+    "mean_by_source_g": {
+     "UL rec": 4513,
+     "Weekly rec": 11523,
+     "rf4stat": 13449
+    }
+   },
+   "almanac_max_over_hi": 0.89
+  },
+  {
+   "fish_key": "g_carp",
+   "name_zh": "草鱼",
+   "name_en": "Grass Carp",
+   "trophy_g": null,
+   "trophy_line_g": 28000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 462,
+    "mean_g": 22765,
+    "median_g": 26895,
+    "p10_g": 2823,
+    "max_g": 46162,
+    "mean_by_source_g": {
+     "UL rec": 3503,
+     "Weekly rec": 27749,
+     "rf4stat": 28867
+    }
+   },
+   "almanac_max_over_hi": 0.923
+  },
+  {
+   "fish_key": "o_ogon",
+   "name_zh": "橙黄金锦鲤",
+   "name_en": "Orenji Ogon",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 32000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 40000,
+   "almanac": {
+    "n": 390,
+    "mean_g": 16070,
+    "median_g": 17506,
+    "p10_g": 3735,
+    "max_g": 31053,
+    "mean_by_source_g": {
+     "UL rec": 2385,
+     "Weekly rec": 16978,
+     "rf4stat": 15428
+    }
+   },
+   "almanac_max_over_hi": 0.776
+  },
+  {
+   "fish_key": "s_freaks",
+   "name_zh": "C2超级怪胎﻿",
+   "name_en": "C2 SuperFreak",
+   "trophy_g": null,
+   "trophy_line_g": 30000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 346,
+    "mean_g": 21096,
+    "median_g": 24482,
+    "p10_g": 2900,
+    "max_g": 44951,
+    "mean_by_source_g": {
+     "UL rec": 2173,
+     "Weekly rec": 23094,
+     "rf4stat": 33496
+    }
+   },
+   "almanac_max_over_hi": 0.899
+  },
+  {
+   "fish_key": "fhcatfish",
+   "name_zh": "铲鮰",
+   "name_en": "Flathead Catfish",
+   "trophy_g": null,
+   "trophy_line_g": 30000,
+   "super_trophy_line_g": 45000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 56250,
+   "almanac": {
+    "n": 401,
+    "mean_g": 16471,
+    "median_g": 15343,
+    "p10_g": 3364,
+    "max_g": 46604,
+    "mean_by_source_g": {
+     "UL rec": 8000,
+     "Weekly rec": 20474,
+     "rf4stat": 16210
+    }
+   },
+   "almanac_max_over_hi": 0.829,
+   "rf4stat_max_g": 58747,
+   "rf4stat_over_almanac": 1.26
+  },
+  {
+   "fish_key": "barb_toni",
+   "name_zh": "董氏须鳅",
+   "name_en": null,
+   "trophy_g": null,
+   "trophy_line_g": 65,
+   "super_trophy_line_g": 80,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 100
+  },
+  {
+   "fish_key": "atl_herring",
+   "name_zh": "大西洋鲱﻿",
+   "name_en": "Atlantic herring",
+   "trophy_g": null,
+   "trophy_line_g": 800,
+   "super_trophy_line_g": 1000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1250,
+   "almanac": {
+    "n": 272,
+    "mean_g": 679,
+    "median_g": 736,
+    "p10_g": 235,
+    "max_g": 1183,
+    "mean_by_source_g": {
+     "UL rec": 246,
+     "Weekly rec": 730,
+     "rf4stat": 890
+    }
+   },
+   "almanac_max_over_hi": 0.946
+  },
+  {
+   "fish_key": "c_nase",
+   "name_zh": "大鼻软口鱼",
+   "name_en": "Nase",
+   "trophy_g": null,
+   "trophy_line_g": 800,
+   "super_trophy_line_g": 1300,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1625,
+   "almanac": {
+    "n": 509,
+    "mean_g": 700,
+    "median_g": 688,
+    "p10_g": 283,
+    "max_g": 1492,
+    "mean_by_source_g": {
+     "UL rec": 533,
+     "Weekly rec": 842,
+     "rf4stat": 801
+    }
+   },
+   "almanac_max_over_hi": 0.918
+  },
+  {
+   "fish_key": "chimaera",
+   "name_zh": "大西洋银鲛",
+   "name_en": "European chimaera",
+   "trophy_g": null,
+   "trophy_line_g": 1500,
+   "super_trophy_line_g": 2000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2500,
+   "almanac": {
+    "n": 93,
+    "mean_g": 890,
+    "median_g": 814,
+    "p10_g": 563,
+    "max_g": 1785,
+    "mean_by_source_g": {
+     "UL rec": 947,
+     "Weekly rec": 887,
+     "rf4stat": 902
+    }
+   },
+   "almanac_max_over_hi": 0.714,
+   "rf4stat_max_g": 2007,
+   "rf4stat_over_almanac": 1.12
+  },
+  {
+   "fish_key": "os_grayling",
+   "name_zh": "东西伯利亚茴鱼﻿",
+   "name_en": "East Siberian Grayling",
+   "trophy_g": null,
+   "trophy_line_g": 2000,
+   "super_trophy_line_g": 2500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 3125,
+   "almanac": {
+    "n": 465,
+    "mean_g": 1459,
+    "median_g": 1486,
+    "p10_g": 718,
+    "max_g": 2827,
+    "mean_by_source_g": {
+     "UL rec": 1370,
+     "Weekly rec": 1575,
+     "rf4stat": 2277
+    }
+   },
+   "almanac_max_over_hi": 0.905
+  },
+  {
+   "fish_key": "e_bream",
+   "name_zh": "东方欧鳊",
+   "name_en": "Eastern Bream",
+   "trophy_g": null,
+   "trophy_line_g": 4400,
+   "super_trophy_line_g": 7000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 8750,
+   "almanac": {
+    "n": 344,
+    "mean_g": 2581,
+    "median_g": 2339,
+    "p10_g": 634,
+    "max_g": 7218,
+    "mean_by_source_g": {
+     "UL rec": 1287,
+     "Weekly rec": 3198,
+     "rf4stat": 5032
+    }
+   },
+   "almanac_max_over_hi": 0.825
+  },
+  {
+   "fish_key": "sea_kambala",
+   "name_zh": "鲽鱼﻿",
+   "name_en": "European plaice",
+   "trophy_g": null,
+   "trophy_line_g": 4500,
+   "super_trophy_line_g": 5500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 6875,
+   "almanac": {
+    "n": 408,
+    "mean_g": 3658,
+    "median_g": 3915,
+    "p10_g": 1271,
+    "max_g": 6880,
+    "mean_by_source_g": {
+     "UL rec": 1904,
+     "Weekly rec": 4184,
+     "rf4stat": 5284
+    }
+   },
+   "almanac_max_over_hi": 1.001
+  },
+  {
+   "fish_key": "himant_g",
+   "name_zh": "多指鞭冠𩽾𩾌",
+   "name_en": "Atlantic footballfish",
+   "trophy_g": null,
+   "trophy_line_g": 7000,
+   "super_trophy_line_g": 9000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 11250,
+   "almanac": {
+    "n": 76,
+    "mean_g": 2628,
+    "median_g": 2639,
+    "p10_g": 550,
+    "max_g": 6839,
+    "mean_by_source_g": {
+     "Weekly rec": 2628
+    }
+   },
+   "almanac_max_over_hi": 0.608
+  },
+  {
+   "fish_key": "keta",
+   "name_zh": "大麻哈鱼",
+   "name_en": "Chum Salmon",
+   "trophy_g": null,
+   "trophy_line_g": 8000,
+   "super_trophy_line_g": 10000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 12500,
+   "almanac": {
+    "n": 513,
+    "mean_g": 6382,
+    "median_g": 6772,
+    "p10_g": 2777,
+    "max_g": 11917,
+    "mean_by_source_g": {
+     "UL rec": 4679,
+     "Weekly rec": 7635,
+     "rf4stat": 9960
+    }
+   },
+   "almanac_max_over_hi": 0.953,
+   "rf4stat_max_g": 11998,
+   "rf4stat_over_almanac": 1.01
+  },
+  {
+   "fish_key": "ambl_r",
+   "name_zh": "钝头鳐﻿",
+   "name_en": "Thorny skate",
+   "trophy_g": null,
+   "trophy_line_g": 11000,
+   "super_trophy_line_g": 14000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 17500,
+   "almanac": {
+    "n": 305,
+    "mean_g": 7228,
+    "median_g": 7233,
+    "p10_g": 2603,
+    "max_g": 14911,
+    "mean_by_source_g": {
+     "UL rec": 3302,
+     "Weekly rec": 7721,
+     "rf4stat": 11962
+    }
+   },
+   "almanac_max_over_hi": 0.852
+  },
+  {
+   "fish_key": "sh_barbel",
+   "name_zh": "短头梭鲃",
+   "name_en": "Short-headed Barbel",
+   "trophy_g": null,
+   "trophy_line_g": 13000,
+   "super_trophy_line_g": 18000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 22500,
+   "almanac": {
+    "n": 414,
+    "mean_g": 12653,
+    "median_g": 13378,
+    "p10_g": 6743,
+    "max_g": 20389,
+    "mean_by_source_g": {
+     "UL rec": 2882,
+     "Weekly rec": 12996,
+     "rf4stat": 13528
+    }
+   },
+   "almanac_max_over_hi": 0.906
+  },
+  {
+   "fish_key": "turbot",
+   "name_zh": "大菱鲆﻿",
+   "name_en": "Turbot",
+   "trophy_g": null,
+   "trophy_line_g": 14000,
+   "super_trophy_line_g": 18000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 22500,
+   "almanac": {
+    "n": 387,
+    "mean_g": 10525,
+    "median_g": 11171,
+    "p10_g": 3378,
+    "max_g": 23574,
+    "mean_by_source_g": {
+     "UL rec": 4633,
+     "Weekly rec": 12273,
+     "rf4stat": 14958
+    }
+   },
+   "almanac_max_over_hi": 1.048,
+   "rf4stat_max_g": 24955,
+   "rf4stat_over_almanac": 1.06
+  },
+  {
+   "fish_key": "p_zubatka",
+   "name_zh": "大西洋狼鳚﻿",
+   "name_en": "Atlantic wolffish",
+   "trophy_g": null,
+   "trophy_line_g": 14500,
+   "super_trophy_line_g": 19000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 23750,
+   "almanac": {
+    "n": 369,
+    "mean_g": 13326,
+    "median_g": 14739,
+    "p10_g": 4803,
+    "max_g": 23365,
+    "mean_by_source_g": {
+     "UL rec": 6013,
+     "Weekly rec": 14719,
+     "rf4stat": 16453
+    }
+   },
+   "almanac_max_over_hi": 0.984
+  },
+  {
+   "fish_key": "buffalo",
+   "name_zh": "大口水牛鱼",
+   "name_en": "Buffalo",
+   "trophy_g": null,
+   "trophy_line_g": 15000,
+   "super_trophy_line_g": 20000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 25000,
+   "almanac": {
+    "n": 295,
+    "mean_g": 12703,
+    "median_g": 13917,
+    "p10_g": 2420,
+    "max_g": 24111,
+    "mean_by_source_g": {
+     "UL rec": 2357,
+     "Weekly rec": 13858,
+     "rf4stat": 16366
+    }
+   },
+   "almanac_max_over_hi": 0.964,
+   "rf4stat_max_g": 24998,
+   "rf4stat_over_almanac": 1.04
+  },
+  {
+   "fish_key": "l_carp",
+   "name_zh": "带形镜鲤",
+   "name_en": "Linear carp",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 448,
+    "mean_g": 22001,
+    "median_g": 23401,
+    "p10_g": 5215,
+    "max_g": 49874,
+    "mean_by_source_g": {
+     "UL rec": 2767,
+     "Weekly rec": 22422,
+     "rf4stat": 28410
+    }
+   },
+   "almanac_max_over_hi": 0.997
+  },
+  {
+   "fish_key": "l_carp_ghost",
+   "name_zh": "带形镜鲤(人面鲤)",
+   "name_en": "Linear Ghost Carp",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 155,
+    "mean_g": 12293,
+    "median_g": 9712,
+    "p10_g": 4248,
+    "max_g": 40828,
+    "mean_by_source_g": {
+     "UL rec": 1526,
+     "Weekly rec": 12247,
+     "rf4stat": 40828
+    }
+   },
+   "almanac_max_over_hi": 0.817
+  },
+  {
+   "fish_key": "l_carp_albino",
+   "name_zh": "带形镜鲤(白化)",
+   "name_en": "Linear albino carp",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 139,
+    "mean_g": 10891,
+    "median_g": 7172,
+    "p10_g": 3650,
+    "max_g": 32879,
+    "mean_by_source_g": {
+     "Weekly rec": 10891
+    }
+   },
+   "almanac_max_over_hi": 0.658
+  },
+  {
+   "fish_key": "a_salmon",
+   "name_zh": "大西洋鲑鱼",
+   "name_en": "Atlantic Salmon",
+   "trophy_g": null,
+   "trophy_line_g": 30000,
+   "super_trophy_line_g": 38000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 47500,
+   "almanac": {
+    "n": 307,
+    "mean_g": 18395,
+    "median_g": 18650,
+    "p10_g": 6574,
+    "max_g": 38359,
+    "mean_by_source_g": {
+     "UL rec": 8468,
+     "Weekly rec": 21166
+    }
+   },
+   "almanac_max_over_hi": 0.808
+  },
+  {
+   "fish_key": "din_l_carp",
+   "name_zh": "丁克斯带形鲤",
+   "name_en": "Dinks linear carp",
+   "trophy_g": null,
+   "trophy_line_g": 35000,
+   "super_trophy_line_g": 45000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 56250,
+   "almanac": {
+    "n": 282,
+    "mean_g": 20243,
+    "median_g": 22235,
+    "p10_g": 2889,
+    "max_g": 53886,
+    "mean_by_source_g": {
+     "UL rec": 1826,
+     "Weekly rec": 22413,
+     "rf4stat": 35428
+    }
+   },
+   "almanac_max_over_hi": 0.958
+  },
+  {
+   "fish_key": "din_m_carp",
+   "name_zh": "丁克斯镜鲤",
+   "name_en": "Dinks mirror carp",
+   "trophy_g": null,
+   "trophy_line_g": 35000,
+   "super_trophy_line_g": 45000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 56250,
+   "almanac": {
+    "n": 319,
+    "mean_g": 19416,
+    "median_g": 20678,
+    "p10_g": 2584,
+    "max_g": 45543,
+    "mean_by_source_g": {
+     "UL rec": 2176,
+     "Weekly rec": 22469
+    }
+   },
+   "almanac_max_over_hi": 0.81
+  },
+  {
+   "fish_key": "din_n_carp",
+   "name_zh": "丁克斯无鳞鲤",
+   "name_en": "Dinks leather carp",
+   "trophy_g": null,
+   "trophy_line_g": 35000,
+   "super_trophy_line_g": 45000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 56250,
+   "almanac": {
+    "n": 200,
+    "mean_g": 15827,
+    "median_g": 14311,
+    "p10_g": 4817,
+    "max_g": 33718,
+    "mean_by_source_g": {
+     "UL rec": 3626,
+     "Weekly rec": 16139
+    }
+   },
+   "almanac_max_over_hi": 0.599
+  },
+  {
+   "fish_key": "lophius_p",
+   "name_zh": "钓𩽾𩾌",
+   "name_en": "European Angler",
+   "trophy_g": null,
+   "trophy_line_g": 35000,
+   "super_trophy_line_g": 45000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 56250,
+   "almanac": {
+    "n": 257,
+    "mean_g": 24028,
+    "median_g": 24242,
+    "p10_g": 10084,
+    "max_g": 52509,
+    "mean_by_source_g": {
+     "UL rec": 9878,
+     "Weekly rec": 24485,
+     "rf4stat": 36118
+    }
+   },
+   "almanac_max_over_hi": 0.933
+  },
+  {
+   "fish_key": "chavycha",
+   "name_zh": "大鳞麻哈鱼",
+   "name_en": "Chinook Salmon",
+   "trophy_g": null,
+   "trophy_line_g": 40000,
+   "super_trophy_line_g": 60000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 75000,
+   "almanac": {
+    "n": 275,
+    "mean_g": 27596,
+    "median_g": 26905,
+    "p10_g": 14519,
+    "max_g": 56779,
+    "mean_by_source_g": {
+     "UL rec": 16847,
+     "Weekly rec": 29246,
+     "rf4stat": 42292
+    }
+   },
+   "almanac_max_over_hi": 0.757,
+   "rf4stat_max_g": 69230,
+   "rf4stat_over_almanac": 1.22
+  },
+  {
+   "fish_key": "meagre",
+   "name_zh": "大西洋白姑鱼",
+   "name_en": "Meagre",
+   "trophy_g": null,
+   "trophy_line_g": 65000,
+   "super_trophy_line_g": 90000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 112500,
+   "almanac": {
+    "n": 250,
+    "mean_g": 37539,
+    "median_g": 35258,
+    "p10_g": 8237,
+    "max_g": 86096,
+    "mean_by_source_g": {
+     "UL rec": 6538,
+     "Weekly rec": 38018,
+     "rf4stat": 64410
+    }
+   },
+   "almanac_max_over_hi": 0.765,
+   "rf4stat_max_g": 108999,
+   "rf4stat_over_almanac": 1.27
+  },
+  {
+   "fish_key": "zs_sturgeon",
+   "name_zh": "东西伯利亚鲟﻿",
+   "name_en": "East Siberian Sturgeon",
+   "trophy_g": null,
+   "trophy_line_g": 100000,
+   "super_trophy_line_g": 150000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 187500,
+   "almanac": {
+    "n": 293,
+    "mean_g": 67301,
+    "median_g": 65311,
+    "p10_g": 19847,
+    "max_g": 176135,
+    "mean_by_source_g": {
+     "UL rec": 12729,
+     "Weekly rec": 65364,
+     "rf4stat": 98346
+    }
+   },
+   "almanac_max_over_hi": 0.939
+  },
+  {
+   "fish_key": "kaluga",
+   "name_zh": "达氏鳇",
+   "name_en": "Kaluga",
+   "trophy_g": null,
+   "trophy_line_g": 500000,
+   "super_trophy_line_g": 1000000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1250000,
+   "almanac": {
+    "n": 125,
+    "mean_g": 32514,
+    "median_g": 24099,
+    "p10_g": 8695,
+    "max_g": 188760,
+    "mean_by_source_g": {
+     "Weekly rec": 32514
+    }
+   },
+   "almanac_max_over_hi": 0.151,
+   "rf4stat_max_g": 782200,
+   "rf4stat_over_almanac": 4.14
+  },
+  {
+   "fish_key": "lm_b_bass",
+   "name_zh": "大口黑鲈",
+   "name_en": "Largemouth bass",
+   "trophy_g": null,
+   "trophy_line_g": 6000,
+   "super_trophy_line_g": 7500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 9375,
+   "almanac": {
+    "n": 513,
+    "mean_g": 3718,
+    "median_g": 3634,
+    "p10_g": 1362,
+    "max_g": 9594,
+    "mean_by_source_g": {
+     "UL rec": 2457,
+     "Weekly rec": 4822,
+     "rf4stat": 5362
+    }
+   },
+   "almanac_max_over_hi": 1.023
+  },
+  {
+   "fish_key": "fwdrum",
+   "name_zh": "淡水石首鱼",
+   "name_en": "Freshwater drum",
+   "trophy_g": null,
+   "trophy_line_g": 13500,
+   "super_trophy_line_g": 19000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 23750,
+   "almanac": {
+    "n": 571,
+    "mean_g": 7402,
+    "median_g": 6736,
+    "p10_g": 1317,
+    "max_g": 22951,
+    "mean_by_source_g": {
+     "UL rec": 4411,
+     "Weekly rec": 10206,
+     "rf4stat": 8678
+    }
+   },
+   "almanac_max_over_hi": 0.966,
+   "rf4stat_max_g": 24648,
+   "rf4stat_over_almanac": 1.07
+  },
+  {
+   "fish_key": "barsch",
+   "name_zh": "俄罗斯梭吻鲈",
+   "name_en": "Volga Zander",
+   "trophy_g": null,
+   "trophy_line_g": 1400,
+   "super_trophy_line_g": 2200,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2750,
+   "almanac": {
+    "n": 559,
+    "mean_g": 1308,
+    "median_g": 1397,
+    "p10_g": 560,
+    "max_g": 2303,
+    "mean_by_source_g": {
+     "UL rec": 977,
+     "Weekly rec": 1538,
+     "rf4stat": 1571
+    }
+   },
+   "almanac_max_over_hi": 0.837,
+   "rf4stat_max_g": 2495,
+   "rf4stat_over_almanac": 1.08
+  },
+  {
+   "fish_key": "r_sturgeon",
+   "name_zh": "俄罗斯鲟",
+   "name_en": "Russian Sturgeon",
+   "trophy_g": null,
+   "trophy_line_g": 50000,
+   "super_trophy_line_g": 100000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 125000,
+   "almanac": {
+    "n": 354,
+    "mean_g": 34582,
+    "median_g": 29970,
+    "p10_g": 7393,
+    "max_g": 122782,
+    "mean_by_source_g": {
+     "UL rec": 8066,
+     "Weekly rec": 36893,
+     "rf4stat": 48634
+    }
+   },
+   "almanac_max_over_hi": 0.982
+  },
+  {
+   "fish_key": "agar",
+   "name_zh": "鳄雀鳝",
+   "name_en": "Alligator gar",
+   "trophy_g": null,
+   "trophy_line_g": 70000,
+   "super_trophy_line_g": 100000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 125000,
+   "almanac": {
+    "n": 114,
+    "mean_g": 11235,
+    "median_g": 9842,
+    "p10_g": 1354,
+    "max_g": 61047,
+    "mean_by_source_g": {
+     "UL rec": 2190,
+     "Weekly rec": 11728,
+     "rf4stat": 12683
+    }
+   },
+   "almanac_max_over_hi": 0.488,
+   "rf4stat_max_g": 88841,
+   "rf4stat_over_almanac": 1.46
+  },
+  {
+   "fish_key": "gorbusha",
+   "name_zh": "粉鲑﻿",
+   "name_en": "Pink Salmon",
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 473,
+    "mean_g": 2050,
+    "median_g": 2004,
+    "p10_g": 898,
+    "max_g": 4856,
+    "mean_by_source_g": {
+     "UL rec": 1804,
+     "Weekly rec": 2326,
+     "rf4stat": 2914
+    }
+   },
+   "almanac_max_over_hi": 0.971,
+   "rf4stat_max_g": 5492,
+   "rf4stat_over_almanac": 1.13
+  },
+  {
+   "fish_key": "hi_utsri",
+   "name_zh": "绯写锦鲤",
+   "name_en": "Hi Utsuri",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 32000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 40000,
+   "almanac": {
+    "n": 207,
+    "mean_g": 9991,
+    "median_g": 7652,
+    "p10_g": 2557,
+    "max_g": 28308,
+    "mean_by_source_g": {
+     "UL rec": 893,
+     "Weekly rec": 10110,
+     "rf4stat": 2415
+    }
+   },
+   "almanac_max_over_hi": 0.708
+  },
+  {
+   "fish_key": "peled",
+   "name_zh": "高白鲑",
+   "name_en": "Peled",
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 487,
+    "mean_g": 2002,
+    "median_g": 2014,
+    "p10_g": 804,
+    "max_g": 4183,
+    "mean_by_source_g": {
+     "UL rec": 1506,
+     "Weekly rec": 2464,
+     "rf4stat": 3114
+    }
+   },
+   "almanac_max_over_hi": 0.837,
+   "rf4stat_max_g": 4988,
+   "rf4stat_over_almanac": 1.19
+  },
+  {
+   "fish_key": "dreissena",
+   "name_zh": "河斑马纹贻贝",
+   "name_en": "Zebra Mussel",
+   "trophy_g": null,
+   "trophy_line_g": 150,
+   "super_trophy_line_g": 210,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 262,
+   "almanac": {
+    "n": 522,
+    "mean_g": 129,
+    "median_g": 139,
+    "p10_g": 53,
+    "max_g": 248,
+    "mean_by_source_g": {
+     "UL rec": 94,
+     "Weekly rec": 155,
+     "rf4stat": 161
+    }
+   },
+   "almanac_max_over_hi": 0.945,
+   "rf4stat_max_g": 249,
+   "rf4stat_over_almanac": 1.0
+  },
+  {
+   "fish_key": "s_lamprey",
+   "name_zh": "黑尾叉牙七鳃鳗",
+   "name_en": "Three Toothed Lamprey",
+   "trophy_g": null,
+   "trophy_line_g": 40,
+   "super_trophy_line_g": null,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 58,
+   "almanac": {
+    "n": 11,
+    "mean_g": 24,
+    "median_g": 21,
+    "p10_g": 11,
+    "max_g": 49,
+    "mean_by_source_g": {
+     "Weekly rec": 24
+    }
+   },
+   "almanac_max_over_hi": 0.845
+  },
+  {
+   "fish_key": "l_minnow",
+   "name_zh": "湖大吻鱥",
+   "name_en": "Lake Minnow",
+   "trophy_g": null,
+   "trophy_line_g": 100,
+   "super_trophy_line_g": 160,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 200,
+   "almanac": {
+    "n": 392,
+    "mean_g": 87,
+    "median_g": 89,
+    "p10_g": 37,
+    "max_g": 179,
+    "mean_by_source_g": {
+     "UL rec": 81,
+     "Weekly rec": 96,
+     "rf4stat": 89
+    }
+   },
+   "almanac_max_over_hi": 0.895
+  },
+  {
+   "fish_key": "crawfish",
+   "name_zh": "河鳌虾",
+   "name_en": "Freshwater Crayfish",
+   "trophy_g": null,
+   "trophy_line_g": 200,
+   "super_trophy_line_g": 330,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 412,
+   "almanac": {
+    "n": 500,
+    "mean_g": 190,
+    "median_g": 196,
+    "p10_g": 85,
+    "max_g": 371,
+    "mean_by_source_g": {
+     "UL rec": 135,
+     "Weekly rec": 222,
+     "rf4stat": 228
+    }
+   },
+   "almanac_max_over_hi": 0.899
+  },
+  {
+   "fish_key": "syb_roach",
+   "name_zh": "湖拟鲤﻿",
+   "name_en": "Siberian Roach",
+   "trophy_g": null,
+   "trophy_line_g": 600,
+   "super_trophy_line_g": 700,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 875,
+   "almanac": {
+    "n": 309,
+    "mean_g": 315,
+    "median_g": 315,
+    "p10_g": 105,
+    "max_g": 769,
+    "mean_by_source_g": {
+     "UL rec": 278,
+     "Weekly rec": 344
+    }
+   },
+   "almanac_max_over_hi": 0.879
+  },
+  {
+   "fish_key": "k_herring",
+   "name_zh": "黑背西鲱",
+   "name_en": "Kessler's Herring",
+   "trophy_g": null,
+   "trophy_line_g": 1200,
+   "super_trophy_line_g": 1700,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2125,
+   "almanac": {
+    "n": 353,
+    "mean_g": 891,
+    "median_g": 968,
+    "p10_g": 275,
+    "max_g": 1856,
+    "mean_by_source_g": {
+     "UL rec": 772,
+     "Weekly rec": 1072,
+     "rf4stat": 1426
+    }
+   },
+   "almanac_max_over_hi": 0.873
+  },
+  {
+   "fish_key": "rudd",
+   "name_zh": "红鳍鱼",
+   "name_en": "Rudd",
+   "trophy_g": null,
+   "trophy_line_g": 1500,
+   "super_trophy_line_g": 2000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2500,
+   "almanac": {
+    "n": 429,
+    "mean_g": 1164,
+    "median_g": 1274,
+    "p10_g": 474,
+    "max_g": 2190,
+    "mean_by_source_g": {
+     "UL rec": 1090,
+     "Weekly rec": 1350,
+     "rf4stat": 1411
+    }
+   },
+   "almanac_max_over_hi": 0.876,
+   "rf4stat_max_g": 2459,
+   "rf4stat_over_almanac": 1.12
+  },
+  {
+   "fish_key": "red_fish",
+   "name_zh": "海平鲉﻿",
+   "name_en": "Atlantic redfish",
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 284,
+    "mean_g": 7051,
+    "median_g": 7332,
+    "p10_g": 2829,
+    "max_g": 14950,
+    "mean_by_source_g": {
+     "UL rec": 3452,
+     "Weekly rec": 7634,
+     "rf4stat": 9891
+    }
+   },
+   "almanac_max_over_hi": 2.99
+  },
+  {
+   "fish_key": "b_scabbardfish",
+   "name_zh": "黑等鳍叉尾带鱼",
+   "name_en": "Black scabbardfish",
+   "trophy_g": null,
+   "trophy_line_g": 4000,
+   "super_trophy_line_g": 5500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 6875,
+   "almanac": {
+    "n": 96,
+    "mean_g": 1803,
+    "median_g": 1678,
+    "p10_g": 622,
+    "max_g": 4575,
+    "mean_by_source_g": {
+     "UL rec": 1438,
+     "Weekly rec": 1806
+    }
+   },
+   "almanac_max_over_hi": 0.665
+  },
+  {
+   "fish_key": "palia_kr",
+   "name_zh": "黑口红点鲑",
+   "name_en": null,
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5625
+  },
+  {
+   "fish_key": "sig_black",
+   "name_zh": "黑白鲑",
+   "name_en": "Black whitefish",
+   "trophy_g": null,
+   "trophy_line_g": 3500,
+   "super_trophy_line_g": 5000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 6250,
+   "almanac": {
+    "n": 383,
+    "mean_g": 1988,
+    "median_g": 1810,
+    "p10_g": 726,
+    "max_g": 5045,
+    "mean_by_source_g": {
+     "UL rec": 1779,
+     "Weekly rec": 2201,
+     "rf4stat": 3584
+    }
+   },
+   "almanac_max_over_hi": 0.807
+  },
+  {
+   "fish_key": "nerka",
+   "name_zh": "红大麻哈鱼",
+   "name_en": "Sockeye Salmon",
+   "trophy_g": null,
+   "trophy_line_g": 4500,
+   "super_trophy_line_g": 6000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 7500,
+   "almanac": {
+    "n": 469,
+    "mean_g": 2137,
+    "median_g": 1785,
+    "p10_g": 726,
+    "max_g": 6228,
+    "mean_by_source_g": {
+     "UL rec": 1762,
+     "Weekly rec": 2475
+    }
+   },
+   "almanac_max_over_hi": 0.83,
+   "rf4stat_max_g": 6973,
+   "rf4stat_over_almanac": 1.12
+  },
+  {
+   "fish_key": "a_catfish",
+   "name_zh": "花鲶",
+   "name_en": "Amur Catfish",
+   "trophy_g": null,
+   "trophy_line_g": 5000,
+   "super_trophy_line_g": 7000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 8750,
+   "almanac": {
+    "n": 365,
+    "mean_g": 2722,
+    "median_g": 2427,
+    "p10_g": 745,
+    "max_g": 6990,
+    "mean_by_source_g": {
+     "UL rec": 1596,
+     "Weekly rec": 3274,
+     "rf4stat": 5485
+    }
+   },
+   "almanac_max_over_hi": 0.799
+  },
+  {
+   "fish_key": "vyrezub",
+   "name_zh": "黑库图拟鲤",
+   "name_en": "Black Sea Kutum",
+   "trophy_g": null,
+   "trophy_line_g": 5500,
+   "super_trophy_line_g": 7500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 9375,
+   "almanac": {
+    "n": 177,
+    "mean_g": 2797,
+    "median_g": 2615,
+    "p10_g": 670,
+    "max_g": 6531,
+    "mean_by_source_g": {
+     "UL rec": 654,
+     "Weekly rec": 2899
+    }
+   },
+   "almanac_max_over_hi": 0.697,
+   "rf4stat_max_g": 8985,
+   "rf4stat_over_almanac": 1.38
+  },
+  {
+   "fish_key": "malma",
+   "name_zh": "花羔红点斑鲑",
+   "name_en": "Dolly Varden Trout",
+   "trophy_g": null,
+   "trophy_line_g": 7500,
+   "super_trophy_line_g": 10000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 12500,
+   "almanac": {
+    "n": 518,
+    "mean_g": 4856,
+    "median_g": 4985,
+    "p10_g": 1421,
+    "max_g": 11485,
+    "mean_by_source_g": {
+     "UL rec": 3700,
+     "Weekly rec": 5884,
+     "rf4stat": 8230
+    }
+   },
+   "almanac_max_over_hi": 0.919,
+   "rf4stat_max_g": 11991,
+   "rf4stat_over_almanac": 1.04
+  },
+  {
+   "fish_key": "riv_rb_trout",
+   "name_zh": "虹鳟",
+   "name_en": "Rainbow Trout",
+   "trophy_g": null,
+   "trophy_line_g": 10000,
+   "super_trophy_line_g": 13000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 16250,
+   "almanac": {
+    "n": 458,
+    "mean_g": 5533,
+    "median_g": 5374,
+    "p10_g": 1150,
+    "max_g": 12560,
+    "mean_by_source_g": {
+     "UL rec": 3569,
+     "Weekly rec": 7161,
+     "rf4stat": 6820
+    }
+   },
+   "almanac_max_over_hi": 0.773
+  },
+  {
+   "fish_key": "dr_char",
+   "name_zh": "黄斑红点鲑﻿",
+   "name_en": "Dryagin Char",
+   "trophy_g": null,
+   "trophy_line_g": 10000,
+   "super_trophy_line_g": 14000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 17500,
+   "almanac": {
+    "n": 370,
+    "mean_g": 6524,
+    "median_g": 6423,
+    "p10_g": 2448,
+    "max_g": 13561,
+    "mean_by_source_g": {
+     "UL rec": 3426,
+     "Weekly rec": 7202,
+     "rf4stat": 10824
+    }
+   },
+   "almanac_max_over_hi": 0.775
+  },
+  {
+   "fish_key": "bl_buffalo",
+   "name_zh": "黑牛胭脂鱼",
+   "name_en": "Black Buffalo",
+   "trophy_g": null,
+   "trophy_line_g": 15000,
+   "super_trophy_line_g": 20000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 25000,
+   "almanac": {
+    "n": 136,
+    "mean_g": 6804,
+    "median_g": 6864,
+    "p10_g": 1833,
+    "max_g": 17472,
+    "mean_by_source_g": {
+     "UL rec": 782,
+     "Weekly rec": 7034
+    }
+   },
+   "almanac_max_over_hi": 0.699
+  },
+  {
+   "fish_key": "m_zubatka",
+   "name_zh": "花狼鱼﻿",
+   "name_en": "Spotted wolffish",
+   "trophy_g": null,
+   "trophy_line_g": 17000,
+   "super_trophy_line_g": 22000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 27500,
+   "almanac": {
+    "n": 284,
+    "mean_g": 14276,
+    "median_g": 15142,
+    "p10_g": 5836,
+    "max_g": 25297,
+    "mean_by_source_g": {
+     "UL rec": 6895,
+     "Weekly rec": 15394,
+     "rf4stat": 18811
+    }
+   },
+   "almanac_max_over_hi": 0.92
+  },
+  {
+   "fish_key": "centroloph_n",
+   "name_zh": "黑长鲳﻿",
+   "name_en": "Black ruff",
+   "trophy_g": null,
+   "trophy_line_g": 24000,
+   "super_trophy_line_g": 29000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 36250,
+   "almanac": {
+    "n": 254,
+    "mean_g": 20182,
+    "median_g": 22310,
+    "p10_g": 8198,
+    "max_g": 39502,
+    "mean_by_source_g": {
+     "UL rec": 3338,
+     "Weekly rec": 19850,
+     "rf4stat": 25783
+    }
+   },
+   "almanac_max_over_hi": 1.09
+  },
+  {
+   "fish_key": "kohaku",
+   "name_zh": "红白锦鲤",
+   "name_en": "Kohaku",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 32000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 40000,
+   "almanac": {
+    "n": 315,
+    "mean_g": 14478,
+    "median_g": 15424,
+    "p10_g": 3528,
+    "max_g": 33329,
+    "mean_by_source_g": {
+     "UL rec": 1562,
+     "Weekly rec": 14887,
+     "rf4stat": 18409
+    }
+   },
+   "almanac_max_over_hi": 0.833,
+   "rf4stat_max_g": 39943,
+   "rf4stat_over_almanac": 1.2
+  },
+  {
+   "fish_key": "b_carp",
+   "name_zh": "黑鲩",
+   "name_en": "Black Carp",
+   "trophy_g": null,
+   "trophy_line_g": 28000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 242,
+    "mean_g": 16720,
+    "median_g": 16760,
+    "p10_g": 2755,
+    "max_g": 46051,
+    "mean_by_source_g": {
+     "UL rec": 2006,
+     "Weekly rec": 18098,
+     "rf4stat": 29599
+    }
+   },
+   "almanac_max_over_hi": 0.921
+  },
+  {
+   "fish_key": "ch_beluga",
+   "name_zh": "黑海欧洲鰉",
+   "name_en": "Black Sea Beluga",
+   "trophy_g": null,
+   "trophy_line_g": 500000,
+   "super_trophy_line_g": 1000000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1250000,
+   "almanac": {
+    "n": 87,
+    "mean_g": 23060,
+    "median_g": 18169,
+    "p10_g": 6577,
+    "max_g": 126537,
+    "mean_by_source_g": {
+     "UL rec": 22777,
+     "Weekly rec": 23000,
+     "rf4stat": 28494
+    }
+   },
+   "almanac_max_over_hi": 0.101
+  },
+  {
+   "fish_key": "black_crappie",
+   "name_zh": "黑斑刺盖太阳鱼",
+   "name_en": "Black crappie",
+   "trophy_g": null,
+   "trophy_line_g": 1600,
+   "super_trophy_line_g": 2200,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2750,
+   "almanac": {
+    "n": 489,
+    "mean_g": 1324,
+    "median_g": 1428,
+    "p10_g": 540,
+    "max_g": 2520,
+    "mean_by_source_g": {
+     "UL rec": 1126,
+     "Weekly rec": 1580,
+     "rf4stat": 1608
+    }
+   },
+   "almanac_max_over_hi": 0.916
+  },
+  {
+   "fish_key": "stickleback_ninesp",
+   "name_zh": "九棘刺",
+   "name_en": "Nine-Spined Stickleback",
+   "trophy_g": null,
+   "trophy_line_g": 70,
+   "super_trophy_line_g": 90,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 112,
+   "almanac": {
+    "n": 355,
+    "mean_g": 44,
+    "median_g": 42,
+    "p10_g": 19,
+    "max_g": 92,
+    "mean_by_source_g": {
+     "UL rec": 29,
+     "Weekly rec": 47,
+     "rf4stat": 71
+    }
+   },
+   "almanac_max_over_hi": 0.818
+  },
+  {
+   "fish_key": "g_tench",
+   "name_zh": "金丁鱥",
+   "name_en": "Golden Tench",
+   "trophy_g": null,
+   "trophy_line_g": 4000,
+   "super_trophy_line_g": 6000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 7500,
+   "almanac": {
+    "n": 323,
+    "mean_g": 2604,
+    "median_g": 2214,
+    "p10_g": 850,
+    "max_g": 7456,
+    "mean_by_source_g": {
+     "UL rec": 1316,
+     "Weekly rec": 2782,
+     "rf4stat": 4066
+    }
+   },
+   "almanac_max_over_hi": 0.994
+  },
+  {
+   "fish_key": "sebastes_m",
+   "name_zh": "尖吻平鲉﻿",
+   "name_en": "Small redfish",
+   "trophy_g": null,
+   "trophy_line_g": 5500,
+   "super_trophy_line_g": 7000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 8750,
+   "almanac": {
+    "n": 382,
+    "mean_g": 2596,
+    "median_g": 2780,
+    "p10_g": 926,
+    "max_g": 4981,
+    "mean_by_source_g": {
+     "UL rec": 1411,
+     "Weekly rec": 3017,
+     "rf4stat": 3196
+    }
+   },
+   "almanac_max_over_hi": 0.569
+  },
+  {
+   "fish_key": "ambl_h",
+   "name_zh": "极北鳐﻿",
+   "name_en": "Arctic skate",
+   "trophy_g": null,
+   "trophy_line_g": 8000,
+   "super_trophy_line_g": 10000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 12500,
+   "almanac": {
+    "n": 309,
+    "mean_g": 5530,
+    "median_g": 5521,
+    "p10_g": 2257,
+    "max_g": 12826,
+    "mean_by_source_g": {
+     "UL rec": 3030,
+     "Weekly rec": 5820,
+     "rf4stat": 8145
+    }
+   },
+   "almanac_max_over_hi": 1.026
+  },
+  {
+   "fish_key": "burbot",
+   "name_zh": "江鳕",
+   "name_en": "Burbot",
+   "trophy_g": null,
+   "trophy_line_g": 9000,
+   "super_trophy_line_g": 14000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 17500,
+   "almanac": {
+    "n": 544,
+    "mean_g": 7656,
+    "median_g": 7738,
+    "p10_g": 2793,
+    "max_g": 15927,
+    "mean_by_source_g": {
+     "UL rec": 5135,
+     "Weekly rec": 9745,
+     "rf4stat": 9433
+    }
+   },
+   "almanac_max_over_hi": 0.91,
+   "rf4stat_max_g": 17995,
+   "rf4stat_over_almanac": 1.13
+  },
+  {
+   "fish_key": "m_carp",
+   "name_zh": "镜鲤﻿",
+   "name_en": "Mirror Carp",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 500,
+    "mean_g": 23235,
+    "median_g": 26704,
+    "p10_g": 2449,
+    "max_g": 48955,
+    "mean_by_source_g": {
+     "UL rec": 2971,
+     "Weekly rec": 30491,
+     "rf4stat": 27982
+    }
+   },
+   "almanac_max_over_hi": 0.979
+  },
+  {
+   "fish_key": "m_carp_ghost",
+   "name_zh": "镜鲤（人面鲤）",
+   "name_en": "Mirror ghost carp",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 263,
+    "mean_g": 17677,
+    "median_g": 16082,
+    "p10_g": 4769,
+    "max_g": 39683,
+    "mean_by_source_g": {
+     "UL rec": 2421,
+     "Weekly rec": 17712,
+     "rf4stat": 25699
+    }
+   },
+   "almanac_max_over_hi": 0.794
+  },
+  {
+   "fish_key": "m_carp_albino",
+   "name_zh": "镜鲤（白化）",
+   "name_en": "Mirror Albino Carp",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 105,
+    "mean_g": 10620,
+    "median_g": 7415,
+    "p10_g": 3390,
+    "max_g": 32639,
+    "mean_by_source_g": {
+     "Weekly rec": 10620
+    }
+   },
+   "almanac_max_over_hi": 0.653
+  },
+  {
+   "fish_key": "x_gladius",
+   "name_zh": "剑鱼",
+   "name_en": "Swordfish",
+   "trophy_g": null,
+   "trophy_line_g": 300000,
+   "super_trophy_line_g": 450000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 562500,
+   "almanac": {
+    "n": 271,
+    "mean_g": 152044,
+    "median_g": 135063,
+    "p10_g": 44459,
+    "max_g": 463041,
+    "mean_by_source_g": {
+     "Weekly rec": 151194,
+     "rf4stat": 157973
+    }
+   },
+   "almanac_max_over_hi": 0.823
+  },
+  {
+   "fish_key": "wh_bass",
+   "name_zh": "金眼狼鲈",
+   "name_en": "White bass",
+   "trophy_g": null,
+   "trophy_line_g": 1750,
+   "super_trophy_line_g": 2500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 3125,
+   "almanac": {
+    "n": 582,
+    "mean_g": 1481,
+    "median_g": 1601,
+    "p10_g": 525,
+    "max_g": 2958,
+    "mean_by_source_g": {
+     "UL rec": 1142,
+     "Weekly rec": 1808,
+     "rf4stat": 1950
+    }
+   },
+   "almanac_max_over_hi": 0.947
+  },
+  {
+   "fish_key": "sig_kuor",
+   "name_zh": "廓里湖白鲑",
+   "name_en": "Kuori Whitefish",
+   "trophy_g": null,
+   "trophy_line_g": 3500,
+   "super_trophy_line_g": 5000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 6250,
+   "almanac": {
+    "n": 325,
+    "mean_g": 2159,
+    "median_g": 2067,
+    "p10_g": 783,
+    "max_g": 4747,
+    "mean_by_source_g": {
+     "UL rec": 1512,
+     "Weekly rec": 2471,
+     "rf4stat": 3797
+    }
+   },
+   "almanac_max_over_hi": 0.76
+  },
+  {
+   "fish_key": "kutum",
+   "name_zh": "库图拟鲤",
+   "name_en": "Caspian Kutum",
+   "trophy_g": null,
+   "trophy_line_g": 5000,
+   "super_trophy_line_g": 7000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 8750,
+   "almanac": {
+    "n": 291,
+    "mean_g": 4066,
+    "median_g": 4266,
+    "p10_g": 1830,
+    "max_g": 7883,
+    "mean_by_source_g": {
+     "UL rec": 1064,
+     "Weekly rec": 3968,
+     "rf4stat": 5405
+    }
+   },
+   "almanac_max_over_hi": 0.901,
+   "rf4stat_max_g": 7994,
+   "rf4stat_over_almanac": 1.01
+  },
+  {
+   "fish_key": "kw_tench",
+   "name_zh": "库尔斯多夫丁鱥",
+   "name_en": "Kvolsdorfsky tench",
+   "trophy_g": null,
+   "trophy_line_g": 4000,
+   "super_trophy_line_g": 6000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 7500,
+   "almanac": {
+    "n": 367,
+    "mean_g": 4159,
+    "median_g": 4440,
+    "p10_g": 1724,
+    "max_g": 6723,
+    "mean_by_source_g": {
+     "UL rec": 1478,
+     "Weekly rec": 4382,
+     "rf4stat": 4511
+    }
+   },
+   "almanac_max_over_hi": 0.896
+  },
+  {
+   "fish_key": "chir",
+   "name_zh": "宽鼻白鲑﻿",
+   "name_en": "Broad Whitefish",
+   "trophy_g": null,
+   "trophy_line_g": 7000,
+   "super_trophy_line_g": 10000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 12500,
+   "almanac": {
+    "n": 440,
+    "mean_g": 3638,
+    "median_g": 3379,
+    "p10_g": 838,
+    "max_g": 10197,
+    "mean_by_source_g": {
+     "UL rec": 2392,
+     "Weekly rec": 4797
+    }
+   },
+   "almanac_max_over_hi": 0.816,
+   "rf4stat_max_g": 11913,
+   "rf4stat_over_almanac": 1.17
+  },
+  {
+   "fish_key": "mikija",
+   "name_zh": "堪察加虹鳟",
+   "name_en": "Kamchatkan Rainbow Trout",
+   "trophy_g": null,
+   "trophy_line_g": 8000,
+   "super_trophy_line_g": 10000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 12500,
+   "almanac": {
+    "n": 473,
+    "mean_g": 3156,
+    "median_g": 2450,
+    "p10_g": 716,
+    "max_g": 9739,
+    "mean_by_source_g": {
+     "UL rec": 1789,
+     "Weekly rec": 4141
+    }
+   },
+   "almanac_max_over_hi": 0.779,
+   "rf4stat_max_g": 11935,
+   "rf4stat_over_almanac": 1.23
+  },
+  {
+   "fish_key": "chartus_kuoriius",
+   "name_zh": "廓里湖红点鲑",
+   "name_en": "Kuori Char",
+   "trophy_g": null,
+   "trophy_line_g": 22000,
+   "super_trophy_line_g": 30000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 37500,
+   "almanac": {
+    "n": 421,
+    "mean_g": 12485,
+    "median_g": 12061,
+    "p10_g": 2609,
+    "max_g": 31155,
+    "mean_by_source_g": {
+     "UL rec": 7416,
+     "Weekly rec": 14938,
+     "rf4stat": 10863
+    }
+   },
+   "almanac_max_over_hi": 0.831
+  },
+  {
+   "fish_key": "r_carp",
+   "name_zh": "框形镜鲤",
+   "name_en": "Frame-sided carp",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 416,
+    "mean_g": 24306,
+    "median_g": 26304,
+    "p10_g": 4805,
+    "max_g": 48084,
+    "mean_by_source_g": {
+     "UL rec": 2508,
+     "Weekly rec": 26321,
+     "rf4stat": 28294
+    }
+   },
+   "almanac_max_over_hi": 0.962
+  },
+  {
+   "fish_key": "r_carp_ghost",
+   "name_zh": "框形镜鲤（人面鲤）",
+   "name_en": "Frame-sided Ghost Carp",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 166,
+    "mean_g": 14546,
+    "median_g": 12144,
+    "p10_g": 4376,
+    "max_g": 40783,
+    "mean_by_source_g": {
+     "Weekly rec": 14217,
+     "rf4stat": 27859
+    }
+   },
+   "almanac_max_over_hi": 0.816
+  },
+  {
+   "fish_key": "r_carp_albino",
+   "name_zh": "框形镜鲤（白化）",
+   "name_en": "Frame-sided albino carp",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 56,
+    "mean_g": 9700,
+    "median_g": 7802,
+    "p10_g": 3943,
+    "max_g": 26373,
+    "mean_by_source_g": {
+     "Weekly rec": 9700
+    }
+   },
+   "almanac_max_over_hi": 0.527
+  },
+  {
+   "fish_key": "c_lamprey",
+   "name_zh": "里海七鳃鳗",
+   "name_en": "Caspian Lamprey",
+   "trophy_g": null,
+   "trophy_line_g": 150,
+   "super_trophy_line_g": 200,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 250,
+   "almanac": {
+    "n": 4,
+    "mean_g": 36,
+    "median_g": 40,
+    "p10_g": 19,
+    "max_g": 61,
+    "mean_by_source_g": {
+     "Weekly rec": 36
+    }
+   },
+   "almanac_max_over_hi": 0.244
+  },
+  {
+   "fish_key": "fe_lamprey",
+   "name_zh": "雷氏七鳃鳗",
+   "name_en": "Far Eastern Brook Lamprey",
+   "trophy_g": null,
+   "trophy_line_g": 40,
+   "super_trophy_line_g": null,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 58,
+   "almanac": {
+    "n": 15,
+    "mean_g": 14,
+    "median_g": 11,
+    "p10_g": 10,
+    "max_g": 25,
+    "mean_by_source_g": {
+     "Weekly rec": 14
+    }
+   },
+   "almanac_max_over_hi": 0.431
+  },
+  {
+   "fish_key": "b_gill",
+   "name_zh": "蓝鳃太阳鱼",
+   "name_en": "Bluegill",
+   "trophy_g": null,
+   "trophy_line_g": 1200,
+   "super_trophy_line_g": 1700,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2125,
+   "almanac": {
+    "n": 450,
+    "mean_g": 1307,
+    "median_g": 1389,
+    "p10_g": 601,
+    "max_g": 2107,
+    "mean_by_source_g": {
+     "UL rec": 1129,
+     "Weekly rec": 1537,
+     "rf4stat": 1424
+    }
+   },
+   "almanac_max_over_hi": 0.992
+  },
+  {
+   "fish_key": "c_herring",
+   "name_zh": "里海西鲱",
+   "name_en": null,
+   "trophy_g": null,
+   "trophy_line_g": 250,
+   "super_trophy_line_g": 340,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 425
+  },
+  {
+   "fish_key": "vobla",
+   "name_zh": "里海拟鲤",
+   "name_en": "Caspian Roach",
+   "trophy_g": null,
+   "trophy_line_g": 500,
+   "super_trophy_line_g": 800,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1000,
+   "almanac": {
+    "n": 318,
+    "mean_g": 344,
+    "median_g": 301,
+    "p10_g": 145,
+    "max_g": 869,
+    "mean_by_source_g": {
+     "UL rec": 326,
+     "Weekly rec": 392,
+     "rf4stat": 547
+    }
+   },
+   "almanac_max_over_hi": 0.869,
+   "rf4stat_max_g": 999,
+   "rf4stat_over_almanac": 1.15
+  },
+  {
+   "fish_key": "poutassou",
+   "name_zh": "蓝鳕﻿",
+   "name_en": "Blue whiting",
+   "trophy_g": null,
+   "trophy_line_g": 900,
+   "super_trophy_line_g": 1200,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1500,
+   "almanac": {
+    "n": 374,
+    "mean_g": 766,
+    "median_g": 839,
+    "p10_g": 226,
+    "max_g": 1489,
+    "mean_by_source_g": {
+     "UL rec": 280,
+     "Weekly rec": 884,
+     "rf4stat": 1034
+    }
+   },
+   "almanac_max_over_hi": 0.993,
+   "rf4stat_max_g": 1498,
+   "rf4stat_over_almanac": 1.01
+  },
+  {
+   "fish_key": "golets_lev",
+   "name_zh": "莱文氏红点鲑",
+   "name_en": "Levanidov's Char",
+   "trophy_g": null,
+   "trophy_line_g": 1600,
+   "super_trophy_line_g": 2100,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2625,
+   "almanac": {
+    "n": 344,
+    "mean_g": 767,
+    "median_g": 672,
+    "p10_g": 295,
+    "max_g": 1795,
+    "mean_by_source_g": {
+     "UL rec": 629,
+     "Weekly rec": 882
+    }
+   },
+   "almanac_max_over_hi": 0.684
+  },
+  {
+   "fish_key": "karasekarp",
+   "name_zh": "鲤鲫",
+   "name_en": "F1",
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 469,
+    "mean_g": 3150,
+    "median_g": 3391,
+    "p10_g": 1184,
+    "max_g": 4992,
+    "mean_by_source_g": {
+     "UL rec": 1565,
+     "Weekly rec": 3695,
+     "rf4stat": 3465
+    }
+   },
+   "almanac_max_over_hi": 0.998,
+   "rf4stat_max_g": 4998,
+   "rf4stat_over_almanac": 1.0
+  },
+  {
+   "fish_key": "sig_o_l",
+   "name_zh": "拉多加湖湖泊白鲑",
+   "name_en": "Ladoga Lake Whitefish",
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 387,
+    "mean_g": 1624,
+    "median_g": 1447,
+    "p10_g": 503,
+    "max_g": 4163,
+    "mean_by_source_g": {
+     "UL rec": 1334,
+     "Weekly rec": 1807,
+     "rf4stat": 2832
+    }
+   },
+   "almanac_max_over_hi": 0.833
+  },
+  {
+   "fish_key": "l_salmon",
+   "name_zh": "拉多加鲑",
+   "name_en": "Ladoga salmon",
+   "trophy_g": null,
+   "trophy_line_g": 14000,
+   "super_trophy_line_g": 20000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 25000,
+   "almanac": {
+    "n": 478,
+    "mean_g": 8593,
+    "median_g": 8938,
+    "p10_g": 1581,
+    "max_g": 20381,
+    "mean_by_source_g": {
+     "UL rec": 4067,
+     "Weekly rec": 11380,
+     "rf4stat": 10405
+    }
+   },
+   "almanac_max_over_hi": 0.815
+  },
+  {
+   "fish_key": "midori_g",
+   "name_zh": "绿鲤",
+   "name_en": "Midori goi",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 32000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 40000,
+   "almanac": {
+    "n": 162,
+    "mean_g": 10690,
+    "median_g": 8802,
+    "p10_g": 2244,
+    "max_g": 27761,
+    "mean_by_source_g": {
+     "UL rec": 1174,
+     "Weekly rec": 11296,
+     "rf4stat": 10121
+    }
+   },
+   "almanac_max_over_hi": 0.694
+  },
+  {
+   "fish_key": "carp_ghost",
+   "name_zh": "鳞鲤(人面鲤)",
+   "name_en": "Common Ghost Carp",
+   "trophy_g": null,
+   "trophy_line_g": 20000,
+   "super_trophy_line_g": 30000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 37500,
+   "almanac": {
+    "n": 265,
+    "mean_g": 13794,
+    "median_g": 12877,
+    "p10_g": 3652,
+    "max_g": 39440,
+    "mean_by_source_g": {
+     "UL rec": 2044,
+     "Weekly rec": 13830,
+     "rf4stat": 20608
+    }
+   },
+   "almanac_max_over_hi": 1.052
+  },
+  {
+   "fish_key": "carp_albino",
+   "name_zh": "鳞鲤(白化)",
+   "name_en": "Common Scaly Albino Carp",
+   "trophy_g": null,
+   "trophy_line_g": 20000,
+   "super_trophy_line_g": 30000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 37500,
+   "almanac": {
+    "n": 131,
+    "mean_g": 8305,
+    "median_g": 6264,
+    "p10_g": 2535,
+    "max_g": 28159,
+    "mean_by_source_g": {
+     "UL rec": 2152,
+     "Weekly rec": 8216,
+     "rf4stat": 16137
+    }
+   },
+   "almanac_max_over_hi": 0.751
+  },
+  {
+   "fish_key": "molva",
+   "name_zh": "蓝魣鳕﻿",
+   "name_en": "Blue ling",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 35000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 43750,
+   "almanac": {
+    "n": 298,
+    "mean_g": 20410,
+    "median_g": 20556,
+    "p10_g": 8607,
+    "max_g": 40965,
+    "mean_by_source_g": {
+     "UL rec": 9745,
+     "Weekly rec": 22034,
+     "rf4stat": 26552
+    }
+   },
+   "almanac_max_over_hi": 0.936,
+   "rf4stat_max_g": 44985,
+   "rf4stat_over_almanac": 1.1
+  },
+  {
+   "fish_key": "s_carp",
+   "name_zh": "鲢鱼",
+   "name_en": "Silver Carp",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 270,
+    "mean_g": 13917,
+    "median_g": 13003,
+    "p10_g": 2630,
+    "max_g": 42551,
+    "mean_by_source_g": {
+     "UL rec": 2737,
+     "Weekly rec": 16216,
+     "rf4stat": 16022
+    }
+   },
+   "almanac_max_over_hi": 0.851
+  },
+  {
+   "fish_key": "k_salmon",
+   "name_zh": "里海鲑鱼",
+   "name_en": "Caspian Brown Trout",
+   "trophy_g": null,
+   "trophy_line_g": 30000,
+   "super_trophy_line_g": 50000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 62500,
+   "almanac": {
+    "n": 222,
+    "mean_g": 17463,
+    "median_g": 16579,
+    "p10_g": 7265,
+    "max_g": 38865,
+    "mean_by_source_g": {
+     "UL rec": 10053,
+     "Weekly rec": 18984,
+     "rf4stat": 29590
+    }
+   },
+   "almanac_max_over_hi": 0.622
+  },
+  {
+   "fish_key": "osetr_ship",
+   "name_zh": "裸腹鲟",
+   "name_en": "Bastard Sturgeon",
+   "trophy_g": null,
+   "trophy_line_g": 50000,
+   "super_trophy_line_g": 70000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 87500,
+   "almanac": {
+    "n": 208,
+    "mean_g": 19974,
+    "median_g": 16407,
+    "p10_g": 5466,
+    "max_g": 59353,
+    "mean_by_source_g": {
+     "UL rec": 6440,
+     "Weekly rec": 20659,
+     "rf4stat": 34696
+    }
+   },
+   "almanac_max_over_hi": 0.678
+  },
+  {
+   "fish_key": "l_sturgeon",
+   "name_zh": "拉多加鲟",
+   "name_en": "Ladoga sturgeon",
+   "trophy_g": null,
+   "trophy_line_g": 60000,
+   "super_trophy_line_g": 85000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 106250,
+   "almanac": {
+    "n": 213,
+    "mean_g": 17267,
+    "median_g": 13509,
+    "p10_g": 2681,
+    "max_g": 57982,
+    "mean_by_source_g": {
+     "UL rec": 7077,
+     "Weekly rec": 20749,
+     "rf4stat": 44906
+    }
+   },
+   "almanac_max_over_hi": 0.546
+  },
+  {
+   "fish_key": "zoarces_v",
+   "name_zh": "绵鳚﻿",
+   "name_en": "Viviparous eelpout",
+   "trophy_g": null,
+   "trophy_line_g": 900,
+   "super_trophy_line_g": 1300,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1625,
+   "almanac": {
+    "n": 378,
+    "mean_g": 756,
+    "median_g": 805,
+    "p10_g": 291,
+    "max_g": 1445,
+    "mean_by_source_g": {
+     "UL rec": 420,
+     "Weekly rec": 869,
+     "rf4stat": 960
+    }
+   },
+   "almanac_max_over_hi": 0.889
+  },
+  {
+   "fish_key": "g_shad",
+   "name_zh": "美洲真鰶",
+   "name_en": "Gizzard shad",
+   "trophy_g": null,
+   "trophy_line_g": 1100,
+   "super_trophy_line_g": 1600,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2000,
+   "almanac": {
+    "n": 496,
+    "mean_g": 1065,
+    "median_g": 1114,
+    "p10_g": 502,
+    "max_g": 1895,
+    "mean_by_source_g": {
+     "UL rec": 930,
+     "Weekly rec": 1274,
+     "rf4stat": 1252
+    }
+   },
+   "almanac_max_over_hi": 0.948
+  },
+  {
+   "fish_key": "eel",
+   "name_zh": "鳗鱼",
+   "name_en": "Eel",
+   "trophy_g": null,
+   "trophy_line_g": 4000,
+   "super_trophy_line_g": 7500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 9375,
+   "almanac": {
+    "n": 419,
+    "mean_g": 3388,
+    "median_g": 3193,
+    "p10_g": 1288,
+    "max_g": 8873,
+    "mean_by_source_g": {
+     "UL rec": 1937,
+     "Weekly rec": 3670,
+     "rf4stat": 4664
+    }
+   },
+   "almanac_max_over_hi": 0.946,
+   "rf4stat_max_g": 8989,
+   "rf4stat_over_almanac": 1.01
+  },
+  {
+   "fish_key": "chan_m",
+   "name_zh": "蒙古红鲌",
+   "name_en": "Mongolian redfin",
+   "trophy_g": null,
+   "trophy_line_g": 2500,
+   "super_trophy_line_g": 3200,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 4000,
+   "almanac": {
+    "n": 301,
+    "mean_g": 1082,
+    "median_g": 863,
+    "p10_g": 295,
+    "max_g": 3400,
+    "mean_by_source_g": {
+     "UL rec": 803,
+     "Weekly rec": 1262
+    }
+   },
+   "almanac_max_over_hi": 0.85
+  },
+  {
+   "fish_key": "salvel_l",
+   "name_zh": "美洲红点鲑",
+   "name_en": "Brook Trout",
+   "trophy_g": null,
+   "trophy_line_g": 5000,
+   "super_trophy_line_g": 7600,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 9500
+  },
+  {
+   "fish_key": "onkor_mg",
+   "name_zh": "马苏大麻哈鱼",
+   "name_en": "Masu sedentary",
+   "trophy_g": null,
+   "trophy_line_g": 5000,
+   "super_trophy_line_g": 6500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 8125,
+   "almanac": {
+    "n": 420,
+    "mean_g": 2877,
+    "median_g": 2674,
+    "p10_g": 884,
+    "max_g": 7107,
+    "mean_by_source_g": {
+     "UL rec": 1997,
+     "Weekly rec": 3531
+    }
+   },
+   "almanac_max_over_hi": 0.875
+  },
+  {
+   "fish_key": "muksun",
+   "name_zh": "穆松白鲑﻿",
+   "name_en": "Muksun",
+   "trophy_g": null,
+   "trophy_line_g": 6000,
+   "super_trophy_line_g": 9000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 11250,
+   "almanac": {
+    "n": 370,
+    "mean_g": 2984,
+    "median_g": 2734,
+    "p10_g": 803,
+    "max_g": 9816,
+    "mean_by_source_g": {
+     "UL rec": 1991,
+     "Weekly rec": 3757
+    }
+   },
+   "almanac_max_over_hi": 0.873,
+   "rf4stat_max_g": 11940,
+   "rf4stat_over_almanac": 1.22
+  },
+  {
+   "fish_key": "onkor_m",
+   "name_zh": "马苏鱼",
+   "name_en": "Masu",
+   "trophy_g": null,
+   "trophy_line_g": 6500,
+   "super_trophy_line_g": 8000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 10000,
+   "almanac": {
+    "n": 361,
+    "mean_g": 3223,
+    "median_g": 2830,
+    "p10_g": 899,
+    "max_g": 8076,
+    "mean_by_source_g": {
+     "UL rec": 1937,
+     "Weekly rec": 3946,
+     "rf4stat": 6974
+    }
+   },
+   "almanac_max_over_hi": 0.808
+  },
+  {
+   "fish_key": "halibut_b",
+   "name_zh": "马舌鲽﻿",
+   "name_en": "Greenland Halibut",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 32000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 40000,
+   "almanac": {
+    "n": 294,
+    "mean_g": 17081,
+    "median_g": 16649,
+    "p10_g": 5759,
+    "max_g": 42792,
+    "mean_by_source_g": {
+     "UL rec": 7517,
+     "Weekly rec": 17795,
+     "rf4stat": 25247
+    }
+   },
+   "almanac_max_over_hi": 1.07
+  },
+  {
+   "fish_key": "n_asagi",
+   "name_zh": "鸣海浅黄锦鲤",
+   "name_en": "Narumi Asagi",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 32000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 40000,
+   "almanac": {
+    "n": 263,
+    "mean_g": 15066,
+    "median_g": 15964,
+    "p10_g": 3617,
+    "max_g": 28231,
+    "mean_by_source_g": {
+     "UL rec": 1848,
+     "Weekly rec": 15468,
+     "rf4stat": 18826
+    }
+   },
+   "almanac_max_over_hi": 0.706
+  },
+  {
+   "fish_key": "cetorhinus_m",
+   "name_zh": "姥鲨",
+   "name_en": "Basking shark",
+   "trophy_g": null,
+   "trophy_line_g": 1300000,
+   "super_trophy_line_g": 2500000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 3125000,
+   "almanac": {
+    "n": 214,
+    "mean_g": 427590,
+    "median_g": 206867,
+    "p10_g": 100243,
+    "max_g": 2432803,
+    "mean_by_source_g": {
+     "Weekly rec": 425862,
+     "rf4stat": 462839
+    }
+   },
+   "almanac_max_over_hi": 0.778
+  },
+  {
+   "fish_key": "shemaya",
+   "name_zh": "拟鲌",
+   "name_en": "Shemaya",
+   "trophy_g": null,
+   "trophy_line_g": 600,
+   "super_trophy_line_g": 900,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1125,
+   "almanac": {
+    "n": 319,
+    "mean_g": 487,
+    "median_g": 485,
+    "p10_g": 192,
+    "max_g": 1042,
+    "mean_by_source_g": {
+     "UL rec": 480,
+     "Weekly rec": 467,
+     "rf4stat": 683
+    }
+   },
+   "almanac_max_over_hi": 0.926,
+   "rf4stat_max_g": 1099,
+   "rf4stat_over_almanac": 1.05
+  },
+  {
+   "fish_key": "neiva",
+   "name_zh": "内维红点鲑",
+   "name_en": "Neiva",
+   "trophy_g": null,
+   "trophy_line_g": 1400,
+   "super_trophy_line_g": 1700,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2125,
+   "almanac": {
+    "n": 184,
+    "mean_g": 515,
+    "median_g": 468,
+    "p10_g": 183,
+    "max_g": 1453,
+    "mean_by_source_g": {
+     "UL rec": 419,
+     "Weekly rec": 586
+    }
+   },
+   "almanac_max_over_hi": 0.684,
+   "rf4stat_max_g": 1923,
+   "rf4stat_over_almanac": 1.32
+  },
+  {
+   "fish_key": "c_squid",
+   "name_zh": "欧洲鱿鱼﻿",
+   "name_en": "European squid",
+   "trophy_g": null,
+   "trophy_line_g": 2000,
+   "super_trophy_line_g": 2400,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 3000,
+   "almanac": {
+    "n": 247,
+    "mean_g": 1736,
+    "median_g": 1892,
+    "p10_g": 542,
+    "max_g": 2927,
+    "mean_by_source_g": {
+     "UL rec": 351,
+     "Weekly rec": 1780,
+     "rf4stat": 2361
+    }
+   },
+   "almanac_max_over_hi": 0.976
+  },
+  {
+   "fish_key": "conger",
+   "name_zh": "欧洲康吉鳗",
+   "name_en": "Conger",
+   "trophy_g": null,
+   "trophy_line_g": 60000,
+   "super_trophy_line_g": 75000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 93750,
+   "almanac": {
+    "n": 237,
+    "mean_g": 34562,
+    "median_g": 32285,
+    "p10_g": 7812,
+    "max_g": 85329,
+    "mean_by_source_g": {
+     "UL rec": 6003,
+     "Weekly rec": 35828,
+     "rf4stat": 34073
+    }
+   },
+   "almanac_max_over_hi": 0.91,
+   "rf4stat_max_g": 99469,
+   "rf4stat_over_almanac": 1.17
+  },
+  {
+   "fish_key": "w_catfish",
+   "name_zh": "欧洲六须鲇",
+   "name_en": "Catfish",
+   "trophy_g": null,
+   "trophy_line_g": 100000,
+   "super_trophy_line_g": 200000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 250000,
+   "almanac": {
+    "n": 474,
+    "mean_g": 63699,
+    "median_g": 62999,
+    "p10_g": 6765,
+    "max_g": 198107,
+    "mean_by_source_g": {
+     "UL rec": 12122,
+     "Weekly rec": 83757,
+     "rf4stat": 101724
+    }
+   },
+   "almanac_max_over_hi": 0.792
+  },
+  {
+   "fish_key": "beluga",
+   "name_zh": "欧洲鳇",
+   "name_en": "Beluga",
+   "trophy_g": null,
+   "trophy_line_g": 500000,
+   "super_trophy_line_g": 1000000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1250000,
+   "almanac": {
+    "n": 161,
+    "mean_g": 169933,
+    "median_g": 79012,
+    "p10_g": 15565,
+    "max_g": 975007,
+    "mean_by_source_g": {
+     "UL rec": 11016,
+     "Weekly rec": 171932
+    }
+   },
+   "almanac_max_over_hi": 0.78,
+   "rf4stat_max_g": 1222163,
+   "rf4stat_over_almanac": 1.25
+  },
+  {
+   "fish_key": "stickleback_ss",
+   "name_zh": "平腹多刺魚",
+   "name_en": "Small Southern Stickleback",
+   "trophy_g": null,
+   "trophy_line_g": 70,
+   "super_trophy_line_g": 90,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 112,
+   "almanac": {
+    "n": 347,
+    "mean_g": 48,
+    "median_g": 47,
+    "p10_g": 23,
+    "max_g": 93,
+    "mean_by_source_g": {
+     "UL rec": 40,
+     "Weekly rec": 51,
+     "rf4stat": 75
+    }
+   },
+   "almanac_max_over_hi": 0.827
+  },
+  {
+   "fish_key": "carp",
+   "name_zh": "普通鲤鱼﻿",
+   "name_en": "Wild Carp",
+   "trophy_g": null,
+   "trophy_line_g": 20000,
+   "super_trophy_line_g": 30000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 37500,
+   "almanac": {
+    "n": 662,
+    "mean_g": 24747,
+    "median_g": 26954,
+    "p10_g": 4142,
+    "max_g": 49880,
+    "mean_by_source_g": {
+     "UL rec": 3742,
+     "Weekly rec": 27658,
+     "rf4stat": 29376
+    }
+   },
+   "almanac_max_over_hi": 1.33,
+   "rf4stat_max_g": 39998,
+   "rf4stat_over_almanac": 0.8
+  },
+  {
+   "fish_key": "syb_gudgeon",
+   "name_zh": "犬首鮈",
+   "name_en": "Siberian Gudgeon",
+   "trophy_g": null,
+   "trophy_line_g": 150,
+   "super_trophy_line_g": 200,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 250,
+   "almanac": {
+    "n": 215,
+    "mean_g": 91,
+    "median_g": 85,
+    "p10_g": 28,
+    "max_g": 186,
+    "mean_by_source_g": {
+     "UL rec": 76,
+     "Weekly rec": 96,
+     "rf4stat": 157
+    }
+   },
+   "almanac_max_over_hi": 0.744
+  },
+  {
+   "fish_key": "frog",
+   "name_zh": "青蛙",
+   "name_en": "Frog",
+   "trophy_g": null,
+   "trophy_line_g": 190,
+   "super_trophy_line_g": 250,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 312,
+   "almanac": {
+    "n": 418,
+    "mean_g": 177,
+    "median_g": 192,
+    "p10_g": 77,
+    "max_g": 291,
+    "mean_by_source_g": {
+     "UL rec": 158,
+     "Weekly rec": 206,
+     "rf4stat": 209
+    }
+   },
+   "almanac_max_over_hi": 0.931,
+   "rf4stat_max_g": 299,
+   "rf4stat_over_almanac": 1.03
+  },
+  {
+   "fish_key": "a_omul",
+   "name_zh": "秋白鲑﻿",
+   "name_en": "Arctic Omul",
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5000,
+   "almanac": {
+    "n": 429,
+    "mean_g": 1637,
+    "median_g": 1411,
+    "p10_g": 464,
+    "max_g": 4093,
+    "mean_by_source_g": {
+     "UL rec": 1211,
+     "Weekly rec": 2133,
+     "rf4stat": 2252
+    }
+   },
+   "almanac_max_over_hi": 0.819
+  },
+  {
+   "fish_key": "pollachius",
+   "name_zh": "青鳕﻿",
+   "name_en": "Pollock",
+   "trophy_g": null,
+   "trophy_line_g": 11000,
+   "super_trophy_line_g": 14000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 17500,
+   "almanac": {
+    "n": 362,
+    "mean_g": 9457,
+    "median_g": 10092,
+    "p10_g": 3374,
+    "max_g": 17646,
+    "mean_by_source_g": {
+     "UL rec": 4183,
+     "Weekly rec": 10813,
+     "rf4stat": 11862
+    }
+   },
+   "almanac_max_over_hi": 1.008,
+   "rf4stat_max_g": 17992,
+   "rf4stat_over_almanac": 1.02
+  },
+  {
+   "fish_key": "stickleback_threesp",
+   "name_zh": "三刺鱼",
+   "name_en": "Three-spined Stickleback",
+   "trophy_g": null,
+   "trophy_line_g": 70,
+   "super_trophy_line_g": 90,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 112,
+   "almanac": {
+    "n": 490,
+    "mean_g": 52,
+    "median_g": 54,
+    "p10_g": 25,
+    "max_g": 99,
+    "mean_by_source_g": {
+     "UL rec": 42,
+     "Weekly rec": 59,
+     "rf4stat": 74
+    }
+   },
+   "almanac_max_over_hi": 0.88
+  },
+  {
+   "fish_key": "sardina_p",
+   "name_zh": "沙丁鱼﻿",
+   "name_en": "Sardine",
+   "trophy_g": null,
+   "trophy_line_g": 180,
+   "super_trophy_line_g": 240,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 300,
+   "almanac": {
+    "n": 360,
+    "mean_g": 147,
+    "median_g": 161,
+    "p10_g": 54,
+    "max_g": 285,
+    "mean_by_source_g": {
+     "UL rec": 60,
+     "Weekly rec": 170,
+     "rf4stat": 195
+    }
+   },
+   "almanac_max_over_hi": 0.95
+  },
+  {
+   "fish_key": "b_bream",
+   "name_zh": "上口欧鳊",
+   "name_en": "Blue Bream",
+   "trophy_g": null,
+   "trophy_line_g": 750,
+   "super_trophy_line_g": 1100,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1375,
+   "almanac": {
+    "n": 417,
+    "mean_g": 515,
+    "median_g": 513,
+    "p10_g": 143,
+    "max_g": 1088,
+    "mean_by_source_g": {
+     "UL rec": 327,
+     "Weekly rec": 609,
+     "rf4stat": 690
+    }
+   },
+   "almanac_max_over_hi": 0.791
+  },
+  {
+   "fish_key": "ed_crab",
+   "name_zh": "食用蟹",
+   "name_en": "Edible crab",
+   "trophy_g": null,
+   "trophy_line_g": 1800,
+   "super_trophy_line_g": 2200,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2750,
+   "almanac": {
+    "n": 243,
+    "mean_g": 1028,
+    "median_g": 867,
+    "p10_g": 418,
+    "max_g": 2989,
+    "mean_by_source_g": {
+     "Weekly rec": 1028
+    }
+   },
+   "almanac_max_over_hi": 1.087
+  },
+  {
+   "fish_key": "sv_sig",
+   "name_zh": "斯维里河白鲑",
+   "name_en": "Svir Whitefish",
+   "trophy_g": null,
+   "trophy_line_g": 3500,
+   "super_trophy_line_g": 5000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 6250,
+   "almanac": {
+    "n": 99,
+    "mean_g": 1405,
+    "median_g": 1192,
+    "p10_g": 425,
+    "max_g": 4195,
+    "mean_by_source_g": {
+     "UL rec": 1104,
+     "Weekly rec": 1602
+    }
+   },
+   "almanac_max_over_hi": 0.671
+  },
+  {
+   "fish_key": "e.pikeperch",
+   "name_zh": "梭鲈鱼",
+   "name_en": "Zander",
+   "trophy_g": null,
+   "trophy_line_g": 8000,
+   "super_trophy_line_g": 12000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 15000,
+   "almanac": {
+    "n": 727,
+    "mean_g": 7002,
+    "median_g": 7247,
+    "p10_g": 2736,
+    "max_g": 20000,
+    "mean_by_source_g": {
+     "UL rec": 4453,
+     "Weekly rec": 8685,
+     "rf4stat": 8332
+    }
+   },
+   "almanac_max_over_hi": 1.333
+  },
+  {
+   "fish_key": "sevan_trout",
+   "name_zh": "塞凡湖鳟",
+   "name_en": "Sevan Trout",
+   "trophy_g": null,
+   "trophy_line_g": 9000,
+   "super_trophy_line_g": 15000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 18750,
+   "almanac": {
+    "n": 532,
+    "mean_g": 6488,
+    "median_g": 6366,
+    "p10_g": 1822,
+    "max_g": 14970,
+    "mean_by_source_g": {
+     "UL rec": 4316,
+     "Weekly rec": 7951,
+     "rf4stat": 8736
+    }
+   },
+   "almanac_max_over_hi": 0.798
+  },
+  {
+   "fish_key": "alfonsino",
+   "name_zh": "十指金眼鲷",
+   "name_en": "Alfonsino",
+   "trophy_g": null,
+   "trophy_line_g": 9000,
+   "super_trophy_line_g": 12000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 15000,
+   "almanac": {
+    "n": 241,
+    "mean_g": 4808,
+    "median_g": 4179,
+    "p10_g": 1336,
+    "max_g": 11937,
+    "mean_by_source_g": {
+     "UL rec": 1549,
+     "Weekly rec": 4968,
+     "rf4stat": 4710
+    }
+   },
+   "almanac_max_over_hi": 0.796,
+   "rf4stat_max_g": 14662,
+   "rf4stat_over_almanac": 1.23
+  },
+  {
+   "fish_key": "yotsushiro",
+   "name_zh": "四白锦鲤",
+   "name_en": "Yotsushiro",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 32000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 40000,
+   "almanac": {
+    "n": 212,
+    "mean_g": 12844,
+    "median_g": 13145,
+    "p10_g": 4010,
+    "max_g": 30631,
+    "mean_by_source_g": {
+     "UL rec": 1153,
+     "Weekly rec": 12900
+    }
+   },
+   "almanac_max_over_hi": 0.766,
+   "rf4stat_max_g": 38571,
+   "rf4stat_over_almanac": 1.26
+  },
+  {
+   "fish_key": "common_carp",
+   "name_zh": "三花鲤鱼",
+   "name_en": "Common Carp",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 35000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 43750,
+   "almanac": {
+    "n": 618,
+    "mean_g": 18604,
+    "median_g": 21312,
+    "p10_g": 2109,
+    "max_g": 39585,
+    "mean_by_source_g": {
+     "UL rec": 2751,
+     "Weekly rec": 25697,
+     "rf4stat": 22215
+    }
+   },
+   "almanac_max_over_hi": 0.905
+  },
+  {
+   "fish_key": "st_sturgeon",
+   "name_zh": "闪光鲟",
+   "name_en": "Stellate Sturgeon",
+   "trophy_g": null,
+   "trophy_line_g": 50000,
+   "super_trophy_line_g": 70000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 87500,
+   "almanac": {
+    "n": 369,
+    "mean_g": 29327,
+    "median_g": 28816,
+    "p10_g": 9737,
+    "max_g": 73700,
+    "mean_by_source_g": {
+     "UL rec": 6497,
+     "Weekly rec": 30270,
+     "rf4stat": 44330
+    }
+   },
+   "almanac_max_over_hi": 0.842
+  },
+  {
+   "fish_key": "lamna_n",
+   "name_zh": "鼠鲨",
+   "name_en": "Porbeagle",
+   "trophy_g": null,
+   "trophy_line_g": 140000,
+   "super_trophy_line_g": 190000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 237500,
+   "almanac": {
+    "n": 280,
+    "mean_g": 79443,
+    "median_g": 78525,
+    "p10_g": 23197,
+    "max_g": 164175,
+    "mean_by_source_g": {
+     "UL rec": 10086,
+     "Weekly rec": 81788,
+     "rf4stat": 79880
+    }
+   },
+   "almanac_max_over_hi": 0.691
+  },
+  {
+   "fish_key": "tugun",
+   "name_zh": "图冈白鲑﻿",
+   "name_en": "Tugun",
+   "trophy_g": null,
+   "trophy_line_g": 60,
+   "super_trophy_line_g": 70,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 87,
+   "almanac": {
+    "n": 270,
+    "mean_g": 43,
+    "median_g": 45,
+    "p10_g": 20,
+    "max_g": 70,
+    "mean_by_source_g": {
+     "UL rec": 44,
+     "Weekly rec": 39,
+     "rf4stat": 67
+    }
+   },
+   "almanac_max_over_hi": 0.8,
+   "rf4stat_max_g": 79,
+   "rf4stat_over_almanac": 1.13
+  },
+  {
+   "fish_key": "sig_p",
+   "name_zh": "驼背白鲑﻿",
+   "name_en": "Humpback Whitefish",
+   "trophy_g": null,
+   "trophy_line_g": 4500,
+   "super_trophy_line_g": 6000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 7500,
+   "almanac": {
+    "n": 516,
+    "mean_g": 2334,
+    "median_g": 2258,
+    "p10_g": 864,
+    "max_g": 6027,
+    "mean_by_source_g": {
+     "UL rec": 1818,
+     "Weekly rec": 2862,
+     "rf4stat": 1146
+    }
+   },
+   "almanac_max_over_hi": 0.804
+  },
+  {
+   "fish_key": "lenok_t",
+   "name_zh": "图们江细鳞鲑",
+   "name_en": "Blunt-snouted lenok",
+   "trophy_g": null,
+   "trophy_line_g": 7500,
+   "super_trophy_line_g": 9000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 11250,
+   "almanac": {
+    "n": 407,
+    "mean_g": 3484,
+    "median_g": 3114,
+    "p10_g": 696,
+    "max_g": 9111,
+    "mean_by_source_g": {
+     "UL rec": 2175,
+     "Weekly rec": 4268,
+     "rf4stat": 7588
+    }
+   },
+   "almanac_max_over_hi": 0.81
+  },
+  {
+   "fish_key": "warm",
+   "name_zh": "太阳鱼",
+   "name_en": "Warmouth",
+   "trophy_g": null,
+   "trophy_line_g": 650,
+   "super_trophy_line_g": 850,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1062,
+   "almanac": {
+    "n": 537,
+    "mean_g": 645,
+    "median_g": 697,
+    "p10_g": 284,
+    "max_g": 1091,
+    "mean_by_source_g": {
+     "UL rec": 559,
+     "Weekly rec": 788,
+     "rf4stat": 740
+    }
+   },
+   "almanac_max_over_hi": 1.027,
+   "rf4stat_max_g": 1099,
+   "rf4stat_over_almanac": 1.01
+  },
+  {
+   "fish_key": "s_bass",
+   "name_zh": "条纹狼鲈",
+   "name_en": "Striped Bass (Striper)",
+   "trophy_g": null,
+   "trophy_line_g": 30000,
+   "super_trophy_line_g": 45000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 56250,
+   "almanac": {
+    "n": 356,
+    "mean_g": 11483,
+    "median_g": 8040,
+    "p10_g": 1476,
+    "max_g": 45761,
+    "mean_by_source_g": {
+     "UL rec": 5061,
+     "Weekly rec": 14227,
+     "rf4stat": 10812
+    }
+   },
+   "almanac_max_over_hi": 0.814
+  },
+  {
+   "fish_key": "u_lamprey",
+   "name_zh": "乌克兰七鳃鳗",
+   "name_en": "Ukrainian Lamprey",
+   "trophy_g": null,
+   "trophy_line_g": 70,
+   "super_trophy_line_g": null,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 101,
+   "almanac": {
+    "n": 58,
+    "mean_g": 30,
+    "median_g": 28,
+    "p10_g": 14,
+    "max_g": 75,
+    "mean_by_source_g": {
+     "Weekly rec": 30
+    }
+   },
+   "almanac_max_over_hi": 0.739
+  },
+  {
+   "fish_key": "v_bream",
+   "name_zh": "文鳊",
+   "name_en": "Vimba",
+   "trophy_g": null,
+   "trophy_line_g": 1500,
+   "super_trophy_line_g": 2400,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 3000,
+   "almanac": {
+    "n": 484,
+    "mean_g": 1211,
+    "median_g": 1259,
+    "p10_g": 352,
+    "max_g": 2845,
+    "mean_by_source_g": {
+     "UL rec": 838,
+     "Weekly rec": 1400,
+     "rf4stat": 1664
+    }
+   },
+   "almanac_max_over_hi": 0.948
+  },
+  {
+   "fish_key": "sig_valaam",
+   "name_zh": "瓦拉姆白鲑",
+   "name_en": "Valaam Whitefish",
+   "trophy_g": null,
+   "trophy_line_g": 1500,
+   "super_trophy_line_g": 2500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 3125,
+   "almanac": {
+    "n": 334,
+    "mean_g": 972,
+    "median_g": 883,
+    "p10_g": 301,
+    "max_g": 2402,
+    "mean_by_source_g": {
+     "UL rec": 808,
+     "Weekly rec": 1122,
+     "rf4stat": 1082
+    }
+   },
+   "almanac_max_over_hi": 0.769
+  },
+  {
+   "fish_key": "sig",
+   "name_zh": "沃尔霍夫白鲑",
+   "name_en": "Volkhov Whitefish",
+   "trophy_g": null,
+   "trophy_line_g": 4000,
+   "super_trophy_line_g": 7000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 8750,
+   "almanac": {
+    "n": 328,
+    "mean_g": 2150,
+    "median_g": 1812,
+    "p10_g": 527,
+    "max_g": 6789,
+    "mean_by_source_g": {
+     "UL rec": 1547,
+     "Weekly rec": 2504,
+     "rf4stat": 3581
+    }
+   },
+   "almanac_max_over_hi": 0.776,
+   "rf4stat_max_g": 7543,
+   "rf4stat_over_almanac": 1.11
+  },
+  {
+   "fish_key": "n_carp",
+   "name_zh": "无鳞鲤﻿",
+   "name_en": "Leather Carp",
+   "trophy_g": null,
+   "trophy_line_g": 30000,
+   "super_trophy_line_g": 45000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 56250,
+   "almanac": {
+    "n": 422,
+    "mean_g": 27798,
+    "median_g": 29316,
+    "p10_g": 10271,
+    "max_g": 57604,
+    "mean_by_source_g": {
+     "UL rec": 2009,
+     "Weekly rec": 28756,
+     "rf4stat": 32531
+    }
+   },
+   "almanac_max_over_hi": 1.024
+  },
+  {
+   "fish_key": "n_carp_ghost",
+   "name_zh": "无鳞鲤 （人面鲤）",
+   "name_en": "Scaleless Ghost Carp",
+   "trophy_g": null,
+   "trophy_line_g": 30000,
+   "super_trophy_line_g": 45000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 56250,
+   "almanac": {
+    "n": 176,
+    "mean_g": 14499,
+    "median_g": 11739,
+    "p10_g": 4895,
+    "max_g": 44338,
+    "mean_by_source_g": {
+     "UL rec": 1209,
+     "Weekly rec": 14502,
+     "rf4stat": 27656
+    }
+   },
+   "almanac_max_over_hi": 0.788
+  },
+  {
+   "fish_key": "n_carp_albino",
+   "name_zh": "无鳞鲤（白化）",
+   "name_en": "Scaleless Albino Carp",
+   "trophy_g": null,
+   "trophy_line_g": 30000,
+   "super_trophy_line_g": 45000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 56250,
+   "almanac": {
+    "n": 95,
+    "mean_g": 11003,
+    "median_g": 7235,
+    "p10_g": 3867,
+    "max_g": 38919,
+    "mean_by_source_g": {
+     "Weekly rec": 11003
+    }
+   },
+   "almanac_max_over_hi": 0.692
+  },
+  {
+   "fish_key": "bullhead_syb",
+   "name_zh": "西伯利亚杜父鱼",
+   "name_en": "Siberian Sculpin",
+   "trophy_g": null,
+   "trophy_line_g": 45,
+   "super_trophy_line_g": 55,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 68,
+   "almanac": {
+    "n": 262,
+    "mean_g": 29,
+    "median_g": 30,
+    "p10_g": 14,
+    "max_g": 54,
+    "mean_by_source_g": {
+     "UL rec": 27,
+     "Weekly rec": 31
+    }
+   },
+   "almanac_max_over_hi": 0.785
+  },
+  {
+   "fish_key": "syb_vendace",
+   "name_zh": "小白鲑﻿",
+   "name_en": "Siberian Sardine Cisco",
+   "trophy_g": null,
+   "trophy_line_g": 800,
+   "super_trophy_line_g": 1100,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1375,
+   "almanac": {
+    "n": 459,
+    "mean_g": 632,
+    "median_g": 671,
+    "p10_g": 230,
+    "max_g": 1168,
+    "mean_by_source_g": {
+     "UL rec": 513,
+     "Weekly rec": 779,
+     "rf4stat": 849
+    }
+   },
+   "almanac_max_over_hi": 0.849
+  },
+  {
+   "fish_key": "lenok_o",
+   "name_zh": "细鳞鲑﻿",
+   "name_en": "Sharp-snouted Lenok",
+   "trophy_g": null,
+   "trophy_line_g": 5500,
+   "super_trophy_line_g": 7000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 8750,
+   "almanac": {
+    "n": 505,
+    "mean_g": 3729,
+    "median_g": 3893,
+    "p10_g": 1612,
+    "max_g": 7390,
+    "mean_by_source_g": {
+     "UL rec": 3328,
+     "Weekly rec": 4201,
+     "rf4stat": 4696
+    }
+   },
+   "almanac_max_over_hi": 0.845
+  },
+  {
+   "fish_key": "syb_sterlet",
+   "name_zh": "西伯利亚小体鲟﻿",
+   "name_en": "Siberian Sterlet",
+   "trophy_g": null,
+   "trophy_line_g": 9000,
+   "super_trophy_line_g": 14000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 17500,
+   "almanac": {
+    "n": 309,
+    "mean_g": 5917,
+    "median_g": 5496,
+    "p10_g": 1872,
+    "max_g": 14868,
+    "mean_by_source_g": {
+     "UL rec": 1677,
+     "Weekly rec": 6054,
+     "rf4stat": 9778
+    }
+   },
+   "almanac_max_over_hi": 0.85
+  },
+  {
+   "fish_key": "sterlet",
+   "name_zh": "小体鲟",
+   "name_en": "Sterlet",
+   "trophy_g": null,
+   "trophy_line_g": 9000,
+   "super_trophy_line_g": 14000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 17500,
+   "almanac": {
+    "n": 331,
+    "mean_g": 6474,
+    "median_g": 6564,
+    "p10_g": 1173,
+    "max_g": 13239,
+    "mean_by_source_g": {
+     "UL rec": 1534,
+     "Weekly rec": 7294,
+     "rf4stat": 10074
+    }
+   },
+   "almanac_max_over_hi": 0.757,
+   "rf4stat_max_g": 16069,
+   "rf4stat_over_almanac": 1.21
+  },
+  {
+   "fish_key": "d_zubatka",
+   "name_zh": "小齿狼鱼﻿",
+   "name_en": "Northern wolffish",
+   "trophy_g": null,
+   "trophy_line_g": 13000,
+   "super_trophy_line_g": 17000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 21250,
+   "almanac": {
+    "n": 192,
+    "mean_g": 7665,
+    "median_g": 7110,
+    "p10_g": 2637,
+    "max_g": 16346,
+    "mean_by_source_g": {
+     "UL rec": 3544,
+     "Weekly rec": 8008,
+     "rf4stat": 13523
+    }
+   },
+   "almanac_max_over_hi": 0.769
+  },
+  {
+   "fish_key": "carp_red",
+   "name_zh": "匈红鲤(鳞鲤)",
+   "name_en": "Red Starvas Carp - Scaly",
+   "trophy_g": null,
+   "trophy_line_g": 20000,
+   "super_trophy_line_g": 30000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 37500,
+   "almanac": {
+    "n": 337,
+    "mean_g": 16659,
+    "median_g": 18272,
+    "p10_g": 5182,
+    "max_g": 34448,
+    "mean_by_source_g": {
+     "UL rec": 1914,
+     "Weekly rec": 15662,
+     "rf4stat": 21773
+    }
+   },
+   "almanac_max_over_hi": 0.919
+  },
+  {
+   "fish_key": "m_carp_red",
+   "name_zh": "匈红鲤（镜鲤）",
+   "name_en": "Starvas Red Carp - Mirror",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 283,
+    "mean_g": 18424,
+    "median_g": 19621,
+    "p10_g": 5798,
+    "max_g": 45383,
+    "mean_by_source_g": {
+     "Weekly rec": 17173,
+     "rf4stat": 26743
+    }
+   },
+   "almanac_max_over_hi": 0.908
+  },
+  {
+   "fish_key": "somniosus_m",
+   "name_zh": "小头睡鲨",
+   "name_en": "Greenland shark",
+   "trophy_g": null,
+   "trophy_line_g": 600000,
+   "super_trophy_line_g": 900000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1125000,
+   "almanac": {
+    "n": 238,
+    "mean_g": 277510,
+    "median_g": 248044,
+    "p10_g": 48530,
+    "max_g": 834573,
+    "mean_by_source_g": {
+     "Weekly rec": 269192,
+     "rf4stat": 355267
+    }
+   },
+   "almanac_max_over_hi": 0.742
+  },
+  {
+   "fish_key": "resfish",
+   "name_zh": "小冠太阳鱼",
+   "name_en": "Redear sunfish",
+   "trophy_g": null,
+   "trophy_line_g": 1700,
+   "super_trophy_line_g": 2300,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2875,
+   "almanac": {
+    "n": 508,
+    "mean_g": 1286,
+    "median_g": 1311,
+    "p10_g": 474,
+    "max_g": 2572,
+    "mean_by_source_g": {
+     "UL rec": 1073,
+     "Weekly rec": 1566,
+     "rf4stat": 1364
+    }
+   },
+   "almanac_max_over_hi": 0.895,
+   "rf4stat_max_g": 2898,
+   "rf4stat_over_almanac": 1.13
+  },
+  {
+   "fish_key": "sm_bass",
+   "name_zh": "小口黑鲈",
+   "name_en": "Smallmouth bass",
+   "trophy_g": null,
+   "trophy_line_g": 3000,
+   "super_trophy_line_g": 4100,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 5125,
+   "almanac": {
+    "n": 526,
+    "mean_g": 2077,
+    "median_g": 1926,
+    "p10_g": 848,
+    "max_g": 4827,
+    "mean_by_source_g": {
+     "UL rec": 1535,
+     "Weekly rec": 2592,
+     "rf4stat": 3245
+    }
+   },
+   "almanac_max_over_hi": 0.942
+  },
+  {
+   "fish_key": "mytilus_ed",
+   "name_zh": "贻贝",
+   "name_en": "Mussel",
+   "trophy_g": null,
+   "trophy_line_g": 130,
+   "super_trophy_line_g": 150,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 187,
+   "almanac": {
+    "n": 248,
+    "mean_g": 78,
+    "median_g": 65,
+    "p10_g": 42,
+    "max_g": 168,
+    "mean_by_source_g": {
+     "Weekly rec": 78
+    }
+   },
+   "almanac_max_over_hi": 0.896
+  },
+  {
+   "fish_key": "a_smelt",
+   "name_zh": "亚洲胡瓜鱼",
+   "name_en": "Asian Smelt",
+   "trophy_g": null,
+   "trophy_line_g": 270,
+   "super_trophy_line_g": 320,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 400,
+   "almanac": {
+    "n": 458,
+    "mean_g": 200,
+    "median_g": 211,
+    "p10_g": 99,
+    "max_g": 345,
+    "mean_by_source_g": {
+     "UL rec": 169,
+     "Weekly rec": 231
+    }
+   },
+   "almanac_max_over_hi": 0.863
+  },
+  {
+   "fish_key": "chukuchan",
+   "name_zh": "亚口鱼",
+   "name_en": "Longnose Sucker",
+   "trophy_g": null,
+   "trophy_line_g": 1800,
+   "super_trophy_line_g": 2200,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2750,
+   "almanac": {
+    "n": 329,
+    "mean_g": 1053,
+    "median_g": 1064,
+    "p10_g": 341,
+    "max_g": 2460,
+    "mean_by_source_g": {
+     "UL rec": 901,
+     "Weekly rec": 1142
+    }
+   },
+   "almanac_max_over_hi": 0.895,
+   "rf4stat_max_g": 2480,
+   "rf4stat_over_almanac": 1.01
+  },
+  {
+   "fish_key": "lycodes_e",
+   "name_zh": "伊氏狼绵鳚",
+   "name_en": "Esmark’s eelpout",
+   "trophy_g": null,
+   "trophy_line_g": 2500,
+   "super_trophy_line_g": 3300,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 4125,
+   "almanac": {
+    "n": 216,
+    "mean_g": 1556,
+    "median_g": 1451,
+    "p10_g": 724,
+    "max_g": 3571,
+    "mean_by_source_g": {
+     "UL rec": 915,
+     "Weekly rec": 1573,
+     "rf4stat": 1911
+    }
+   },
+   "almanac_max_over_hi": 0.866
+  },
+  {
+   "fish_key": "kijuch",
+   "name_zh": "银鳟鱼",
+   "name_en": "Coho Salmon",
+   "trophy_g": null,
+   "trophy_line_g": 5500,
+   "super_trophy_line_g": 7000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 8750,
+   "almanac": {
+    "n": 498,
+    "mean_g": 3094,
+    "median_g": 2930,
+    "p10_g": 1057,
+    "max_g": 7209,
+    "mean_by_source_g": {
+     "UL rec": 2164,
+     "Weekly rec": 3905,
+     "rf4stat": 7209
+    }
+   },
+   "almanac_max_over_hi": 0.824,
+   "rf4stat_max_g": 7990,
+   "rf4stat_over_almanac": 1.11
+  },
+  {
+   "fish_key": "pinagor",
+   "name_zh": "圆鳍鱼﻿",
+   "name_en": "Lumpfish",
+   "trophy_g": null,
+   "trophy_line_g": 6000,
+   "super_trophy_line_g": 7500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 9375,
+   "almanac": {
+    "n": 331,
+    "mean_g": 4074,
+    "median_g": 4388,
+    "p10_g": 1186,
+    "max_g": 8763,
+    "mean_by_source_g": {
+     "UL rec": 1677,
+     "Weekly rec": 4592,
+     "rf4stat": 5529
+    }
+   },
+   "almanac_max_over_hi": 0.935,
+   "rf4stat_max_g": 9460,
+   "rf4stat_over_almanac": 1.08
+  },
+  {
+   "fish_key": "bh_carp",
+   "name_zh": "鳙鱼",
+   "name_en": "Bighead Carp",
+   "trophy_g": null,
+   "trophy_line_g": 30000,
+   "super_trophy_line_g": 45000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 56250,
+   "almanac": {
+    "n": 510,
+    "mean_g": 21602,
+    "median_g": 23984,
+    "p10_g": 2726,
+    "max_g": 57722,
+    "mean_by_source_g": {
+     "UL rec": 3532,
+     "Weekly rec": 27854,
+     "rf4stat": 34210
+    }
+   },
+   "almanac_max_over_hi": 1.026
+  },
+  {
+   "fish_key": "m_molva",
+   "name_zh": "魣鳕﻿",
+   "name_en": "Common ling",
+   "trophy_g": null,
+   "trophy_line_g": 30000,
+   "super_trophy_line_g": 40000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 50000,
+   "almanac": {
+    "n": 297,
+    "mean_g": 21507,
+    "median_g": 20887,
+    "p10_g": 9040,
+    "max_g": 47876,
+    "mean_by_source_g": {
+     "UL rec": 10603,
+     "Weekly rec": 23020,
+     "rf4stat": 31779
+    }
+   },
+   "almanac_max_over_hi": 0.958
+  },
+  {
+   "fish_key": "halibut_w",
+   "name_zh": "庸鲽﻿",
+   "name_en": "Atlantic halibut",
+   "trophy_g": null,
+   "trophy_line_g": 150000,
+   "super_trophy_line_g": 220000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 275000,
+   "almanac": {
+    "n": 310,
+    "mean_g": 115529,
+    "median_g": 111405,
+    "p10_g": 41663,
+    "max_g": 294613,
+    "mean_by_source_g": {
+     "UL rec": 18327,
+     "Weekly rec": 117236,
+     "rf4stat": 153763
+    }
+   },
+   "almanac_max_over_hi": 1.071
+  },
+  {
+   "fish_key": "m_goshiki",
+   "name_zh": "圆点五色锦鲤",
+   "name_en": "Mameshibori Goshiki",
+   "trophy_g": null,
+   "trophy_line_g": 25000,
+   "super_trophy_line_g": 32000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 40000,
+   "almanac": {
+    "n": 248,
+    "mean_g": 10256,
+    "median_g": 8194,
+    "p10_g": 3127,
+    "max_g": 28585,
+    "mean_by_source_g": {
+     "UL rec": 1682,
+     "Weekly rec": 10290
+    }
+   },
+   "almanac_max_over_hi": 0.715
+  },
+  {
+   "fish_key": "bp_bass",
+   "name_zh": "眼点丽鱼",
+   "name_en": "Butterfly Peacock bass",
+   "trophy_g": null,
+   "trophy_line_g": 4000,
+   "super_trophy_line_g": 5500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 6875,
+   "almanac": {
+    "n": 394,
+    "mean_g": 2222,
+    "median_g": 2137,
+    "p10_g": 578,
+    "max_g": 5083,
+    "mean_by_source_g": {
+     "UL rec": 1471,
+     "Weekly rec": 2654,
+     "rf4stat": 4070
+    }
+   },
+   "almanac_max_over_hi": 0.739
+  },
+  {
+   "fish_key": "valyok",
+   "name_zh": "真柱白鲑",
+   "name_en": "Round Whitefish",
+   "trophy_g": null,
+   "trophy_line_g": 1200,
+   "super_trophy_line_g": 1600,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 2000,
+   "almanac": {
+    "n": 432,
+    "mean_g": 531,
+    "median_g": 422,
+    "p10_g": 176,
+    "max_g": 1609,
+    "mean_by_source_g": {
+     "UL rec": 434,
+     "Weekly rec": 630,
+     "rf4stat": 1361
+    }
+   },
+   "almanac_max_over_hi": 0.804,
+   "rf4stat_max_g": 1859,
+   "rf4stat_over_almanac": 1.16
+  },
+  {
+   "fish_key": "trib_h",
+   "name_zh": "珠星三块鱼",
+   "name_en": "Ugui",
+   "trophy_g": null,
+   "trophy_line_g": 1200,
+   "super_trophy_line_g": 1500,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 1875,
+   "almanac": {
+    "n": 475,
+    "mean_g": 819,
+    "median_g": 829,
+    "p10_g": 288,
+    "max_g": 1708,
+    "mean_by_source_g": {
+     "UL rec": 667,
+     "Weekly rec": 929,
+     "rf4stat": 1270
+    }
+   },
+   "almanac_max_over_hi": 0.911
+  },
+  {
+   "fish_key": "taimen",
+   "name_zh": "哲罗鱼﻿",
+   "name_en": "Taimen",
+   "trophy_g": null,
+   "trophy_line_g": 50000,
+   "super_trophy_line_g": 80000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 100000,
+   "almanac": {
+    "n": 536,
+    "mean_g": 22677,
+    "median_g": 17902,
+    "p10_g": 3166,
+    "max_g": 88181,
+    "mean_by_source_g": {
+     "UL rec": 11319,
+     "Weekly rec": 31259,
+     "rf4stat": 49949
+    }
+   },
+   "almanac_max_over_hi": 0.882,
+   "rf4stat_max_g": 99577,
+   "rf4stat_over_almanac": 1.13
+  },
+  {
+   "fish_key": "c_anguineus",
+   "name_zh": "皱鳃鲨",
+   "name_en": "Frilled shark",
+   "trophy_g": null,
+   "trophy_line_g": 50000,
+   "super_trophy_line_g": 70000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 87500,
+   "almanac": {
+    "n": 153,
+    "mean_g": 28262,
+    "median_g": 23758,
+    "p10_g": 7100,
+    "max_g": 67547,
+    "mean_by_source_g": {
+     "UL rec": 2633,
+     "Weekly rec": 28218,
+     "rf4stat": 31810
+    }
+   },
+   "almanac_max_over_hi": 0.772
+  },
+  {
+   "fish_key": "hs_bass",
+   "name_zh": "杂交条纹狼鲈",
+   "name_en": "Hybrid Striped Bass (Whiterock Bass)",
+   "trophy_g": null,
+   "trophy_line_g": 8000,
+   "super_trophy_line_g": 10000,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 12500,
+   "almanac": {
+    "n": 424,
+    "mean_g": 3868,
+    "median_g": 3243,
+    "p10_g": 681,
+    "max_g": 10239,
+    "mean_by_source_g": {
+     "UL rec": 2152,
+     "Weekly rec": 5122,
+     "rf4stat": 2822
+    }
+   },
+   "almanac_max_over_hi": 0.819
+  },
+  {
+   "fish_key": "ostrea_ed",
+   "name_zh": "牡蛎",
+   "name_en": "Oyster",
+   "trophy_g": null,
+   "trophy_line_g": 300,
+   "super_trophy_line_g": 370,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 462,
+   "almanac": {
+    "n": 230,
+    "mean_g": 164,
+    "median_g": 138,
+    "p10_g": 77,
+    "max_g": 363,
+    "mean_by_source_g": {
+     "Weekly rec": 164
+    }
+   },
+   "almanac_max_over_hi": 0.785
+  },
+  {
+   "fish_key": "s_saurus",
+   "name_zh": "竹刀鱼﻿",
+   "name_en": "Atlantic saury",
+   "trophy_g": null,
+   "trophy_line_g": 600,
+   "super_trophy_line_g": 750,
+   "db_avg_g": null,
+   "db_min_g": null,
+   "db_max_g": null,
+   "spawn_hi_g": 937,
+   "almanac": {
+    "n": 397,
+    "mean_g": 580,
+    "median_g": 652,
+    "p10_g": 147,
+    "max_g": 992,
+    "mean_by_source_g": {
+     "UL rec": 204,
+     "Weekly rec": 686,
+     "rf4stat": 689
+    }
+   },
+   "almanac_max_over_hi": 1.058
+  }
+ ]
+}
