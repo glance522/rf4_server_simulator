@@ -28,6 +28,7 @@ func init() {
 		d.Register(9, 3, hCraftMine2)
 		d.Register(9, 4, hCraftCost)
 		d.Register(9, 6, hCraftAddTemplate)
+		d.Register(9, 7, hCraftDeleteTemplate)
 	})
 }
 
@@ -1606,81 +1607,238 @@ func hCraftCost(ctx *Ctx) ([]byte, bool) {
 
 // ---- 9/6 添加配方模板 ----
 
-// hCraftAddTemplate 处理 9/6 配方模板请求，返回 171 配方详情。
-// 请求键可以是配方 id 或产出物 id；未指定或未知时使用第一条配方，
-// 配方表为空时返回 null。
+// craftTemplateElemCode 是 171 的 f3/f4 元素容器 args code。
+//
+// 元素类必须是 hbokamnohjb（type_id 170，DTO bpdjphlfjdj）：客户端
+// dmolhiobcbb.plphdfehkjl 把这两格读成 bpdjphlfjdj[]，发 17(kdpbhdffjaf)
+// 会在 lpdfanjcalm<T> 抛 InvalidCastException，保存回调抛出后面板卡在
+// busy 态（Player.log 2026-11-11 12:46:32 实栈）。
+// 170 -> 96 取自 argcode_table.json 的 by_type_id；9/5 的 171 列表用 97，
+// 96/97 成对，互证这组映射。
+const craftTemplateElemCode = "96"
+
+// craftTemplateListCode 是 9/5 响应里 171 列表的容器 args code。
+// by_cmd["9/5"]="97" 且 by_type_id["171"]="97"，两处一致。
+const craftTemplateListCode = "97"
+
+// hCraftAddTemplate 处理 9/6 保存配方模板。
+//
+// 请求体就是一整个 171 对象（实抓 2026-11-11 14:29:20）：
+//
+//	f0 GUID（客户端未分配时为全零）
+//	f1 模板名（玩家填的「奶油1」）
+//	f2 配方键（craft_feed_dry）
+//	f3 args(96) 工具条目、f4 args(96) 材料条目，元素 170 = {需求key, 序号, 真实物品id}
+//
+// 客户端已经把模板内容算好了，服务端只做两件事：补一个稳定 GUID、落库，
+// 然后按 171 回包。不再按配方重新推导材料——那会把玩家选的具体物品丢掉。
 func hCraftAddTemplate(ctx *Ctx) ([]byte, bool) {
 	srv := ctx.Sess.Srv
 	if !srv.requireDB(ctx) {
 		return nil, false
 	}
 	cctx := ctx.Sess.pushCtx()
-	recipeID := ""
-	if strs := deepStrings(ctx.Tree); len(strs) > 0 {
-		recipeID = strs[0]
-	}
-	recipe := srv.resolveRecipe(cctx, recipeID)
-	if recipe == nil {
-		if list, err := srv.DB.ListRecipes(cctx); err == nil && len(list) > 0 {
-			recipe = list[0]
-		}
-	}
-	if recipe == nil {
+
+	tmpl, ok := craftTemplateFromRequest(ctx.Tree)
+	if !ok {
+		ctx.Log.Warn("9/6 请求体不是 171 模板")
 		return []byte{0x00}, true // ctx.reply(None)
 	}
-	guid := uuid5OIDHex(recipe.RecipeID)
-	tmpl := craftTemplate(guid, recipe.Name, recipe.Kind, craftDemandObjs(recipe))
+	if tmpl.Fields[2].StrOr() == "" {
+		ctx.Log.Warn("9/6 请求缺配方键")
+		return []byte{0x00}, true
+	}
+	recipe := srv.resolveRecipe(cctx, tmpl.Fields[2].StrOr())
+	if recipe == nil {
+		ctx.Log.Warn("9/6 未知配方", "recipe", tmpl.Fields[2].StrOr())
+		return []byte{0x00}, true
+	}
+
+	guid := tmpl.Fields[0].GuidHex()
+	if guid == "" || guid == zeroGUIDHex {
+		guid = uuid5OIDHex(fmt.Sprintf("%d:%s:%s", ctx.Sess.Userid, recipe.RecipeID, tmpl.Fields[1].StrOr()))
+	}
+	tmpl.Fields[0] = proto.FGuid(guid)
+
+	now := float64(time.Now().Unix())
+	row := &store.CraftTemplate{
+		UID:           ctx.Sess.Userid,
+		GUID:          guid,
+		RecipeID:      recipe.RecipeID,
+		Name:          tmpl.Fields[1].StrOr(),
+		Kind:          tmpl.Fields[2].StrOr(),
+		ToolsJSON:     craftTemplateEntriesJSON(tmpl.Fields[3].Val),
+		MaterialsJSON: craftTemplateEntriesJSON(tmpl.Fields[4].Val),
+		CreatedTs:     now,
+		UpdatedTs:     now,
+	}
+	if err := srv.DB.SaveCraftTemplate(cctx, row); err != nil {
+		ctx.Log.Error("9/6 模板落库失败", "err", err, "recipe", recipe.RecipeID)
+		return []byte{0x00}, true
+	}
+
 	body, err := proto.EncodeValue(tmpl, ctx.Sess.Table())
 	if err != nil {
 		return nil, false
 	}
-	ctx.Log.Info("9/6 配方模板", "recipe", recipe.RecipeID, "guid", guid)
+	ctx.Log.Info("9/6 配方模板", "recipe", recipe.RecipeID, "guid", guid,
+		"name", row.Name, "tools", len(tmpl.Fields[3].Val.Items),
+		"materials", len(tmpl.Fields[4].Val.Items))
 	return body, true
 }
 
-// craftTemplate 构造 171 配方模板：f0 GUID、f1 名称、f2 分类、
-// f3 输入材料、f4 输出产品。9/6 不返回输出产品，f4 使用空 args("61")。
-func craftTemplate(guid, name, kind string, inputs []*proto.Value) *proto.Value {
+// zeroGUIDHex 是客户端「还没分配模板 id」时下发的全零 GUID。
+const zeroGUIDHex = "00000000000000000000000000000000"
+
+// hCraftDeleteTemplate 处理 9/7 删除配方模板，响应 null。
+//
+// 请求里带模板 GUID（16 字节 hex）；只删本人模板，别人的 GUID 传进来删不到。
+// 模板本来就不存在时同样回 null——删除是幂等的，客户端不需要区分。
+func hCraftDeleteTemplate(ctx *Ctx) ([]byte, bool) {
+	srv := ctx.Sess.Srv
+	if srv == nil || srv.DB == nil {
+		return []byte{0x00}, true
+	}
+	guid := templateGUIDOf(ctx.Tree)
+	if guid == "" {
+		ctx.Log.Warn("9/7 请求缺模板 GUID")
+		return []byte{0x00}, true
+	}
+	deleted, err := srv.DB.DeleteCraftTemplate(ctx.Sess.pushCtx(), ctx.Sess.Userid, guid)
+	if err != nil {
+		ctx.Log.Error("9/7 模板删除失败", "err", err, "guid", guid)
+	}
+	ctx.Log.Info("9/7 删除配方模板", "guid", guid, "deleted", deleted)
+	return []byte{0x00}, true
+}
+
+// templateGUIDOf 从请求树里取第一个 16 字节 GUID（9/7 的模板 id）。
+func templateGUIDOf(root *proto.Value) string {
+	var out string
+	var walk func(v *proto.Value)
+	walk = func(v *proto.Value) {
+		if v == nil || out != "" {
+			return
+		}
+		switch v.Kind {
+		case proto.KindGuid:
+			if len(v.Hex) == 32 && v.Hex != zeroGUIDHex {
+				out = v.Hex
+			}
+		case proto.KindObj:
+			for i := range v.Fields {
+				walk(v.Fields[i].Val)
+			}
+		case proto.KindArgs, proto.KindValList, proto.KindArray, proto.KindTypedArr:
+			for _, it := range v.Items {
+				walk(it)
+			}
+		}
+	}
+	walk(root)
+	return out
+}
+
+// craftTemplateFromRequest 从请求树里取 171 模板对象。
+// 优先精确匹配 171；客户端把模板包在 args 里时沿容器下钻一层。
+func craftTemplateFromRequest(root *proto.Value) (*proto.Value, bool) {
+	var found *proto.Value
+	var walk func(v *proto.Value)
+	walk = func(v *proto.Value) {
+		if v == nil || found != nil {
+			return
+		}
+		if v.Kind == proto.KindObj {
+			if v.TypeID == 171 || v.Class == "dmolhiobcbb" {
+				found = v
+				return
+			}
+			for i := range v.Fields {
+				if v.Fields[i].Val != nil {
+					walk(v.Fields[i].Val)
+				}
+			}
+			return
+		}
+		if v.Kind == proto.KindArgs || v.Kind == proto.KindValList ||
+			v.Kind == proto.KindArray || v.Kind == proto.KindTypedArr {
+			for _, it := range v.Items {
+				walk(it)
+			}
+		}
+	}
+	walk(root)
+	if found == nil || len(found.Fields) < 5 {
+		return nil, false
+	}
+	return found, true
+}
+
+// craftTemplateEntriesJSON 把 170 条目列表序列化成存取用的 JSON。
+// 空列表落成 "[]"，读出来仍是空列表，不会变成 null。
+func craftTemplateEntriesJSON(v *proto.Value) string {
+	if v == nil || v.Kind != proto.KindArgs || len(v.Items) == 0 {
+		return "[]"
+	}
+	type entry struct {
+		Desc   string `json:"desc"`
+		Idx    uint32 `json:"idx"`
+		ItemID string `json:"item_id"`
+	}
+	out := make([]entry, 0, len(v.Items))
+	for _, it := range v.Items {
+		if it == nil || it.Kind != proto.KindObj || len(it.Fields) < 3 {
+			continue
+		}
+		e := entry{Desc: it.Fields[0].StrOr(), ItemID: it.Fields[2].StrOr()}
+		if n := it.Fields[1].Num; n != nil {
+			e.Idx = uint32(*n)
+		}
+		out = append(out, e)
+	}
+	raw, err := json.Marshal(out)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
+// craftTemplateEntriesFromJSON 还原 170 条目列表；坏数据返回空列表而不是报错，
+// 让单条模板坏掉时不影响整个 9/5 列表。
+func craftTemplateEntriesFromJSON(raw string) []*proto.Value {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	type entry struct {
+		Desc   string `json:"desc"`
+		Idx    uint32 `json:"idx"`
+		ItemID string `json:"item_id"`
+	}
+	var ents []entry
+	if err := json.Unmarshal([]byte(raw), &ents); err != nil {
+		return nil
+	}
+	out := make([]*proto.Value, 0, len(ents))
+	for _, e := range ents {
+		out = append(out, wiregen.MustMakeObj("hbokamnohjb", map[int]*proto.Value{
+			0: proto.StrVal(e.Desc),
+			1: proto.U32(e.Idx),
+			2: proto.StrVal(e.ItemID),
+		}))
+	}
+	return out
+}
+
+// craftTemplate 构造 171 配方模板：f0 GUID、f1 名称、f2 分类（保存时为配方键）、
+// f3 工具、f4 材料，两格都是 args(96) 的 hbokamnohjb(170) 列表。
+func craftTemplate(guid, name, kind string, tools, materials []*proto.Value) *proto.Value {
 	return wiregen.MustMakeObj("dmolhiobcbb", map[int]*proto.Value{
 		0: proto.Guid(guid),
 		1: proto.StrVal(name),
 		2: proto.StrVal(kind),
-		3: proto.Args(proto.S(listCodeForObjs(inputs)), inputs...),
-		4: proto.Args(proto.S("61")),
+		3: proto.Args(proto.S(craftTemplateElemCode), tools...),
+		4: proto.Args(proto.S(craftTemplateElemCode), materials...),
 	})
-}
-
-// craftDemandObjs 根据权威配方数据构造 501 配方需求条目。
-// materials_json 为空时返回 nil，对应空的需求列表。
-func craftDemandObjs(recipe *store.Recipe) []*proto.Value {
-	if recipe.MaterialsJSON == "" {
-		return nil
-	}
-	var mats []craftDemand
-	if err := json.Unmarshal([]byte(recipe.MaterialsJSON), &mats); err != nil {
-		return nil
-	}
-	out := make([]*proto.Value, 0, len(mats))
-	for _, m := range mats {
-		// f4 item id 列表（utf-8 字节，非 null 数组；空也要给数组）
-		hexes := make([]string, 0, len(m.Alternatives)+1)
-		for _, a := range demandAccepts(m) {
-			if a == "" {
-				continue
-			}
-			hexes = append(hexes, hex.EncodeToString([]byte(a)))
-		}
-		out = append(out, wiregen.MustMakeObj("kdpbhdffjaf", map[int]*proto.Value{
-			0: proto.StrVal(fmt.Sprintf("%s_req", recipe.RecipeID)), // 需求 key
-			1: proto.Str(nil),                                       // f1 固定为 null
-			2: proto.U32(0),                                         // lmmhdlhogdc 容器：背包
-			3: proto.Null(),                                         // f3 可接受槽位（无 gdgifedhinj → null）
-			4: proto.ArrayOf(hexes),
-			5: proto.U32(uint32(m.need())),
-			// f6..f8 OPT=0 由 MakeObj 零值填充
-		}))
-	}
-	return out
 }
 
 // ---- 803 构造 ----
