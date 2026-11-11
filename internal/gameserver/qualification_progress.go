@@ -49,13 +49,12 @@ func qualificationCounterObject(ruleID int64, counted []store.QualificationFish,
 func (s *Server) qualificationFishObject(f store.QualificationFish) *proto.Value {
 	modelKey := ""
 	if s != nil {
-		// 雌雄必须按真鱼 guid 推导才跟渔护/纪录卡一致；GUID 是去重键的 md5，
-		// 只在老存档（没有 fish_guid）上兜底，保证同一个存档每次结果相同。
-		seed := f.FishGUID
-		if seed == "" {
-			seed = f.GUID
-		}
-		modelKey = s.fishModelVariantForFish(f.Species, f.WeightG, f.LengthM, f.Grade, seed)
+		// 族名必须与渔护/纪录卡/溜鱼同源：都按**真鱼 guid**（catch_log.catch_guid）推导。
+		// f.GUID 是资格去重键的 md5，跟这尾鱼的外观没有关系；拿它当种子会让同一尾鱼在
+		// 任务鱼表里跟渔护里显示成两套模型。老存档没有 fish_guid 时留空，交给
+		// fishVariantSeed 走「鱼种+克重+体长」的内容种子——那正是其余三条路径的兜底，
+		// 四条路径才会一致。
+		modelKey = s.fishModelVariantForFish(f.Species, f.WeightG, f.LengthM, f.Grade, f.FishGUID)
 	}
 	key, name := f.NameZh, (*string)(nil)
 	if modelKey != "" {

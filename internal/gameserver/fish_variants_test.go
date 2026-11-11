@@ -2,6 +2,7 @@ package gameserver
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,90 +35,97 @@ func seedSalmonLines(t *testing.T) *store.DB {
 	return db
 }
 
-func TestPickFishModelVariantStages(t *testing.T) {
-	const q, b = 4000, 38000
-	cases := []struct {
-		name    string
-		species string
-		weight  int64
-		length  float64
-		male    bool
-		want    string
-	}{
-		{"幼鱼 parr", "a_salmon", 800, 0.18, true, "a_salmon_parr"},
-		{"降海幼鱼 smolt", "a_salmon", 3000, 0.30, false, "a_salmon_smolt"},
-		// 关键回归：7.7kg / 0.95m 已经过了鱼苗尺度，必须走成鱼族，
-		// 否则渔护列表缩略图会空白（鱼苗模型塞进成鱼尺寸槽）。
-		{"7.7kg 成鱼体型不得用鱼苗族", "a_salmon", 7724, 0.95, false, "a_salmon_f1"},
-		{"成鱼第一期(雌)", "a_salmon", 12000, 1.09, false, "a_salmon_f1"},
-		{"成鱼第二期(雄)", "a_salmon", 20000, 1.30, true, "a_salmon_m2"},
-		{"蓝冠线附近(雌)", "a_salmon", 37000, 1.61, false, "a_salmon_f3"},
-		{"超蓝冠也封顶", "a_salmon", 200000, 2.60, true, "a_salmon_m3"},
-		{"大鳞麻哈鱼 5 期", "chavycha", 59000, 1.80, false, "chavycha_f_5"},
-		{"大马哈鱼 2 期", "keta", 37000, 1.50, true, "keta_m_2"},
-		{"无变体族鱼种", "perch", 500, 0.20, true, ""},
-	}
-	for _, tc := range cases {
-		got := pickFishModelVariant(tc.species, tc.weight, q, b, tc.male, tc.length,
-			defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM)
-		if got != tc.want {
-			t.Fatalf("%s：族名=%q want=%q", tc.name, got, tc.want)
-		}
-	}
-}
-
-// 体长缺失（老数据）时不允许用鱼苗族：成鱼尺寸槽取不到对应模型会渲染成空白。
-func TestFishModelVariantJuvenileNeedsLength(t *testing.T) {
-	if got := pickFishModelVariant("a_salmon", 800, 4000, 38000, true, 0,
-		defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM); got == "a_salmon_parr" {
-		t.Fatalf("体长缺失时不应判成幼鱼族，得到 %q", got)
-	}
-	// 体长在阈值内才放行。
-	if got := pickFishModelVariant("a_salmon", 800, 4000, 38000, true, 0.20,
+// 幼鱼两族仍按体重 + 体长卡（鱼苗模型塞进成鱼尺寸槽会让渔护缩略图空白）；
+// 成鱼不按体重分期，见 TestFishModelVariantIgnoresWeightBands。
+func TestPickFishModelVariantJuvenileFamilies(t *testing.T) {
+	if got := pickFishModelVariant("a_salmon", 800, true, "guid-1", 0.18,
 		defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM); got != "a_salmon_parr" {
-		t.Fatalf("0.20m 的 800g 幼鱼应走 parr，得到 %q", got)
+		t.Fatalf("800g/0.18m 幼鱼应走 parr，实得 %q", got)
+	}
+	if got := pickFishModelVariant("a_salmon", 3000, false, "guid-2", 0.30,
+		defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM); got != "a_salmon_smolt" {
+		t.Fatalf("3000g/0.30m 应走 smolt，实得 %q", got)
+	}
+	// 关键回归：7.7kg / 0.95m 已经过了鱼苗尺度，必须走成鱼族。
+	got := pickFishModelVariant("a_salmon", 7724, false, "guid-3", 0.95,
+		defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM)
+	if !strings.HasPrefix(got, "a_salmon_f") {
+		t.Fatalf("7.7kg 成鱼体型应走成鱼族，实得 %q", got)
+	}
+	// 无变体族的鱼种留空。
+	if got := pickFishModelVariant("perch", 500, true, "guid-4", 0.20,
+		defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM); got != "" {
+		t.Fatalf("鲈鱼不该有族名，实得 %q", got)
 	}
 }
 
-// 同一尾鱼（GUID）必须永远得到同一个族名，否则溜鱼/结算/渔护会各显示一套模型。
-func TestFishModelVariantStablePerFish(t *testing.T) {
-	db := seedSalmonLines(t)
-	srv := newVariantTestServer(t, map[string]float64{})
-	srv.SetDB(db)
-
-	const guid = "9f2c1d4e6a8b0c1d2e3f405162738495"
-	first := srv.fishModelVariantForFish("a_salmon", 20000, 1.30, 2, guid)
-	if first == "" {
-		t.Fatal("大西洋鲑应当有变体族")
+// 玩家实测的问题就在这里：旧实现把「入档线 → 蓝冠线」等分给各期，于是同一个体重挡位永远
+// 是同一套模型（上星、蓝冠各固定一两种）。官服是同一鱼种的多套外观随机出，各个挡位都能
+// 钓到任意一套。这里钉住：同一体重、不同个体 → 雌雄六套外观都能出现。
+func TestFishModelVariantIgnoresWeightBands(t *testing.T) {
+	weights := []struct {
+		name string
+		g    int64
+	}{
+		{"入档以上", 12000},
+		{"上星", 30000},
+		{"蓝冠", 38000},
 	}
-	for i := 0; i < 20; i++ {
-		if got := srv.fishModelVariantForFish("a_salmon", 20000, 1.30, 2, guid); got != first {
-			t.Fatalf("同一尾鱼第 %d 次族名=%q，首次=%q", i, got, first)
+	all := []string{"a_salmon_f1", "a_salmon_f2", "a_salmon_f3",
+		"a_salmon_m1", "a_salmon_m2", "a_salmon_m3"}
+	for _, w := range weights {
+		seen := map[string]bool{}
+		for i := 0; i < 400; i++ {
+			guid := fmt.Sprintf("%032x", i*2654435761)
+			v := pickFishModelVariant("a_salmon", w.g, fishVariantMale(guid), guid, 1.30,
+				defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM)
+			seen[v] = true
 		}
-	}
-	if got := srv.fishModelVariantForFish("perch", 20000, 0.30, 2, guid); got != "" {
-		t.Fatalf("无变体族鱼种应留空，得到 %q", got)
-	}
-}
-
-// 雌雄由 GUID 哈希决定：多次不同 GUID 必须雌雄都出现，且六套成鱼族都能命中。
-func TestFishModelVariantCoversEveryFamily(t *testing.T) {
-	seen := map[string]bool{}
-	for i := 0; i < 600; i++ {
-		guid := fmt.Sprintf("%032x", i*2654435761)
-		// 期数只跟体重走（入档线 4000、蓝冠线 38000 三等分），
-		// 这里挑三档中点把三期全扫一遍。
-		for _, w := range []int64{12000, 21000, 36000} {
-			if v := pickFishModelVariant("a_salmon", w, 4000, 38000, fishVariantMale(guid), 1.30,
-				defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM); v != "" {
-				seen[v] = true
+		for _, want := range all {
+			if !seen[want] {
+				t.Fatalf("%s档（%dg）从未出过 %s，模型仍与体重绑定：%v", w.name, w.g, want, seen)
 			}
 		}
 	}
-	for _, want := range []string{"a_salmon_f1", "a_salmon_f2", "a_salmon_f3",
-		"a_salmon_m1", "a_salmon_m2", "a_salmon_m3"} {
-		if !seen[want] {
-			t.Fatalf("族 %s 从未被选中：%v", want, seen)
+}
+
+// 同一尾鱼换任何体重挡位都必须还是同一套外观——证明选族只由身份决定，与体重无关。
+func TestFishModelVariantSameSeedAnyWeight(t *testing.T) {
+	const guid = "9f2c1d4e6a8b0c1d2e3f405162738495"
+	male := fishVariantMale(guid)
+	first := pickFishModelVariant("a_salmon", 12000, male, guid, 1.30,
+		defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM)
+	if first == "" {
+		t.Fatal("大西洋鲑应当有族名")
+	}
+	for _, w := range []int64{5000, 12000, 30000, 38000, 200000} {
+		if got := pickFishModelVariant("a_salmon", w, male, guid, 1.30,
+			defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM); got != first {
+			t.Fatalf("同一尾鱼在 %dg 得到 %q，12000g 时是 %q", w, got, first)
+		}
+	}
+}
+
+// 五套外观（大鳞麻哈鱼）、两套（大马哈鱼）也要铺满，不能只出第一套。
+func TestFishModelVariantCoversMultiFamilySpecies(t *testing.T) {
+	cases := map[string][]string{
+		"chavycha": {"chavycha_f_1", "chavycha_f_2", "chavycha_f_3", "chavycha_f_4", "chavycha_f_5",
+			"chavycha_m_1", "chavycha_m_2", "chavycha_m_3", "chavycha_m_4", "chavycha_m_5"},
+		"keta":   {"keta_f_1", "keta_f_2", "keta_m_1", "keta_m_2"},
+		"kijuch": {"kijuch_f_1", "kijuch_f_2", "kijuch_m_1", "kijuch_m_2"},
+	}
+	for species, want := range cases {
+		seen := map[string]bool{}
+		for i := 0; i < 400; i++ {
+			guid := fmt.Sprintf("%032x", i*2654435761+7)
+			v := pickFishModelVariant(species, 20000, fishVariantMale(guid), guid, 1.20,
+				defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM)
+			seen[v] = true
+		}
+		for _, f := range want {
+			if !seen[f] {
+				t.Fatalf("%s 的族 %s 从未被选中：%v", species, f, seen)
+			}
 		}
 	}
 }

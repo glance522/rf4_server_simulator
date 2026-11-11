@@ -79,10 +79,6 @@ type Server struct {
 	curves  map[string][][19]float64
 	curveMu sync.Mutex
 
-	// 模型族（FishFamily）档位线缓存：鱼种 -> (入档线, 奖杯线, 蓝冠线)
-	variantMu    sync.Mutex
-	variantLines map[string][2]int64 // 鱼种 -> {入档线, 蓝冠线}（奖杯线不参与选族）
-
 	// 技能定义缓存
 	skillDefs     map[int64][]skillNodeDef
 	skillDefsOnce sync.Once

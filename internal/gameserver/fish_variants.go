@@ -26,26 +26,31 @@ import (
 // 族名必须由同一尾鱼稳定推导，否则会出现「溜的是一条、鱼护里是另一条」。
 // 这里用（鱼种、体重、FishGUID）推导：同一尾鱼在溜鱼 / 结算 / 渔护 / 鱼卡四处
 // 算出的族名必然一致，重新登录、重连、重读库也不会变。
+//
+// **族与体重挡位无关**：官服同一鱼种的多套外观是随机出的，同一挡位既可能出 1 期也可能
+// 出 3 期，不存在「小的是 1 期、上星固定 2 期、蓝冠固定 3 期」的对应。旧实现按「入档线
+// → 蓝冠线」的相对位置取下标，结果每个挡位永远是同一套模型（玩家实测：上星与蓝冠各是
+// 固定的一两种），已改为按身份种子取下标，见 fishVariantStageIndex。
 var fishModelVariants = map[string]fishModelVariant{
-	// 大西洋鲑：幼鱼 parr / 降海幼鱼 smolt / 成鱼雌雄各 3 期
-	// （产卵期体色逐渐变深，雄鱼下颌逐渐钩曲）
+	// 大西洋鲑：幼鱼 parr / 降海幼鱼 smolt / 成鱼雌雄各 3 套外观
+	// （体色深浅与下颌钩曲程度不同，官服随机出，不按体型分期）
 	"a_salmon": {
 		female: []string{"a_salmon_f1", "a_salmon_f2", "a_salmon_f3"},
 		male:   []string{"a_salmon_m1", "a_salmon_m2", "a_salmon_m3"},
 		parr:   "a_salmon_parr",
 		smolt:  "a_salmon_smolt",
 	},
-	// 大鳞麻哈鱼：雌雄各 5 期
+	// 大鳞麻哈鱼：雌雄各 5 套外观
 	"chavycha": {
 		female: []string{"chavycha_f_1", "chavycha_f_2", "chavycha_f_3", "chavycha_f_4", "chavycha_f_5"},
 		male:   []string{"chavycha_m_1", "chavycha_m_2", "chavycha_m_3", "chavycha_m_4", "chavycha_m_5"},
 	},
-	// 大马哈鱼：雌雄各 2 期
+	// 大马哈鱼：雌雄各 2 套外观
 	"keta": {
 		female: []string{"keta_f_1", "keta_f_2"},
 		male:   []string{"keta_m_1", "keta_m_2"},
 	},
-	// 奇努克鲑：雌雄各 2 期
+	// 奇努克鲑：雌雄各 2 套外观
 	"kijuch": {
 		female: []string{"kijuch_f_1", "kijuch_f_2"},
 		male:   []string{"kijuch_m_1", "kijuch_m_2"},
@@ -132,27 +137,60 @@ func fishVariantSeed(species string, weightG int64, lengthM float64, guid string
 	return fmt.Sprintf("%s|%d|%d", strings.ToLower(species), weightG, int64(math.Round(lengthM*1000)))
 }
 
+// fishVariantHash 把「身份种子 + 用途盐」混成一个 64 位值。
+//
+// 不能直接拿 fnv 的低位取模：只差几个字符的 GUID（同一批次连号生成的那种）算出来的
+// 低位高度相关，实测会出现「某套外观永远抽不到」「雌鱼全是一个样」这类偏斜。这里过一遍
+// splitmix64 终结器把低位打散，再取模。
+func fishVariantHash(seed, salt string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(strings.ToLower(strings.TrimSpace(seed))))
+	_, _ = h.Write([]byte(salt))
+	x := h.Sum64()
+	x ^= x >> 30
+	x *= 0xbf58476d1ce4e5b9
+	x ^= x >> 27
+	x *= 0x94d049bb133111eb
+	x ^= x >> 31
+	return x
+}
+
 // fishVariantMale 由身份串决定雌雄。
 //
 // 不能用 rand：同一尾鱼溜鱼时抽一次、结算/渔护再抽一次会错位，
 // 出现「溜的是雄鱼、鱼护里变雌鱼」。对身份串哈希后四条读路径永远一致；
 // 身份串为空（字段全缺）时**固定按雌鱼处理**，宁可少一种外观，也不要每次刷新都变。
 func fishVariantMale(seed string) bool {
-	g := strings.ToLower(strings.TrimSpace(seed))
-	if g == "" {
+	if strings.TrimSpace(seed) == "" {
 		return false
 	}
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(g))
-	return h.Sum64()&1 == 1
+	return fishVariantHash(seed, "|sex")&1 == 1
+}
+
+// fishVariantStageIndex 由身份种子决定用第几套外观（均匀取），**与体重无关**。
+//
+// 官服这类鱼的多套模型是随机出的：同一体重挡位既可能出 1 期也可能出 3 期。旧实现把
+// 「入档线 → 蓝冠线」等分给各期，于是每个挡位永远是同一套（上星、蓝冠各固定一两种），
+// 玩家一眼就能看出规律。改成哈希取模后，同一种鱼在同一挡位会分散到全部族上。
+//
+// 仍然用身份种子而不是 rand：同一尾鱼在溜鱼 / 结算 / 渔护 / 鱼卡四处必须拿到同一个族名。
+// 盐用 "|model"，与决定雌雄的那一位互不相关，避免「雄鱼永远是 1 期」这类耦合。
+func fishVariantStageIndex(seed string, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	if strings.TrimSpace(seed) == "" {
+		// 字段全缺的老数据：固定取第一套，宁可少一种外观，也不要每次刷新都变。
+		return 0
+	}
+	return int(fishVariantHash(seed, "|model") % uint64(n))
 }
 
 // pickFishModelVariant 为这尾鱼挑一个客户端真实存在的模型族名。
-// 期数按体重在「入档线 → 蓝冠线」之间的相对位置取：越大的鱼越靠后。
 //
 // juvenileMaxM 是鱼苗族的体长上限：只有小鱼才允许用 parr / smolt，
 // 否则渔护列表的缩略图会因为「鱼苗模型 + 成鱼尺寸槽」渲染成空白。
-func pickFishModelVariant(species string, weightG, qualifiedG, blueG int64, male bool,
+func pickFishModelVariant(species string, weightG int64, male bool, seed string,
 	lengthM float64, parrMaxG, smoltMaxG int64, juvenileMaxM float64) string {
 	v, ok := fishModelVariants[species]
 	if !ok {
@@ -171,52 +209,7 @@ func pickFishModelVariant(species string, weightG, qualifiedG, blueG int64, male
 	if len(list) == 0 {
 		return ""
 	}
-	idx := 0
-	if blueG > qualifiedG && weightG > qualifiedG {
-		r := float64(weightG-qualifiedG) / float64(blueG-qualifiedG)
-		if r < 0 {
-			r = 0
-		}
-		if r > 0.999 {
-			r = 0.999
-		}
-		idx = int(r * float64(len(list)))
-	}
-	if idx < 0 {
-		idx = 0
-	}
-	if idx >= len(list) {
-		idx = len(list) - 1
-	}
-	return list[idx]
-}
-
-// fishModelVariantLines 取（入档线，蓝冠线），按鱼种缓存：
-// 渔护一次序列化上百条鱼，不能每条都查库。
-//
-// 只缓存两条线——选期数用的是「入档线 → 蓝冠线」之间的相对位置，奖杯线不参与，
-// 所以不读也不传（旧注释声称「结合入档/奖杯/蓝冠三条线」，与实现不符，已改正）。
-func (s *Server) fishModelVariantLines(species string) (int64, int64) {
-	s.variantMu.Lock()
-	if lines, ok := s.variantLines[species]; ok {
-		s.variantMu.Unlock()
-		return lines[0], lines[1]
-	}
-	s.variantMu.Unlock()
-
-	var qualified, blue int64
-	if s.DB != nil {
-		if v, _, b := s.DB.GradeLines(s.dbCtx(), species); v != nil && b != nil {
-			qualified, blue = *v, *b
-		}
-	}
-	s.variantMu.Lock()
-	if s.variantLines == nil {
-		s.variantLines = map[string][2]int64{}
-	}
-	s.variantLines[species] = [2]int64{qualified, blue}
-	s.variantMu.Unlock()
-	return qualified, blue
+	return list[fishVariantStageIndex(seed, len(list))]
 }
 
 // fishModelVariantForFish 是族名的唯一入口：同一尾鱼（GUID）在任何界面都得到同一个族名。
@@ -228,12 +221,11 @@ func (s *Server) fishModelVariantForFish(species string, weightG int64, lengthM 
 	if _, ok := fishModelVariants[species]; !ok {
 		return ""
 	}
-	qualified, blue := s.fishModelVariantLines(species)
 	parrMax := int64(s.tunableF("fish_variant_parr_max_g", defaultFishVariantParrMaxG))
 	smoltMax := int64(s.tunableF("fish_variant_smolt_max_g", defaultFishVariantSmoltMaxG))
 	juvenileMaxM := s.tunableF("fish_variant_juvenile_max_m", defaultFishVariantJuvenileMaxM)
-	male := fishVariantMale(fishVariantSeed(species, weightG, lengthM, guid))
-	return pickFishModelVariant(species, weightG, qualified, blue, male,
+	seed := fishVariantSeed(species, weightG, lengthM, guid)
+	return pickFishModelVariant(species, weightG, fishVariantMale(seed), seed,
 		lengthM, parrMax, smoltMax, juvenileMaxM)
 }
 

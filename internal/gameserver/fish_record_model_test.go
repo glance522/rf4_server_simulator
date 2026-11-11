@@ -124,18 +124,16 @@ func TestFishModelVariantDottedSleeperKey(t *testing.T) {
 		t.Fatalf("旧的错误 key a_sleeper 不应再命中，得到 %q", got)
 	}
 
-	// 三档外观按体重取：80g 入档 / 700g 蓝冠线三等分。
+	// 三套外观随机出（与体重无关）：固定一个体重扫不同身份，三套都要出现。
 	seen := map[string]bool{}
-	for i := 0; i < 40; i++ {
+	for i := 0; i < 60; i++ {
 		guid := fmt.Sprintf("%032x", i*2654435761)
-		for _, w := range []int64{100, 300, 690} {
-			v := pickFishModelVariant("a.sleeper", w, 80, 700, fishVariantMale(guid), 0.30,
-				defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM)
-			if v == "" {
-				t.Fatalf("a.sleeper 应当有变体族（w=%d guid=%s）", w, guid)
-			}
-			seen[v] = true
+		v := pickFishModelVariant("a.sleeper", 300, fishVariantMale(guid), guid, 0.30,
+			defaultFishVariantParrMaxG, defaultFishVariantSmoltMaxG, defaultFishVariantJuvenileMaxM)
+		if v == "" {
+			t.Fatalf("a.sleeper 应当有变体族（guid=%s）", guid)
 		}
+		seen[v] = true
 	}
 	for _, want := range []string{"a_sleeper", "a_sleeper_2", "a_sleeper_3"} {
 		if !seen[want] {
