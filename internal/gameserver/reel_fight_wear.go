@@ -45,10 +45,10 @@ const (
 // fightReelWear 是本竿搏鱼期间的装备受力账：承力参数缓存 + 累计磨损。
 // 承力参数一次搏鱼只查一次库，玩家改摩擦档位即作废重取。
 type fightReelWear struct {
-	valid     bool
-	fishGUID  string
-	rodGUID   string
-	reelGUID  string
+	valid      bool
+	fishGUID   string
+	rodGUID    string
+	reelGUID   string
 	leaderGUID string // 本竿挂装的前导实例（无前导装配为空）；落库后由下发使用
 
 	setting  int64   // 17/14 线上摩擦档位，0~29；29 为锁轮（dragKg 已按档位取到锁轮承力）

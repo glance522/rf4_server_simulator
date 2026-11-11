@@ -17,7 +17,7 @@ import (
 )
 
 // newFightWearForTest 造一条搏鱼受力账：ratedKg 是摩擦片额定，drag 是此刻泄力
-//（29 档即锁轮承力），pull 是鱼拉力（公斤力），oilWear 是轮油打滑系数。
+// （29 档即锁轮承力），pull 是鱼拉力（公斤力），oilWear 是轮油打滑系数。
 func newFightWearForTest(rated, drag, pull, oilWear float64) fightReelWear {
 	return fightReelWear{
 		valid: true, fishGUID: "fish0000000000000000000000000001",

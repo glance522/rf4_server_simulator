@@ -74,7 +74,7 @@ func TestReelWearTunableRangeValidation(t *testing.T) {
 	// 受力磨损速率上限 0.01%/s（官服量级 0.0004，0.01 已快 25 倍）：超出应被拒；
 	// 烧穿曲线键已随锁轮曲线删除，不再受区间约束。
 	for _, value := range []string{"0.02", "-0.1"} {
-		if got := call("POST", "/api/tunables", login.Token, `{"key":"wear_stress_gear_per_s","value":"` + value + `"}`).Code; got != 400 {
+		if got := call("POST", "/api/tunables", login.Token, `{"key":"wear_stress_gear_per_s","value":"`+value+`"}`).Code; got != 400 {
 			t.Fatalf("受力速率 %q 应被拒绝，实得 %d", value, got)
 		}
 	}
