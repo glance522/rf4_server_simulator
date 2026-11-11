@@ -33,6 +33,9 @@ type Session struct {
 	sendMu sync.Mutex
 	// call_id 由 Server 按 token 共享分配，见 nextCallID；Session 不单独计数。
 
+	// playFlushedAt 上次把在线时长写库的时刻；Zero 表示尚未累计过。
+	playFlushedAt time.Time
+
 	closed   atomic.Bool
 	stopCh   chan struct{} // 关闭信号（保活循环等监听）
 	stopOnce sync.Once
@@ -245,6 +248,8 @@ func (s *Session) startKeepalive() {
 				// 注意：只做"到期移除"，不反复重建物品，避免客户端 UI 卡死。
 				s.keepaliveTicks++
 				if s.keepaliveTicks%6 == 0 {
+					// 在线时长每约 30 秒落一次库，崩溃时最多丢半分钟。
+					s.flushPlaytime(time.Now())
 					s.expireRentalTickets()
 					// 有已启表的钓鱼游时同步推档案：客户端徽章的剩余时间
 					// 只在档案对象替换时重算，不推就一直显示旧值。
@@ -258,9 +263,33 @@ func (s *Session) startKeepalive() {
 	}()
 }
 
+// flushPlaytime 把「上次写库到现在」的在线秒数累加进 profile.play_seconds。
+// 每约 30 秒调一次、会话关闭时再调一次，保证进程被杀时最多丢半分钟。
+func (s *Session) flushPlaytime(now time.Time) {
+	if s == nil || s.Srv == nil || s.Srv.DB == nil || s.Userid == 0 {
+		return
+	}
+	if s.playFlushedAt.IsZero() {
+		s.playFlushedAt = s.startedAt
+		if s.playFlushedAt.IsZero() {
+			s.playFlushedAt = now
+		}
+	}
+	secs := int64(now.Sub(s.playFlushedAt) / time.Second)
+	if secs < 1 {
+		return
+	}
+	s.playFlushedAt = s.playFlushedAt.Add(time.Duration(secs) * time.Second)
+	if err := s.Srv.DB.AddPlaySecondsKV(s.Srv.dbCtx(), s.Userid, secs); err != nil {
+		s.log.Warn("在线时长累计失败", "err", err)
+	}
+}
+
 // Close 关闭会话（幂等）。
 func (s *Session) Close(reason string) {
 	if s.closed.CompareAndSwap(false, true) {
+		// 先把最后的在线时长落库，再走别的收尾（重连接管也走这里）。
+		s.flushPlaytime(time.Now())
 		s.updateHappyHour(time.Now(), true)
 		s.updateDrinkBonuses(time.Now())
 		// 钓鱼游停表：离线暂停计时，把关闭时刻前的在线时长消费完。

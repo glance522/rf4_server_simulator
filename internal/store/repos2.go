@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -862,6 +863,38 @@ func (d *DB) KVSet(ctx context.Context, key, value string) error {
 		INSERT INTO kv(k, v) VALUES(?,?) ON CONFLICT (k) DO UPDATE SET v=?`,
 		key, value, value)
 	return err
+}
+
+// playSecondsKey 是玩家累计在线秒数在 kv 表里的键。
+// 用 kv 而不是给 profile 加列：不动表结构、不需要迁移。
+func playSecondsKey(uid int64) string { return "play_seconds:" + strconv.FormatInt(uid, 10) }
+
+// AddPlaySecondsKV 原子累加玩家在线秒数（单条 UPSERT，冲突时按整数相加）。
+func (d *DB) AddPlaySecondsKV(ctx context.Context, uid, secs int64) error {
+	if uid == 0 || secs <= 0 {
+		return nil
+	}
+	_, err := d.SQL.ExecContext(ctx, `
+		INSERT INTO kv(k, v) VALUES(?, ?)
+		ON CONFLICT (k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + ? AS TEXT)`,
+		playSecondsKey(uid), strconv.FormatInt(secs, 10), secs)
+	return err
+}
+
+// PlaySeconds 读取玩家累计在线秒数；没有记录或解析失败都按 0。
+func (d *DB) PlaySeconds(ctx context.Context, uid int64) int64 {
+	if d == nil || uid == 0 {
+		return 0
+	}
+	v, ok, err := d.KVGet(ctx, playSecondsKey(uid))
+	if err != nil || !ok {
+		return 0
+	}
+	n, perr := strconv.ParseInt(v, 10, 64)
+	if perr != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 // QueuePush 管理指令入队（admin 进程投递）。
