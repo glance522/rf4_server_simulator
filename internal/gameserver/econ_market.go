@@ -1167,7 +1167,10 @@ func (s *Server) buildPartInstance(ctx context.Context, host *store.Item, sysID,
 			TypeID int64
 		}{fallbackWireClass, fallbackTypeID}
 	}
-	sum := md5.Sum([]byte(host.GUID + "|" + key))
+	// guid 绑定型号：客户端按子件 guid 缓存零件显示，同一宿主槽位换不同
+	// 型号必须产生新 guid 才会触发重渲染；同型号重复构造仍得到同一 guid，
+	// 幂等性不变。
+	sum := md5.Sum([]byte(host.GUID + "|" + key + "|" + sysID))
 	childGUID := fmt.Sprintf("%x", sum)
 	obj, err := wiregen.MakeObj(cls.Class, nil)
 	if err != nil {
@@ -1259,21 +1262,40 @@ func hWorkshopDiag(ctx *Ctx) ([]byte, bool) {
 	}
 	comps := proto.Args(proto.S("143")) // 元素类 hlopebmchhp(poolccanfhd, type_id 504) 的 args code
 	if row, rerr := srv.DB.GetItemByGUID(cctx, guid); rerr == nil && row != nil {
-		// 渔轮同型号修理会整机恢复，21/2 对每个内件都报整机保养价。
-		// 客户端按选中的内件上报 f3；多选时会累加多次，21/3 仍只收一次。
-		reelServiceSilver := int64(-1)
-		if def, derr := srv.itemDefForRow(cctx, row); derr == nil && def != nil && def.Category == gearCatReel {
+		// 渔轮/渔竿的同型号修理都会整机恢复（渔轮恢复全部内件、渔竿恢复全部
+		// 出厂件），21/2 对每个零件行都报整机保养价。客户端按选中的零件上报
+		// f3；多选时会累加多次，21/3 仍只收一次（workshopQuoteCovers 容忍）。
+		serviceSilver := int64(-1)
+		if def, derr := srv.itemDefForRow(cctx, row); derr == nil && def != nil {
 			if fields, ferr := FieldsFromJSON(row.FieldsJSON); ferr == nil {
-				reelServiceSilver = int64(math.Round(srv.reelRepairWearInFields(cctx, row, fields) * 500))
+				switch def.Category {
+				case gearCatReel:
+					serviceSilver = int64(math.Round(srv.reelRepairWearInFields(cctx, row, fields) * 500))
+				case gearCatRod:
+					// 整竿价 = f0/f1/f2 出厂件磨损总量与本体磨损取较大值，
+					// 与 21/3 整竿保养的收费口径一致。
+					partWear := 0.0
+					for i := 0; i < 3 && i < len(fields); i++ {
+						ch := fields[i].Val
+						if ch == nil || ch.Kind != proto.KindObj {
+							continue
+						}
+						if didx := fieldIdxByCS(ch.Class, csDurability); didx >= 0 && didx < ch.FieldCount() {
+							partWear += math.Max(0, 1-float64(math.Float32frombits(ch.Fields[didx].U32())))
+						}
+					}
+					bodyWear := math.Max(0, 1-row.Durability)
+					serviceSilver = int64(math.Round(math.Max(partWear, bodyWear) * 500))
+				}
 			}
 		}
 		for _, p := range srv.repairPartsOf(cctx, row) {
-			// f3 = 该零件的修理报价（按磨损计价，完好度 1.0 → 0）；渔轮为整机保养价。
+			// f3 = 该零件的修理报价（按磨损计价，完好度 1.0 → 0）；渔轮/渔竿为整机保养价。
 			repairSilver := int64(math.Round(math.Max(0, 1-p.Cond) * 500))
 			// 本体行只在内部零件都满时出现，不能套用内件整机保养价，
 			// 否则本体 0.0 会显示成免费修理。
-			if reelServiceSilver >= 0 && p.Cat != uint32(gearCatReel) {
-				repairSilver = reelServiceSilver
+			if serviceSilver >= 0 && p.Cat != uint32(gearCatReel) {
+				repairSilver = serviceSilver
 			}
 			comps.Items = append(comps.Items, wiregen.MustMakeObj("hlopebmchhp", map[int]*proto.Value{
 				0: proto.Guid(p.GUID),
@@ -1407,9 +1429,24 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	}
 	itemDef, itemDefErr := srv.itemDefForRow(cctx, row)
 	isReel := itemDefErr == nil && itemDef != nil && itemDef.Category == gearCatReel
+	isRod := itemDefErr == nil && itemDef != nil && itemDef.Category == gearCatRod
 	reelWearBefore := 0.0
 	if isReel {
 		reelWearBefore = srv.reelRepairWearInFields(cctx, row, fields)
+	}
+	// 整竿保养的磨损快照必须在同型号修理循环之前取：循环会把点击的零件
+	// 先修到 1.0，之后读到的就是满值，磨损总量会少算。
+	rodWearBefore := make([]float64, 3)
+	if isRod {
+		for i := 0; i < 3 && i < len(fields); i++ {
+			ch := fields[i].Val
+			if ch == nil || ch.Kind != proto.KindObj {
+				continue
+			}
+			if didx := fieldIdxByCS(ch.Class, csDurability); didx >= 0 && didx < ch.FieldCount() {
+				rodWearBefore[i] = math.Max(0, 1-float64(math.Float32frombits(ch.Fields[didx].U32())))
+			}
+		}
 	}
 
 	silver, gold := int64(0), int64(0)
@@ -1418,6 +1455,20 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	bodyRepair := false
 	hasPartOrder := false
 	allRepairs := true
+	// 本次修理实际恢复了耐久的子件 guid 集合：客户端按子件 guid 缓存零件
+	// 显示，同型号修理原地改耐久 guid 不变不会触发零件行重渲染。落库前给
+	// 这些子件换新 guid，让客户端按新实例重建显示。
+	repairedGUIDs := map[string]bool{}
+	markRepaired := func(ch *proto.Value) {
+		if ch == nil || ch.Kind != proto.KindObj {
+			return
+		}
+		if gidx := fieldIdxByCS(ch.Class, csGUID); gidx >= 0 && gidx < ch.FieldCount() {
+			if g := ch.Fields[gidx].Hex; g != "" {
+				repairedGUIDs[g] = true
+			}
+		}
+	}
 	for _, o := range orders {
 		if o.Cat == uint32(gearCatReel) &&
 			(o.SysID == "" || strings.EqualFold(o.SysID, row.ItemID)) {
@@ -1452,6 +1503,9 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 				old := float64(math.Float32frombits(ch.Fields[didx].U32()))
 				ch.Fields[didx].Num = ptrU64(uint64(math.Float32bits(1.0)))
 				silver += int64(math.Round(math.Max(0, 1-old) * 500))
+				if old < 1 {
+					markRepaired(ch)
+				}
 			}
 			changed = true
 			continue
@@ -1488,10 +1542,41 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 				ctx.Log.Warn("工坊修理：轮内零件恢复失败", "guid", shortGUID(row.GUID), "err", ierr)
 				return nil, false
 			}
-			// 整机保养会恢复全部内件。本体耐久是内件的综合，收费取
+			// 整机保养恢复全部内件：标记全部内件子件（磨损件会被重渲染，
+			// 满耐久件标记无副作用——只对本次真正落库的修理生效）。
+			if child, _, idx, ok := srv.selectedReelPart(cctx, fields, reelPartCatWasher); ok {
+				_ = idx
+				markRepaired(child)
+			}
+			for _, category := range srv.reelWearCategoriesInFields(cctx, fields) {
+				if child, _, _, ok := srv.selectedReelPart(cctx, fields, category); ok {
+					markRepaired(child)
+				}
+			}
+			// 本体耐久是内件的综合，收费取
 			// “零件总磨损”和“本体磨损”的较大值，不能重复相加。
 			bodyWear := math.Max(0, 1-row.Durability)
 			silver = int64(math.Round(math.Max(reelWearBefore, bodyWear) * 500))
+			gold = 0
+		} else if isRod {
+			// 整竿保养：与渔轮整机保养同口径。客户端点一次"修理"只上报选中
+			// 的一个零件条目，这里恢复 f0/f1/f2 全部出厂件耐久，按循环前
+			// 快照的磨损总量计价（本体已由 wholeItemRepair 刷满，取较大值
+			// 避免重复相加）。
+			rodWear := 0.0
+			for i := 0; i < 3 && i < len(fields); i++ {
+				rodWear += rodWearBefore[i]
+				if ch := fields[i].Val; ch != nil && ch.Kind == proto.KindObj {
+					if didx := fieldIdxByCS(ch.Class, csDurability); didx >= 0 && didx < ch.FieldCount() {
+						ch.Fields[didx].Num = ptrU64(uint64(math.Float32bits(1.0)))
+					}
+					if rodWearBefore[i] > 0 {
+						markRepaired(ch)
+					}
+				}
+			}
+			bodyWear := math.Max(0, 1-row.Durability)
+			silver = int64(math.Round(math.Max(rodWear, bodyWear) * 500))
 			gold = 0
 		}
 	} else if bodyRepair && isReel {
@@ -1507,6 +1592,42 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 			return nil, false
 		}
 	} else if costSilver <= 0 {
+		// 客户端对同一修理操作会连发两次 21/3：第二次到达时目标已被第一次
+		// 修满，按磨损计价必然是 0。纯修理落到零价 = 已无磨损可修，按幂等
+		// 成功处理：不扣费、不写流水，回当前物品树（对齐"已完好则不必修理，
+		// 避免白扣费"的口径）。有换件条目却算出零价属于定价缺失，仍然拒绝。
+		if wholeItemRepair {
+			// 零价不代表物品已满：本体可能还差极小耐久。修理语义是恢复整个
+			// 物品，这里把本体也刷满并落库；轮子同步性能表里的耐久快照。
+			// 写库失败退回纯幂等，不让这次修理变成报错。
+			if row.Durability < 1 {
+				if serr := srv.DB.SetItemDurability(cctx, row.GUID, 1.0); serr == nil {
+					row.Durability = 1
+					if isReel {
+						if perf, perr := srv.DB.GetReelPerformance(cctx, row.GUID); perr == nil && perf != nil {
+							perf.Durability = 1
+							_ = srv.DB.UpsertReelPerformance(cctx, *perf)
+						}
+					}
+				}
+			}
+			tree, terr := srv.ItemToTree(cctx, row)
+			if terr != nil {
+				return nil, false
+			}
+			bodyOut, berr := proto.EncodeValue(tree, ctx.Sess.Table())
+			if berr != nil {
+				return nil, false
+			}
+			// 与成功路径同口径：每个成功的 21/3 响应都伴随 4/22 物品刷新，
+			// 缺推送会让工作坊面板停在转圈状态。
+			ctx.AfterResponse(func() {
+				ctx.Sess.Push(4, 22, proto.Args(proto.S("61"), tree))
+			})
+			ctx.Log.Info("工坊修理：目标已无磨损，幂等返回当前物品树", "item", row.ItemID,
+				"guid", shortGUID(row.GUID))
+			return bodyOut, true
+		}
 		ctx.Log.Warn("工坊换件：银币价格为 0，拒绝零金额交易", "item", shortGUID(itemGUID))
 		return nil, false
 	}
@@ -1515,7 +1636,7 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		if useGold {
 			quotedCost = costGold
 		}
-		if wholeItemRepair && isReel {
+		if wholeItemRepair && (isReel || isRod) {
 			if !workshopQuoteCovers(clientCost, quotedCost) {
 				ctx.Log.Warn("工坊修理：客户端报价异常", "item", shortGUID(itemGUID),
 					"client", clientCost, "server", quotedCost, "gold", useGold)
@@ -1540,6 +1661,21 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		if p.Silver < costSilver {
 			ctx.Log.Info("工坊换件：银币不足", "balance", p.Silver, "cost", costSilver)
 			return nil, false
+		}
+	}
+	// 本次修理恢复过的子件换新 guid，让客户端按新实例重建零件显示。
+	for i := range fields {
+		ch := fields[i].Val
+		if ch == nil || ch.Kind != proto.KindObj {
+			continue
+		}
+		gidx := fieldIdxByCS(ch.Class, csGUID)
+		if gidx < 0 || gidx >= ch.FieldCount() {
+			continue
+		}
+		if g := ch.Fields[gidx].Hex; g != "" && repairedGUIDs[g] {
+			sum := md5.Sum([]byte(g + "|repair|" + strconv.FormatInt(time.Now().UnixNano(), 10)))
+			ch.Fields[gidx].Hex = fmt.Sprintf("%x", sum)
 		}
 	}
 	// 版本戳必须严格递增，否则客户端会忽略更新后的物品树，工作坊停在转圈状态。

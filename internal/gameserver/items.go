@@ -734,6 +734,19 @@ func (s *Server) rebuildRod(ctx context.Context, it *store.Item, obj *proto.Valu
 		if !ok || sysID == "" {
 			continue
 		}
+		// 槽位已有可解析的同品类子件时保留玩家装配：工作坊允许把竿柄换成
+		// 别的型号，buildPartInstance 构造的实例状态位/工艺/耐久齐全。若不
+		// 保留，每次启动（RepairItemPhysics）和每次下发（ItemToTree）都会
+		// 把换装打回出厂默认件。只有槽位为空或子件损坏（解析不出品类/
+		// 品类不符）才按定义重建。
+		if old := obj.Fields[i].Val; old != nil && old.Kind == proto.KindObj {
+			if oldCat := s.childCategory(ctx, old); oldCat > 0 {
+				if defChild, derr := s.DB.GetItemDefByItemID(ctx, sysID); derr == nil && defChild != nil &&
+					oldCat == defChild.Category {
+					continue
+				}
+			}
+		}
 		// 部件以独立子对象重建，GUID 由竿 GUID 和槽名稳定派生。
 		// 状态位必须取竿配置中的基值，不能使用部件独立定义中的装配位，
 		// 否则客户端会拒绝渔轮收线输入。
