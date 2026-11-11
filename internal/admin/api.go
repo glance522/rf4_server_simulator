@@ -332,19 +332,24 @@ var reelWearTunableRanges = map[string]tunableRange{
 	"reel_slip_wear_s27": {min: 1e-12, max: 1},
 	"reel_slip_wear_s28": {min: 1e-12, max: 1},
 	"reel_slip_wear_max": {min: 1e-12, max: 1},
-	// 校准秒数是除数：太小时每小时磨损率被放大到失真。
+	// 校准秒数是除数：太小时每小时磨损率被放大到失真。缺省 41.7s 对齐官服实测。
 	"reel_slip_calibration_seconds": {min: 0.01, max: 3600},
-	// 烧蚀校准制动力也是除数，太小会让 T 直接爆表而被 reelBurnSecondsFor 丢弃。
-	"reel_burn_calibration_drag_kg": {min: 0.01, max: 10000},
-	// 烧穿基准秒：为 0 则 T=0，整条烧蚀通道失效。
-	"reel_locked_burn_base_s": {min: 0.01, max: 3600},
-	// 曲线指数取 0 会把 (t/T)^p 变成常数，烧蚀退化成一次跳变。
-	"reel_locked_burn_curve": {min: 0.1, max: 10},
+	// 打滑门槛倍率：1=只要超泄力就磨（旧口径），>1 给死区（官服 1.04× 零磨损）。
+	"reel_slip_deadband_ratio": {min: 1, max: 10},
+	// 受力磨损速率（百分点/受力秒）：0 关通道；上限 0.01%/s 已比官服量级快 25 倍。
+	"wear_stress_oil_per_s":      {min: 0, max: 0.01},
+	"wear_stress_gear_per_s":     {min: 0, max: 0.01},
+	"wear_stress_bearing_per_s":  {min: 0, max: 0.01},
+	"wear_stress_spool_per_s":    {min: 0, max: 0.01},
+	"wear_stress_guides_per_s":   {min: 0, max: 0.01},
+	"wear_stress_rodblank_per_s": {min: 0, max: 0.01},
+	"wear_leader_per_stress_sec": {min: 0, max: 0.01},
+	// 搏鱼中受力落库/下发：0=关 1=开；节流间隔秒数。
+	"wear_stress_stream":         {min: 0, max: 1},
+	"wear_stress_stream_seconds": {min: 1, max: 30},
 	// 负载节拍：太小会让每次上报折算成极短时长，磨损几乎不涨。
 	"reel_load_tick_seconds":     {min: 0.01, max: 600},
 	"reel_load_max_tick_seconds": {min: 0.01, max: 600},
-	// 路亚每竿折扣：0.001=千分之一倍，再小等于免费。
-	"reel_cast_base_factor_lure": {min: 0.001, max: 1},
 }
 
 func (s *Server) handleTunableSet(w http.ResponseWriter, r *http.Request) {

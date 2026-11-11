@@ -736,6 +736,14 @@ func (s *Server) rebuildRod(ctx context.Context, it *store.Item, obj *proto.Valu
 		if cerr != nil || child == nil {
 			continue
 		}
+		// 竿侧受力磨损把子件耐久持久化在 DB 字段树里（applyRodStressWear）：
+		// 现建子件前先把已持久化的耐久合并回来，否则每次快照都会把磨损抹回满值。
+		// 状态位/其余字段仍以现建为准，只合并耐久一项。
+		if old := obj.Fields[i].Val; old != nil && old.Kind == proto.KindObj {
+			if dur := reelChildDurability(old); dur < 1 {
+				setReelChildDurability(child, dur)
+			}
+		}
 		obj.Fields[i].Val = child
 	}
 

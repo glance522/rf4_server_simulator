@@ -127,7 +127,7 @@ func TestLoadProbeCountsUndecodedAndBoundsSlots(t *testing.T) {
 // TestFightWearDetailCarriesLoadProbe 断观测结果确实跟着磨损账走到损伤日志里：
 // 攒凭据的地方就是这条日志，日志里没有就等于白观测。
 func TestFightWearDetailCarriesLoadProbe(t *testing.T) {
-	w := newFightWearForTest(7.7, 5, 7.7, 11.55, 1, 1, true)
+	w := newFightWearForTest(7.7, 5, 11.55, 1)
 	w.loadProbe.observe(proto.Args524(proto.F32(6.5)), true)
 	detail := fightWearDetailFields(w, 0.01, nil)
 	if detail["load_reports"] != 1 {

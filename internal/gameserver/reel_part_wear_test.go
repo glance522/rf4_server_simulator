@@ -1,9 +1,8 @@
 package gameserver
 
-// 渔轮零件耐久消耗与本体耐久聚合：spec §5/§6/§7。
-// 摩擦片是烧件（只走泄力打滑与锁轮过载），其余五件是寿命件（随使用时间缓慢降），
-// 摩擦片由打滑与锁轮过载曲线主导，其余五件按使用时间缓慢消耗；
-// 本体那一格必须等于六件零件的加权综合。
+// 渔轮/鱼竿零件受力磨损与本体耐久聚合：specs/changes/wear-fight-time/spec.md。
+// 零件按搏鱼受力秒数缓慢消耗，速率缺省值对齐官服抓包实测（lure2 n.pike 17s 窗口）；
+// 旋钮（34）/手柄（4）/摩擦片不入矩阵；本体那一格等于零件的加权综合。
 
 import (
 	"context"
@@ -13,75 +12,66 @@ import (
 	"rf4server/internal/store"
 )
 
-// 纯数学口径：硬编码 spec §5 的校准表，防止以后改常量时把寿命难度无声拉起来。
-func TestReelPartWearRatesMatchSpecCalibration(t *testing.T) {
-	// 一竿典型口径：锁轮过载 2 秒、泄力打滑 10 次、泡水 1 次。
-	typical := reelPartCounts{Rods: 1, OverloadSecs: 2, SlipTicks: 10, Soaks: 1}
-
-	for _, tc := range []struct {
+// TestReelPartWearMatchesOfficialRates 用官服实测字面量钉住速率：lure2 n.pike
+// 搏鱼窗口 17s 各件 Δ%（docs/实测博鱼过程对装备磨损的影响分析.md §3）。期望值
+// 一律取抓包实测速率，不允许用实现代码复算；矩阵缺省档位取存档方案档位，
+// 与官服字面量的偏差在 ±20% 内。
+func TestReelPartWearMatchesOfficialRates(t *testing.T) {
+	const fightSecs = 17.0
+	official := []struct {
 		category int64
-		wantRods float64
+		rate     float64 // 官服实测 %/s
 	}{
-		{reelPartCatOil, 204}, {reelPartCatGear, 1428}, {reelPartCatBearing, 961},
-		{reelPartCatHandle, 2631}, {reelPartCatSpool, 5000},
-	} {
-		worn := reelPartWearFor(tc.category, 100, typical, reelSlipCalibrationSeconds)
-		if worn <= 0 {
-			t.Fatalf("品类 %d 每竿不耗耐久", tc.category)
+		{reelPartCatOil, 0.00038},
+		{reelPartCatGear, 0.00039},
+		{reelPartCatGuides, 0.00041},
+		{reelPartCatBearing, 0.00014},
+		{reelPartCatSpool, 0.00012},
+		{reelPartCatRodBlank, 0.00003},
+	}
+	counts := reelPartCounts{StressSecs: fightSecs}
+	for _, tc := range official {
+		want := tc.rate * fightSecs / 100 // 官服实测的寿命比例
+		got := reelPartWearFor(tc.category, 100, counts, reelPartWearMatrix[tc.category].perStressSec)
+		if got <= 0 {
+			t.Fatalf("品类 %d 受力 %vs 应耗耐久", tc.category, fightSecs)
 		}
-		if got := 1 / worn; math.Abs(got-tc.wantRods) > tc.wantRods*0.02 {
-			t.Fatalf("品质 100 下品类 %d 预期用 %.0f 竿，实得 %.0f 竿", tc.category, tc.wantRods, got)
+		if math.Abs(got-want) > want*0.2 {
+			t.Fatalf("品类 %d 官服 17s 应磨 %.6f（%.5f%%/s），实得 %.6f",
+				tc.category, want, tc.rate, got)
 		}
 	}
-	// 摩擦片不参与每竿基准：它的寿命已经由打滑与过载曲线决定，再叠一层会变成第二个摩擦片。
-	if got := reelPartWearFor(reelPartCatWasher, 100, typical, reelSlipCalibrationSeconds); got != 0 {
-		t.Fatalf("摩擦片不应参与每竿基准，实得 %v", got)
+	// 摩擦片不参与受力矩阵：它的账由打滑单独结，再叠一层会变成第二个摩擦片。
+	if got := reelPartWearFor(reelPartCatWasher, 100, counts, 1); got != 0 {
+		t.Fatalf("摩擦片不应参与受力矩阵，实得 %v", got)
 	}
-	// 低档位正常使用几乎不磨；29 档仍应明显快于结构件，形成高档泄力的成本。
-	washerOneRod := 10 * reelSlipWearForSettingDefault(29)
-	if slowest := reelPartWearFor(reelPartCatSpool, 100, typical, reelSlipCalibrationSeconds); washerOneRod/slowest < 4 {
-		t.Fatalf("29 档摩擦片相对线杯只快 %.1f 倍，高负荷成本不够明显", washerOneRod/slowest)
+	// 旋钮（34）与手柄（4）官服实测恒 1.0：不入矩阵。
+	for _, category := range []int64{reelPartCatHandle, reelPartCatRodHandle} {
+		if got := reelPartWearFor(category, 100, counts, 1); got != 0 {
+			t.Fatalf("品类 %d 官服实测不磨损，实得 %v", category, got)
+		}
 	}
-	// 品质寿命系数：低档货明显更不耐用。
+	// 断件次数不扣寿命（无官服数据，仅诊断）。
+	if got := reelPartWearFor(reelPartCatSpool, 100, reelPartCounts{BreakHits: 1}, 1); got != 0 {
+		t.Fatalf("断件冲击不应扣寿命，实得 %v", got)
+	}
+	// 品质寿命系数：低档货明显更不耐用；品质 100 恰为官服速率（标定约定）。
 	for quality, want := range map[float64]float64{0: 0.35, 15: 0.3625, 40: 0.55, 100: 1.0} {
 		if got := reelPartLifeFactor(quality); math.Abs(got-want) > 1e-9 {
 			t.Fatalf("品质 %.0f 寿命系数=%v，期望 %v", quality, got, want)
 		}
 	}
-	if math.Abs(reelPartWearFor(reelPartCatOil, 15, typical, reelSlipCalibrationSeconds)/reelPartWearFor(reelPartCatOil, 100, typical, reelSlipCalibrationSeconds)-
+	if math.Abs(reelPartWearFor(reelPartCatOil, 15, counts, 0.0004)/reelPartWearFor(reelPartCatOil, 100, counts, 0.0004)-
 		1/reelPartLifeFactor(15)) > 1e-9 {
 		t.Fatal("消耗量必须除以品质寿命系数")
 	}
-	// 没咬钩的空竿只结算基准与泡水两格。
-	empty := reelPartCounts{Rods: 1, Soaks: 1}
-	if got, want := reelPartWearFor(reelPartCatOil, 100, empty, reelSlipCalibrationSeconds), 0.360/100; math.Abs(got-want) > 1e-12 {
-		t.Fatalf("空竿轮油消耗=%v，期望 %v", got, want)
+	// 生产口径：速率走 tunable，非法值回落矩阵缺省。
+	srv := &Server{}
+	if got := srv.reelStressRateFor(reelPartCatOil); math.Abs(got-0.0004) > 1e-12 {
+		t.Fatalf("轮油受力速率缺省应为 0.0004，实得 %v", got)
 	}
-	if got, want := reelPartWearFor(reelPartCatBearing, 100, empty, reelSlipCalibrationSeconds), 0.040/100; math.Abs(got-want) > 1e-12 {
-		t.Fatalf("空竿轴承消耗=%v，期望 %v", got, want)
-	}
-	// 断件冲击只在真断件那一次扣。
-	if got, want := reelPartWearFor(reelPartCatSpool, 100, reelPartCounts{BreakHits: 1}, reelSlipCalibrationSeconds), 0.20/100; math.Abs(got-want) > 1e-12 {
-		t.Fatalf("断件冲击线杯消耗=%v，期望 %v", got, want)
-	}
-	if got, want := reelPartWearFor(reelPartCatGear, 100, reelPartCounts{BreakHits: 1}, reelSlipCalibrationSeconds), 0.05/100; math.Abs(got-want) > 1e-12 {
-		t.Fatalf("断件冲击齿轮消耗=%v，期望 %v", got, want)
-	}
-	if got := reelPartWearFor(reelPartCatHandle, 100, reelPartCounts{BreakHits: 1}, reelSlipCalibrationSeconds); got != 0 {
-		t.Fatalf("摇柄不参与断件冲击，实得 %v", got)
-	}
-}
-
-func TestReelPartSlipWearUsesElapsedSeconds(t *testing.T) {
-	byTicks := reelPartCounts{SlipTicks: 10}
-	bySeconds := reelPartCounts{SlipSecs: 10 * reelSlipCalibrationSeconds}
-	for _, category := range reelWearPartCategories {
-		gotTicks := reelPartWearFor(category, 50, byTicks, reelSlipCalibrationSeconds)
-		gotSeconds := reelPartWearFor(category, 50, bySeconds, reelSlipCalibrationSeconds)
-		if math.Abs(gotTicks-gotSeconds) > 1e-12 {
-			t.Fatalf("品类 %d 打滑秒数应折算成同寿命：ticks=%.9f seconds=%.9f",
-				category, gotTicks, gotSeconds)
-		}
+	if got := srv.reelStressRateFor(reelPartCatWasher); got != 0 {
+		t.Fatalf("矩阵外品类速率应为 0，实得 %v", got)
 	}
 }
 
@@ -132,9 +122,9 @@ func reelBodyFromStore(t *testing.T, srv *Server, db *store.DB, ctx context.Cont
 	return row.Durability, body
 }
 
-// newFightAccount 造一笔本竿搏鱼磨损账，并指向测试轮子。
+// newFightAccount 造一笔本竿搏鱼受力账，并指向测试轮子。
 func newFightAccount(rated float64, perf *store.ReelPerformance, reelGUID string) fightReelWear {
-	w := newFightWearForTest(rated, perf.BaseDragKg, perf.LockedDragKg, perf.BaseDragKg*3, 1, 1, false)
+	w := newFightWearForTest(rated, perf.BaseDragKg, perf.BaseDragKg*3, 1)
 	w.rodGUID, w.reelGUID = "rod0000000000000000000000000000001", reelGUID
 	return w
 }
@@ -148,11 +138,10 @@ func TestFightSettlementWearsPartsAndBody(t *testing.T) {
 		t.Fatal("读不到摩擦片额制制动力")
 	}
 	w := newFightAccount(rated, before, reelGUID)
-	w.SlipWear = 0.5 // 本竿烧掉一半摩擦片寿命
-	w.SlipTicks = 10
-	w.BurnSecs = 2
-	w.BaseCharged = true
-	if !srv.applyFightReelWear(ctx, wearTestUID, w, "14/4") {
+	w.SlipWear = 0.5  // 本竿烧掉一半摩擦片寿命
+	w.SlipTicks = 10  // 诊断口径
+	w.StressSecs = 17 // 一场 n.pike 量级的搏鱼受力
+	if !srv.applyFightReelWear(ctx, wearTestUID, w, "14/4", true) {
 		t.Fatal("本竿磨损应落库")
 	}
 
@@ -172,7 +161,7 @@ func TestFightSettlementWearsPartsAndBody(t *testing.T) {
 	counts := w.partCounts()
 	for _, category := range reelWearPartCategories {
 		_, quality, durability := srv.reelPartStateFromRow(ctx, afterRow, category)
-		want := 1 - reelPartWearFor(category, quality, counts, reelSlipCalibrationSeconds)
+		want := 1 - reelPartWearFor(category, quality, counts, srv.reelStressRateFor(category))
 		if durability >= 1 || math.Abs(durability-want) > 1e-6 {
 			t.Fatalf("品类 %d 本竿应耗到 %.6f，实得 %.6f", category, want, durability)
 		}
@@ -198,8 +187,7 @@ func TestBurnedWasherBreaksReel(t *testing.T) {
 	rated, _ := srv.reelWasherRatedFromRow(ctx, wearReelRow(t, db, ctx, reelGUID))
 	w := newFightAccount(rated, perf, reelGUID)
 	w.SlipWear = 1
-	w.BaseCharged = true
-	if !srv.applyFightReelWear(ctx, wearTestUID, w, "14/4") {
+	if !srv.applyFightReelWear(ctx, wearTestUID, w, "14/4", true) {
 		t.Fatal("本竿磨损应落库")
 	}
 	row := wearReelRow(t, db, ctx, reelGUID)
@@ -229,15 +217,14 @@ func TestBurnedWasherBreaksReel(t *testing.T) {
 	}
 }
 
-// TestEmptyRodSettlesPartsOnly 确认没咬钩的空竿：零件要结算基准与泡水，
-// 但摩擦片不该被白扣（它只认打滑与过载）。
-func TestEmptyRodSettlesPartsOnly(t *testing.T) {
+// TestEmptyFightSettlesNothing 钉住官服口径（底钓2 66min 空竿段全零件零磨损）：
+// 没有受力秒的账（空竿、抛竿、等待）不产生任何落库，摩擦片与轮件一格都不扣。
+func TestEmptyFightSettlesNothing(t *testing.T) {
 	srv, db, ctx, reelGUID, perf := wearReelFixture(t)
 	rated, _ := srv.reelWasherRatedFromRow(ctx, wearReelRow(t, db, ctx, reelGUID))
 	w := newFightAccount(rated, perf, reelGUID)
-	w.BaseCharged = true
-	if !srv.applyFightReelWear(ctx, wearTestUID, w, "14/4") {
-		t.Fatal("空竿也应结算零件基准")
+	if srv.applyFightReelWear(ctx, wearTestUID, w, "14/4", true) {
+		t.Fatal("空账不应落库")
 	}
 	row := wearReelRow(t, db, ctx, reelGUID)
 	fresh, err := srv.syncReelPerformance(ctx, row)
@@ -247,17 +234,15 @@ func TestEmptyRodSettlesPartsOnly(t *testing.T) {
 	if math.Abs(fresh.BaseDragKg-perf.BaseDragKg) > 1e-9 {
 		t.Fatalf("空竿不该磨摩擦片：%.6f -> %.6f", perf.BaseDragKg, fresh.BaseDragKg)
 	}
-	counts := w.partCounts()
 	for _, category := range reelWearPartCategories {
-		_, quality, durability := srv.reelPartStateFromRow(ctx, row, category)
-		want := 1 - reelPartWearFor(category, quality, counts, reelSlipCalibrationSeconds)
-		if math.Abs(durability-want) > 1e-6 {
-			t.Fatalf("空竿品类 %d 耐久应为 %.6f，实得 %.6f", category, want, durability)
+		_, _, durability := srv.reelPartStateFromRow(ctx, row, category)
+		if durability != 1 {
+			t.Fatalf("空竿品类 %d 耐久应保持 1，实得 %.6f", category, durability)
 		}
 	}
-	stored, aggregated := reelBodyFromStore(t, srv, db, ctx, reelGUID)
-	if stored <= 0 || math.Abs(stored-aggregated) > 1e-6 {
-		t.Fatalf("空竿后本体耐久应等于零件聚合：%.6f vs %.6f", stored, aggregated)
+	stored, _ := reelBodyFromStore(t, srv, db, ctx, reelGUID)
+	if math.Abs(stored-1) > 1e-9 {
+		t.Fatalf("空竿后本体耐久应保持 1，实得 %.6f", stored)
 	}
 }
 
@@ -270,8 +255,8 @@ func TestBodyDurabilityNeverRaisedByWear(t *testing.T) {
 	}
 	rated, _ := srv.reelWasherRatedFromRow(ctx, wearReelRow(t, db, ctx, reelGUID))
 	w := newFightAccount(rated, perf, reelGUID)
-	w.BaseCharged = true
-	if !srv.applyFightReelWear(ctx, wearTestUID, w, "14/4") {
+	w.StressSecs = 17
+	if !srv.applyFightReelWear(ctx, wearTestUID, w, "14/4", true) {
 		t.Fatal("本竿磨损应落库")
 	}
 	stored, aggregated := reelBodyFromStore(t, srv, db, ctx, reelGUID)

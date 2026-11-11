@@ -114,8 +114,7 @@ func (s *Server) receiveGearAssistant(ctx *Ctx, text string) ([]byte, bool) {
 		now := time.Now()
 		for _, st := range s.fishingStatesFor(uid) {
 			st.mu.Lock()
-			// Keep incurred wear, but never charge the protected interval later.
-			st.reelWear.SegSecs = 0
+			// Keep incurred wear; the timestamp only bounds later tick billing.
 			st.reelWear.lastLoadAt = now
 			st.reelWear.protectionChangedAt = now
 			st.mu.Unlock()

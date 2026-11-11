@@ -1908,11 +1908,9 @@ func (s *Server) scheduleBiteState(sess *Session, st *FishState, preserveHooked,
 	st.RigSettled = false
 	st.TickSeen = false
 	// 上一竿的磨损账若还没落库（异常退出、断线等），先取走，解锁后补写。
-	// 只有 resetCast（真正换新的一竿）才重新扣每竿基准；嘬饵否决、鱼离场这类
-	// 同一竿续段的重入不带新基准，否则一次抛竿的基准会被扣两次。
-	// 基准按钓组折扣：路亚族抛投频率高，同样的"一竿"要便宜得多。
-	pendingWear, hasPendingWear := rollFightWearLedgerLocked(st, st.GearGuid, resetCast,
-		s.reelCastBaseFactor(st.RigType))
+	// 官服口径：磨损只按搏鱼受力时间扣，抛竿/空竿不产生任何新账（specs/changes/
+	// wear-fight-time/spec.md），这里只是把上一竿的残余受力账结清。
+	pendingWear, hasPendingWear := rollFightWearLedgerLocked(st, st.GearGuid)
 	if resetCast || st.CastTs.IsZero() {
 		st.CastTs = now
 	}
@@ -1927,7 +1925,7 @@ func (s *Server) scheduleBiteState(sess *Session, st *FishState, preserveHooked,
 	s.armBiteTimerLocked(sess.Userid, st, now.Add(time.Duration(delay*float64(time.Second))))
 	st.mu.Unlock()
 	if hasPendingWear {
-		s.applyFightReelWear(s.dbCtx(), sess.Userid, pendingWear, "14/7")
+		s.applyFightReelWear(s.dbCtx(), sess.Userid, pendingWear, "14/7", true)
 	}
 	return true
 }

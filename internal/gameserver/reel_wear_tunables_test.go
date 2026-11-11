@@ -1,12 +1,13 @@
 package gameserver
 
-// 摩擦片磨损参数的 tunable 化验证。见 specs/changes/reel-wear-tunables。
+// 摩擦片/受力磨损参数的 tunable 化验证。见 specs/changes/reel-wear-tunables 与
+// specs/changes/wear-fight-time/spec.md。
 //
 // 这组测试分两半：
 //  1. 无 DB 的零值 Server：验证「未配置时行为与硬编码逐字节一致」；
 //  2. 带 DB 的 Server：验证 tunable 覆盖与非法值回落。
 //
-// 打滑/烧蚀的物理手算样例在 reel_fight_wear_test.go 里已有覆盖，这里只钉参数通路。
+// 打滑的物理手算样例在 reel_fight_wear_test.go 里已有覆盖，这里只钉参数通路。
 
 import (
 	"context"
@@ -40,14 +41,27 @@ func TestReelSlipWearDefaultMatchesConstants(t *testing.T) {
 	}
 }
 
-func TestReelSlipCalibrationAndBurnDefaults(t *testing.T) {
+func TestReelSlipCalibrationDefaults(t *testing.T) {
 	t.Parallel()
 	srv := &Server{}
 	if got := srv.reelSlipCalibrationSeconds(); math.Abs(got-reelSlipCalibrationSeconds) > 1e-12 {
 		t.Errorf("默认校准秒数=%.4f，期望 %.4f", got, reelSlipCalibrationSeconds)
 	}
-	if got := srv.reelBurnCalibrationDrag(); math.Abs(got-reelBurnCalibrationDragKg) > 1e-12 {
-		t.Errorf("默认校准制动力=%.4f，期望 %.4f", got, reelBurnCalibrationDragKg)
+	// 缺省校准对齐官服 W5 实测：0.01%/41.7s ≈ 0.00024%/s。
+	if math.Abs(reelSlipCalibrationSeconds-41.7) > 1e-9 {
+		t.Errorf("校准秒数缺省应取官服档位 41.7，实得 %.4f", reelSlipCalibrationSeconds)
+	}
+	if got := srv.reelSlipDeadbandRatio(); math.Abs(got-reelSlipDeadbandRatioDefault) > 1e-12 {
+		t.Errorf("默认打滑门槛=%.4f，期望 %.4f", got, reelSlipDeadbandRatioDefault)
+	}
+	if got := srv.leaderStressWearPerSec(); math.Abs(got-leaderStressWearPerSecDefault) > 1e-12 {
+		t.Errorf("默认前导受力速率=%.6f，期望 %.6f", got, leaderStressWearPerSecDefault)
+	}
+	if !srv.fightWearStreamEnabled() {
+		t.Error("搏鱼中受力落库/下发缺省应开启")
+	}
+	if got := srv.fightWearStreamInterval(); math.Abs(got-defaultFightWearStreamSeconds) > 1e-12 {
+		t.Errorf("默认节流间隔=%.4f，期望 %.4f", got, defaultFightWearStreamSeconds)
 	}
 }
 
@@ -57,28 +71,58 @@ func TestReelSlipWearHalvesWithDoubledCalibration(t *testing.T) {
 	srv, db := newEconomyTxTestServer(t)
 	ctx := context.Background()
 
-	w := newFightWearForTest(7.7, 5, 9, 7.5, 1, 1, false)
+	w := newFightWearForTest(7.7, 5, 7.5, 1)
 	w.setting = 29
 	const tick = 2.0
 
-	_, base, _, _, _ := srv.fightReelTickWear(w, tick)
+	_, base, _, _ := srv.fightReelTickWear(w, tick)
 	if base <= 0 {
 		t.Fatalf("基准磨损应大于 0，实得 %.9f", base)
 	}
-	// 手算：0.0001 / 1.8 * 2 * 1 * 1
+	// 手算：0.0001 / 41.7 * 2 * 1 * 1
 	wantBase := defaultReelSlipWearMax / reelSlipCalibrationSeconds * tick
 	if math.Abs(base-wantBase) > 1e-12 {
 		t.Fatalf("29 档打滑磨损=%.12f，手算 %.12f", base, wantBase)
 	}
 
-	if err := db.TunableSet(ctx, "reel_slip_calibration_seconds", "3.6", "test"); err != nil {
+	if err := db.TunableSet(ctx, "reel_slip_calibration_seconds", "83.4", "test"); err != nil {
 		t.Fatal(err)
 	}
 	srv.tunAt = time.Time{}
-	_, halved, _, _, _ := srv.fightReelTickWear(w, tick)
+	_, halved, _, _ := srv.fightReelTickWear(w, tick)
 
 	if math.Abs(halved-base/2) > 1e-12 {
 		t.Fatalf("校准秒数翻倍后磨损应减半：base=%.12f halved=%.12f", base, halved)
+	}
+}
+
+// 打滑门槛倍率可调：拉力落在门槛与旧口径之间时，门槛提高就不再算打滑。
+func TestReelSlipDeadbandTunable(t *testing.T) {
+	t.Parallel()
+	srv, db := newEconomyTxTestServer(t)
+	ctx := context.Background()
+
+	// 拉力 5.2 = 泄力 5 的 1.04×：缺省门槛 1.05 下不打滑（官服边界样本）。
+	w := newFightWearForTest(7.7, 5, 5.2, 1)
+	if ticks, _, _, _ := srv.fightReelTickWear(w, 2); ticks != 0 {
+		t.Fatalf("1.04× 泄力在缺省门槛下不应打滑，实得 ticks=%d", ticks)
+	}
+	// 门槛调到 1.0（旧口径）：1.04× 也算打滑。
+	if err := db.TunableSet(ctx, "reel_slip_deadband_ratio", "1", "test"); err != nil {
+		t.Fatal(err)
+	}
+	srv.tunAt = time.Time{}
+	ticks, slip, _, _ := srv.fightReelTickWear(w, 2)
+	if ticks != 1 || slip <= 0 {
+		t.Fatalf("门槛调到 1 后 1.04× 应记打滑，实得 ticks=%d slip=%v", ticks, slip)
+	}
+	// 非法值（<1）回落缺省 1.05，打滑消失。
+	if err := db.TunableSet(ctx, "reel_slip_deadband_ratio", "0.5", "test"); err != nil {
+		t.Fatal(err)
+	}
+	srv.tunAt = time.Time{}
+	if ticks, _, _, _ := srv.fightReelTickWear(w, 2); ticks != 0 {
+		t.Fatal("非法门槛应回落缺省，1.04× 不应打滑")
 	}
 }
 
@@ -118,37 +162,29 @@ func TestReelSlipWearFallsBackOnInvalidTunable(t *testing.T) {
 	}
 }
 
-// 烧穿时长 T = base x (rated/校准值) x 油 / 过载。校准值翻倍 → T 减半。
-func TestReelBurnSecondsShrinkWithCalibrationDrag(t *testing.T) {
+// 受力磨损速率走 tunable：调到 0 关通道，翻倍磨损翻倍；非法值回落矩阵缺省。
+func TestReelStressRateHonorsTunable(t *testing.T) {
 	t.Parallel()
 	srv, db := newEconomyTxTestServer(t)
 	ctx := context.Background()
 
-	// rated=15.4 → strength = 15.4/7.7 = 2；过载 pull/locked-1+0.35 = 1.35
-	w := newFightWearForTest(15.4, 5, 15.4, 20, 1, 1, true)
-	base := srv.reelBurnSecondsFor(w)
-	if base <= 0 {
-		t.Fatalf("基准烧穿时长应大于 0，实得 %.4f", base)
+	counts := reelPartCounts{StressSecs: 10}
+	def := reelPartWearMatrix[reelPartCatGear].perStressSec
+	if got := srv.reelStressRateFor(reelPartCatGear); math.Abs(got-def) > 1e-12 {
+		t.Fatalf("未配置时齿轮受力速率应取矩阵缺省 %.6f，实得 %.6f", def, got)
 	}
-
-	if err := db.TunableSet(ctx, "reel_burn_calibration_drag_kg", "15.4", "test"); err != nil {
+	if err := db.TunableSet(ctx, "wear_stress_gear_per_s", "0", "test"); err != nil {
 		t.Fatal(err)
 	}
 	srv.tunAt = time.Time{}
-	shrunk := srv.reelBurnSecondsFor(w)
-
-	if math.Abs(shrunk-base/2) > 1e-9 {
-		t.Fatalf("校准制动力翻倍后烧穿时长应减半：base=%.4f shrunk=%.4f", base, shrunk)
+	if got := reelPartWearFor(reelPartCatGear, 100, counts, srv.reelStressRateFor(reelPartCatGear)); got != 0 {
+		t.Fatalf("速率调 0 应关通道，实得 %v", got)
 	}
-}
-
-// 每竿基准与泡水走消耗矩阵，不受打滑参数影响。
-func TestReelPartWearPerRodUnaffectedBySlipTunable(t *testing.T) {
-	t.Parallel()
-	counts := reelPartCounts{Rods: 1, Soaks: 1}
-	got := reelPartWearFor(reelPartCatGear, 100, counts, reelSlipCalibrationSeconds)
-	want := 0.030 / 100
-	if math.Abs(got-want) > 1e-12 {
-		t.Fatalf("齿轮每竿基准=%.9f，期望 %.9f", got, want)
+	if err := db.TunableSet(ctx, "wear_stress_gear_per_s", "abc", "test"); err != nil {
+		t.Fatal(err)
+	}
+	srv.tunAt = time.Time{}
+	if got := srv.reelStressRateFor(reelPartCatGear); math.Abs(got-def) > 1e-12 {
+		t.Fatalf("非法值应回落矩阵缺省 %.6f，实得 %.6f", def, got)
 	}
 }

@@ -64,7 +64,6 @@ func TestInvalidBreakReportLeavesReelUntouched(t *testing.T) {
 
 	// 本竿已经搏过一段：账上有打滑磨损，还没落库。
 	st.mu.Lock()
-	st.reelWear.markRodUsedLocked(rodGUID, 1)
 	st.reelWear.SlipWear = reelSlipWear
 	st.reelWear.SlipTicks = 1
 	st.mu.Unlock()
@@ -99,15 +98,15 @@ func TestInvalidBreakReportLeavesReelUntouched(t *testing.T) {
 	}
 }
 
-// TestEmptyRodRealCastSettlesReelParts 整竿没收到过 14/8 的空竿也必须结算：账本里
-// 只有竿 GUID 时，结算要按钓组解析出渔轮，把每竿基准与泡水扣掉。
-func TestEmptyRodRealCastSettlesReelParts(t *testing.T) {
+// TestEmptyRodRealCastSettlesNothing 钉住官服口径（底钓2 66min 空竿段全零件零磨损）：
+// 整竿没收到过 14/8 的空竿没有任何磨损账，结算不落库、不推送、不掉耐久。
+func TestEmptyRodRealCastSettlesNothing(t *testing.T) {
 	srv, db := newRigTestServer(t)
 	t.Cleanup(func() { stopFishingRecoveryTimers(srv) })
 	ctx := t.Context()
 	_, rodGUID, reelGUID := castRigWithReel(t, srv, 732)
 
-	// 注册一个带真实隧道的在线会话，验证磨损不只落库，还会推送 4/22。
+	// 注册一个带真实隧道的在线会话：空竿结算后必须连 4/22 都不发（无事可推）。
 	tunnelSess, peer := newTunnelProbe(t, srv)
 	t.Cleanup(func() {
 		srv.mu.Lock()
@@ -125,23 +124,20 @@ func TestEmptyRodRealCastSettlesReelParts(t *testing.T) {
 	select {
 	case env := <-pushed:
 		if env == nil {
-			t.Fatal("空竿结算后没有收到 4/22 推送")
+			t.Fatal("收到空推送帧")
 		}
-		v, _, err := proto.DecodeValue(env.Body, 0, srv.Table())
-		if err != nil || !containsGUID(deepGUIDs(v), reelGUID) {
-			t.Fatalf("4/22 推送未包含渔轮树: err=%v", err)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("等待空竿结算的 4/22 推送超时")
+		t.Fatal("空竿结算不应推送任何 4/22（官服空竿零磨损、无账可推）")
+	case <-time.After(500 * time.Millisecond):
+		// 预期路径：没有推送。
 	}
 
 	row := wearReelRow(t, db, ctx, reelGUID)
-	if row.Durability >= 1 {
-		t.Fatalf("空竿后本体耐久应随零件聚合下降，实得 %v", row.Durability)
+	if row.Durability != 1 {
+		t.Fatalf("空竿后本体耐久应保持 1，实得 %v", row.Durability)
 	}
 	for _, category := range reelWearPartCategories {
-		if _, _, durability := srv.reelPartStateFromRow(ctx, row, category); durability >= 1 {
-			t.Fatalf("空竿后品类 %d 耐久应下降，实得 %v", category, durability)
+		if _, _, durability := srv.reelPartStateFromRow(ctx, row, category); durability != 1 {
+			t.Fatalf("空竿后品类 %d 耐久应保持 1，实得 %v", category, durability)
 		}
 	}
 }

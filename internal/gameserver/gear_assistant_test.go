@@ -233,7 +233,7 @@ func TestGearAssistantProtectsThreeRodsAndKeepsManualActions(t *testing.T) {
 	}
 }
 
-func TestGearAssistantOverloadAccountingAndNormalWear(t *testing.T) {
+func TestGearAssistantToggleKeepsWearBoundaries(t *testing.T) {
 	s, db := newRigTestServer(t)
 	sess := newProbeSess(s)
 	uid := sess.Userid
@@ -250,63 +250,41 @@ func TestGearAssistantOverloadAccountingAndNormalWear(t *testing.T) {
 	st := s.selectFishingRod(uid, rod.GUID)
 	st.mu.Lock()
 	st.GearGuid, st.Pending, st.CastActive, st.Hooked = rod.GUID, fish, true, true
-	st.reelWear = newFightWearForTest(7.7, 5, 7.7, 11.55, 1, 1, true)
-	st.reelWear.rodGUID, st.reelWear.reelGUID, st.reelWear.fishGUID = rod.GUID, reel.GUID, fish.FishGUID
-	st.reelWear.BaseCharged, st.reelWear.Used = true, true
-	st.reelWear.BurnWear, st.reelWear.BurnSecs, st.reelWear.SegSecs = .05, 1, 1
 	st.mu.Unlock()
+	// 满红不爆保护只管断件（17/9），不再有磨损层语义（锁轮烧穿曲线已删）：
+	// 搏鱼受力磨损照常累计，开关只重置时间边界，切换后的一小时空窗不得补记。
 	sendGearAssistantForTest(t, s, sess, "开")
 	load := miscCtx(sess, 14, 8, nil)
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 3; i++ {
 		st.mu.Lock()
-		st.reelWear.lastLoadAt = time.Now().Add(-5 * time.Second)
+		st.reelWear.lastLoadAt = time.Now().Add(-2 * time.Second)
 		st.mu.Unlock()
 		s.recordFightReelLoad(load)
 	}
 	st.mu.Lock()
-	w := st.reelWear
+	withWear := st.reelWear
 	st.mu.Unlock()
-	if w.BurnWear != .05 || w.BurnSecs != 1 || w.SegSecs != 0 || !w.BaseCharged {
-		t.Fatalf("protected overload added wear or removed previous wear: %+v", w)
+	if withWear.StressSecs <= 0 {
+		t.Fatalf("protected fight must still accrue stress wear: %+v", withWear)
 	}
-	// A long protected interval without load frames must not be caught up on close.
+	// 一小时无上报的空窗在切换后不得被补记。
 	st.mu.Lock()
 	st.reelWear.lastLoadAt = time.Now().Add(-time.Hour)
-	st.mu.Unlock()
-	sendGearAssistantForTest(t, s, sess, "关")
-	st.mu.Lock()
-	if time.Since(st.reelWear.lastLoadAt) > time.Second || st.reelWear.SegSecs != 0 {
-		st.mu.Unlock()
-		t.Fatal("switch did not reset protected duration")
-	}
-	st.reelWear.lastLoadAt = time.Now().Add(-2 * time.Second)
-	st.reelWear.protectionChangedAt = st.reelWear.lastLoadAt // Advance both boundaries for the simulated two seconds.
+	st.reelWear.protectionChangedAt = time.Now()
 	st.mu.Unlock()
 	s.recordFightReelLoad(load)
 	st.mu.Lock()
-	afterOff := st.reelWear
+	afterGap := st.reelWear
 	st.mu.Unlock()
-	if afterOff.BurnWear <= w.BurnWear || afterOff.BurnSecs <= w.BurnSecs {
-		t.Fatal("closing protection did not resume locked overload")
-	}
-	sendGearAssistantForTest(t, s, sess, "开")
-	st.mu.Lock()
-	st.reelWear.locked = false
-	st.reelWear.lastLoadAt = time.Now().Add(-2 * time.Second)
-	st.reelWear.protectionChangedAt = st.reelWear.lastLoadAt
-	st.mu.Unlock()
-	s.recordFightReelLoad(load)
-	st.mu.Lock()
-	afterSlip := st.reelWear
-	st.mu.Unlock()
-	if afterSlip.SlipWear <= 0 || afterSlip.SlipTicks != 1 || afterSlip.BurnWear != afterOff.BurnWear {
-		t.Fatal("protection disabled ordinary slip wear")
+	if afterGap.StressSecs > withWear.StressSecs+defaultReelLoadMaxTickSeconds {
+		t.Fatalf("long idle gap must not be billed after toggle: %.2f -> %.2f",
+			withWear.StressSecs, afterGap.StressSecs)
 	}
 	before := *mustItem(t, db, reel.GUID)
 	s.settleFightReelWearState(t.Context(), st, uid, "14/4")
 	after := *mustItem(t, db, reel.GUID)
 	if after.Durability >= before.Durability {
-		t.Fatal("protection erased incurred damage and ordinary use wear")
+		t.Fatal("incurred stress wear must land at settlement")
 	}
 	s.settleFightReelWearState(t.Context(), st, uid, "14/4")
 	if again := *mustItem(t, db, reel.GUID); again != after {

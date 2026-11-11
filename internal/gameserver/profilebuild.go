@@ -515,6 +515,17 @@ func (s *Session) Push4_22Items(extraGUIDs []string) {
 	s.Push(4, 22, proto.Args(proto.S("61"), items...))
 }
 
+// Push4_22Trees 以官服搏鱼帧形状推送裸物品/部件子树（4/22 args("61")）。
+// 只发受力磨损涉及的零件子树，绝不重建竿/线全量树——全量重建会重建鱼实体、
+// 打断冲刺与体力阶段（见 hFishingLoad 注释）。形状依据官服搏鱼 4/22 抓包
+// （lure2 46 帧 + 底钓2 274 帧，部件作为独立对象并列，按 GUID 原位更新）。
+func (s *Session) Push4_22Trees(trees []*proto.Value) {
+	if len(trees) == 0 {
+		return
+	}
+	s.Push(4, 22, proto.Args(proto.S("61"), trees...))
+}
+
 // Push4_22ItemGUIDs 只推指定背包物品的最新树。
 // 吃饵、剪线等背包数量变化走这条通道；不要把竿/线混进背包更新。
 func (s *Session) Push4_22ItemGUIDs(guids []string) {

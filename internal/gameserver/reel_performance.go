@@ -92,14 +92,23 @@ func reelSlipWearForSettingDefault(setting int64) float64 {
 const reelPartQualityAttr = "obifdihmcfn"
 
 // 渔轮内部六件的品类编号：磨损、承力与工坊都按这套编号寻件。
+// 官方抓包核实（specs/changes/wear-fight-time/spec.md）：34 是旋钮（knobs），
+// 摇柄握把是竿侧 category 4——两者官服实测都不磨损，34 因此不进磨损矩阵。
 const (
 	reelPartCatBearing = int64(7)  // 轴承
 	reelPartCatSpool   = int64(8)  // 线杯
 	reelPartCatWasher  = int64(9)  // 摩擦片
 	reelPartCatOil     = int64(10) // 轮油
-	reelPartCatHandle  = int64(34) // 摇柄
+	reelPartCatHandle  = int64(34) // 旋钮（knobs，官服实测不磨损；历史注释误作摇柄）
 	reelPartCatGear    = int64(52) // 齿轮
-	reelPartCatMotor   = int64(81) // 电动轮电机
+	reelPartCatMotor   = int64(81) // 电动轮电机（磨损停扣，待官服电轮数据）
+)
+
+// 竿侧零件品类编号：官服搏鱼快照里与轮件并列受力磨损（specs/changes/wear-fight-time/spec.md §1）。
+const (
+	reelPartCatRodBlank  = int64(36) // 竿坯
+	reelPartCatRodHandle = int64(4)  // 竿侧手柄（官服不磨损，仅随帧下发）
+	reelPartCatGuides    = int64(5)  // 导环
 )
 
 const (
