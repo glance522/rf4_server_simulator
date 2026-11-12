@@ -1,0 +1,25 @@
+services:
+  rf4-server:
+    build: .  # 使用当前目录的 Dockerfile 构建镜像
+    image: rf4-server
+    container_name: rf4-server
+    restart: unless-stopped
+    ports:
+      # HTTPS 登录监听443端口不可更改
+      - "443:443"
+      # 游戏客户端 realtime 监听地址不可更改。
+      - "9341:9341"
+      # 健康检查、指标和性能分析监听地址不可更改。
+      - "9501:9501"
+    environment:
+      # 读取.env里的变量。
+      - RF4_GATEWAY_ADVERTISE_HOST=${RF4_GATEWAY_ADVERTISE_HOST}
+    volumes:
+      # 持久化核心数据（SQLite 数据库）
+      - ./data:/app/data
+      # 持久化证书（首次生成后复用）
+      - ./certs:/app/certs
+      # 项目可能用到的静态数据目录
+      - ./server_data:/app/server_data
+    # 如果 NAS 内存有限，可以限制资源，根据实际剩余内存调整
+    # mem_limit: 512m
