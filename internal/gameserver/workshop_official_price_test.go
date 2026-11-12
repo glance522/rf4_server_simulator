@@ -57,7 +57,8 @@ func workshopPageSilver(t *testing.T, srv *Server, item *store.Item, cats ...int
 		if !want[int64(p.Cat)] {
 			continue
 		}
-		baseSilver, baseGold := srv.partRepairBasePrice(ctx, p)
+		// 空 storeID / 空地图：不乘部位维修倍率，验的是"界面价 == 实扣"这个契约本身。
+		baseSilver, baseGold := srv.partRepairBasePrice(ctx, "", "", p)
 		residual, _ := srv.workshopPartResidual(int64(p.Cat), baseSilver, baseGold)
 		// 银币支付时只扣银币列（官服那单新件含 5 金，实扣只有 30 银）。
 		total += baseSilver - residual

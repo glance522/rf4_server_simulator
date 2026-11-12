@@ -42,6 +42,9 @@ var RuntimeTables = []string{
 	"request_receipts", "market_offer", "shop_item_override",
 	"fish_weight_override", "fish_bite_setting", "fish_grade_lines", "skill_link",
 	"fish_ecology", "skill_fish_effect_def", "hook_bite_profile", "fish_bait_override",
+	// workshop_part_price 是工坊配件价/工时的后台覆盖层（迁移 9100010）。
+	// 不能并进静态的 item_price（seed 会整表替换），所以按运行时表登记。
+	"workshop_part_price",
 }
 
 // TableOwnership 返回每张用户表的唯一归属。静态、玩家、运行时三组必须互不相交。

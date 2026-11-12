@@ -98,6 +98,11 @@ func NewServer(cfg config.Admin, db *store.DB, log logger, webFS fs.FS) *Server 
 	mux.HandleFunc("GET /api/fish/config", auth(s.handleFishConfig))
 	mux.HandleFunc("POST /api/fish/config", auth(s.handleFishConfigSave))
 	mux.HandleFunc("POST /api/fish/config/reset", auth(s.handleFishConfigReset))
+	// 工坊配件价/工时覆盖（workshop_part_price）。game-side 每次报价直接查表，
+	// 不需要投递 reload 指令。
+	mux.HandleFunc("GET /api/workshop/part_prices", auth(s.handleWorkshopPartPriceList))
+	mux.HandleFunc("POST /api/workshop/part_prices", auth(s.handleWorkshopPartPriceSave))
+	mux.HandleFunc("POST /api/workshop/part_prices/delete", auth(s.handleWorkshopPartPriceDelete))
 	mux.HandleFunc("GET /api/fish/pool", auth(s.handleFishPool))
 	mux.HandleFunc("GET /api/fish/spawn_mode", auth(s.handleSpawnModeGet))
 	mux.HandleFunc("POST /api/fish/spawn_mode", auth(s.handleSpawnModeSet))

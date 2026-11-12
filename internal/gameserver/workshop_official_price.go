@@ -169,13 +169,17 @@ func (s *Server) workshopPartHours(cat int64) uint32 {
 // 零件本身通常没有 item_price 行，partPrice 会继续回退到 attrs 推导和
 // partBasePrice 表，与 21/2 里 hpopgbjohpk.f2 用的是同一条链路，所以两边
 // 算出来的新件价一定相同。
-func (s *Server) partRepairBasePrice(ctx context.Context, p repairPart) (int64, int64) {
+//
+// storeID / mapKey 用来乘该店铺该**部位**的维修倍率（见 repair_part_mult.go）。
+// 21/2 与 21/4 必须传同一组值，否则客户端拿到的 f2 和服务端结算用的价不是
+// 一个数，报价校验会拒单。传空串等于不乘倍率（测试和拿不到工坊 id 的兜底路径）。
+func (s *Server) partRepairBasePrice(ctx context.Context, storeID, mapKey string, p repairPart) (int64, int64) {
 	if p.NID != 0 {
 		if def, err := s.DB.GetItemDef(ctx, int64(p.NID)); err == nil && def != nil && def.ItemID != "" {
-			return s.partPrice(ctx, def.ItemID, def.Category)
+			return s.partPriceForStore(ctx, storeID, mapKey, def.ItemID, def.Category)
 		}
 	}
-	return s.partPrice(ctx, "", int64(p.Cat))
+	return s.partPriceForStore(ctx, storeID, mapKey, "", int64(p.Cat))
 }
 
 // childNumericID 取子对象的 numeric_id。同型号"修理"要按该件自己的新件标价

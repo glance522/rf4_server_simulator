@@ -529,7 +529,7 @@ func TestWorkshopDiagReelRepairQuoteMatchesWholeService(t *testing.T) {
 		if p.Cat != uint32(reelPartCatGear) {
 			continue
 		}
-		ps, _ := srv.partRepairBasePrice(ctx, p)
+		ps, _ := srv.partRepairBasePrice(ctx, "", "", p)
 		rs, _ := srv.workshopPartResidual(int64(p.Cat), ps, 0)
 		wantResidual, wantClient = rs, ps-rs
 	}

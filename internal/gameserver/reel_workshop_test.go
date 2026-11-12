@@ -45,7 +45,8 @@ func TestWorkshopExposesAllCompatibleReelParts(t *testing.T) {
 	parts := srv.repairPartsOf(ctx, reel)
 	counts := map[uint32]int{}
 	for _, part := range parts {
-		counts[part.Cat] = len(srv.partAlternatives(ctx, reel.ItemID, part))
+		// 空 storeID / 空地图 = 不乘部位维修倍率，这里只验兼容件条数。
+		counts[part.Cat] = len(srv.partAlternatives(ctx, "", "", reel.ItemID, part))
 	}
 	// Spark 2 2000S 的精确表含 6 个线杯、2 个摩擦片，再加当前零件自身；
 	// 不得被旧的 3/4 个上限截断。

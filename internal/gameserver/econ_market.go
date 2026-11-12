@@ -1075,7 +1075,7 @@ func (s *Server) compatFor(reelItemID, category string) ([]string, bool) {
 // 这里原来有一套"按磨损比例 × 上限小时向上取整"的折算（workshopRepairHours），
 // 是官方样本进来之前的猜测，已经没有任何调用方，删掉以免被误用。
 
-func (s *Server) partAlternatives(ctx context.Context, reelItemID string, part repairPart) []*proto.Value {
+func (s *Server) partAlternatives(ctx context.Context, storeID, mapKey, reelItemID string, part repairPart) []*proto.Value {
 	nid := int64(part.NID)
 	if nid == 0 {
 		if row, err := s.DB.GetItemByGUID(ctx, part.GUID); err == nil && row != nil {
@@ -1096,7 +1096,14 @@ func (s *Server) partAlternatives(ctx context.Context, reelItemID string, part r
 			return
 		}
 		seen[itemID] = true
-		silver, gold := s.partPrice(ctx, itemID, def.Category)
+		// f2 走 partPriceForStore = 标价 × 该店铺该部位的维修倍率，
+		// 与 21/2 的 hlopebmchhp.f3（残值）同源：残值是在这个放大后的价上
+		// 按品类残值率折的，所以 (f2 − f3) 天然成比例，客户端复算自洽。
+		// 见 repair_part_mult.go 顶部注释。
+		silver, gold := s.partPriceForStore(ctx, storeID, mapKey, itemID, def.Category)
+		// f1 是每行展示的旧件折抵额（标价的 1/10）。它**不参与**报价运算——
+		// 官服那一单 21/4 报 30 = 296−266，用的是 f3（266），不是 f1（28）。
+		// 保持原口径，只是随 f2 一起放大。
 		comp := wiregen.MustMakeObj("oifghenlghh", map[int]*proto.Value{
 			0: proto.U64(uint64(silver / 10)),
 			1: proto.U64(uint64(gold / 10)),
@@ -1111,7 +1118,8 @@ func (s *Server) partAlternatives(ctx context.Context, reelItemID string, part r
 			2: price,
 			// f3 = 银币修理要等的小时数。官方截图（2026-11-11）里银币按钮上方
 			// 标「2 小时」、金币按钮标「即时」，两者差的就是这一格。
-			3: proto.U32(s.workshopPartHours(int64(def.Category))),
+			// 先查后台覆盖（workshop_part_price.hours，0 = 即时），没有再用品类默认。
+			3: proto.U32(s.workshopPartHoursFor(ctx, mapKey, itemID, int64(def.Category))),
 		}))
 	}
 	addJob(def.ItemID)
@@ -1334,6 +1342,13 @@ func hWorkshopDiag(ctx *Ctx) ([]byte, bool) {
 	if guid == "" {
 		guid = "00000000000000000000000000000000"
 	}
+	// 工坊 id 与所在地图：部位维修倍率靠这两个值解析（repair_part_mult.go）。
+	//
+	// 21/2 的请求同样是 args(524)[ str 工坊id, guid ]（抓包 帧#399 / #403 实证），
+	// 所以这里能拿到和 21/4 完全一样的工坊 id —— 两处必须同源，否则发给客户端的
+	// f2（21/2）和服务端结算价（21/4）会差一个倍率，报价校验直接拒单。
+	storeID, _, _, _ := parseRepairRequest(ctx.Tree)
+	partMapKey := srv.currentLevel(ctx.Sess.Userid)
 	comps := proto.Args(proto.S("143")) // 元素类 hlopebmchhp(poolccanfhd, type_id 504) 的 args code
 	// 在办修理（银币已付、还在等工时）**照常报价**。
 	//
@@ -1356,7 +1371,7 @@ func hWorkshopDiag(ctx *Ctx) ([]byte, bool) {
 			// 磨损发"修理费"，客户端当成 0 折抵 → 界面报全价、我们只收几银
 			// （实测界面 2197 / 实扣 3、界面 3756 / 实扣 62）。
 			// 见 workshop_official_price.go。
-			baseSilver, baseGold := srv.partRepairBasePrice(cctx, p)
+			baseSilver, baseGold := srv.partRepairBasePrice(cctx, storeID, partMapKey, p)
 			repairSilver, repairGold := srv.workshopPartResidual(int64(p.Cat), baseSilver, baseGold)
 			comps.Items = append(comps.Items, wiregen.MustMakeObj("hlopebmchhp", map[int]*proto.Value{
 				0: proto.Guid(p.GUID),
@@ -1366,7 +1381,7 @@ func hWorkshopDiag(ctx *Ctx) ([]byte, bool) {
 				4: proto.U32(0),
 				// f5 = 可更换件工单列表（hpopgbjohpk[]），客户端据此显示
 				// "选择替代品（有 N 种可选的变体）"。
-				5: proto.Args(proto.S("146"), srv.partAlternatives(cctx, row.ItemID, p)...),
+				5: proto.Args(proto.S("146"), srv.partAlternatives(cctx, storeID, partMapKey, row.ItemID, p)...),
 			}))
 		}
 	}
@@ -1597,6 +1612,9 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	// 时效对象要把这个 id 原样回显给客户端（f24.f0），所以随任务一起落库，
 	// 不能事后猜一个写死的值。
 	storeID, _, _, _ := parseRepairRequest(tree)
+	// 部位维修倍率要用的地图键（repair_part_mult.go）。storeID 命中
+	// shop_repair_defs.json 时倍率按店里的地图+品牌取，这里只是兜底。
+	partMapKey := srv.currentLevel(ctx.Sess.Userid)
 
 	row, err := srv.DB.GetItemByGUID(cctx, itemGUID)
 	if err != nil || row == nil || row.UID != ctx.Sess.Userid {
@@ -1684,7 +1702,7 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 				// 旧口径只收 round(磨损×500)，比客户端界面的报价低一到两个
 				// 数量级（实测界面 2197 / 实扣 3），玩家看到的就是"钱扣错了"。
 				// 见 workshop_official_price.go。
-				ps, pg := srv.partRepairBasePrice(cctx, repairPart{Cat: o.Cat, NID: childNumericID(ch)})
+				ps, pg := srv.partRepairBasePrice(cctx, storeID, partMapKey, repairPart{Cat: o.Cat, NID: childNumericID(ch)})
 				rs, rg := srv.workshopPartResidual(int64(o.Cat), ps, pg)
 				silver += ps - rs
 				gold += pg - rg
@@ -1712,7 +1730,7 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		// 等于给玩家装了一只坏件，本体永远抬不回来。
 		setReelChildDurability(child, 1)
 		fields[idx].Val = child
-		ps, pg := srv.partPrice(cctx, o.SysID, def.Category)
+		ps, pg := srv.partPriceForStore(cctx, storeID, partMapKey, o.SysID, def.Category)
 		// 换件同样按 (新件价 − 旧件残值) 收：官服 21/2 的 f3 就是旧件残值，
 		// 客户端按差额报价，服务端必须按同一个数收，否则界面与实扣对不上。
 		rs, rg := srv.workshopPartResidual(def.Category, ps, pg)
@@ -1979,7 +1997,9 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	if deferred {
 		jobHours = 0
 		for _, o := range orders {
-			if h := srv.workshopPartHours(int64(o.Cat)); h > jobHours {
+			// 工时以"这件"为单位：后台覆盖行写了 hours 就用它（0 = 即时），
+			// 否则按品类默认。见 workshop_part_price.go。
+			if h := srv.workshopPartHoursFor(cctx, partMapKey, o.SysID, int64(o.Cat)); h > jobHours {
 				jobHours = h
 			}
 		}
