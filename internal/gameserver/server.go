@@ -104,6 +104,13 @@ type Server struct {
 
 	// 测试注入的随机源；nil 时使用全局 rand。
 	randFloat func() float64
+
+	// 工坊在办修理（银币排队）的显示缓存：uid → 该玩家还在等的任务。
+	// 物品树下发是所有背包/装备路径的唯一出口，每件物品各查一次库会把
+	// SQLite 打满，所以按玩家一次取全量、缓存 1 秒，写操作主动失效。
+	// 详见 workshop_repair_lock.go。
+	repairLockMu    sync.Mutex
+	repairLockCache map[int64]workshopRepairLockEntry
 }
 
 // NewServer 构建主服务器。
@@ -248,9 +255,11 @@ func (s *Server) openSession(c *tunnel.Conn, sid uint64, payload []byte) {
 			sess.log.Warn("玩家初始化失败", "err", err)
 		}
 		s.recoverCompletedCatchOnLogin(sess)
+		s.recoverWorkshopRepairsOnLogin(sess)
 		sess.Push(0, 1, proto.Args524())
 	} else {
 		s.recoverCompletedCatchOnLogin(sess)
+		s.recoverWorkshopRepairsOnLogin(sess)
 	}
 	sess.startKeepalive()
 }

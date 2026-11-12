@@ -184,6 +184,12 @@ func TestWorkshopPartSwapWritesPerformanceAfterBodyRecalc(t *testing.T) {
 	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
 		t.Fatal("工坊换件失败")
 	}
+	// 银币换件同样要等（官服口径：银币要等、金币即时）。到期结算后才会写
+	// item 行与物理参数表，这里先把它推到到期。
+	expireWorkshopJobs(t, db, reviewWearUID)
+	if settled := settleWorkshopForTest(t, srv, reviewWearUID); len(settled) != 1 {
+		t.Fatalf("到期应结算 1 件，实际 %v", settled)
+	}
 
 	stored, err := db.GetReelPerformance(ctx, reel.GUID)
 	if err != nil || stored == nil {

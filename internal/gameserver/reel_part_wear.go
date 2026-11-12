@@ -349,13 +349,21 @@ func (s *Server) recalcReelBodyDurability(ctx context.Context, row *store.Item) 
 }
 
 // restoreReelInternalsInFields 把轮内零件恢复到额定状态，只改内存中的物品树。
-func (s *Server) restoreReelInternalsInFields(ctx context.Context, row *store.Item, fields []proto.Field) (bool, error) {
+//
+// only 为 nil 时恢复全部内件（进店大修、金币即时修都走这个口径）；非 nil 时
+// 只恢复其中列出的品类（按品类号，与 21/4 请求里的品类字节、item_def.category
+// 同一套）。工坊 21/4 必须传"本次真的付了钱的件"：官服按件收费，玩家只勾
+// 一件时把整只轮子刷满就是白送。
+func (s *Server) restoreReelInternalsInFields(ctx context.Context, row *store.Item, fields []proto.Field, only map[int64]bool) (bool, error) {
 	if s == nil || s.DB == nil || row == nil {
 		return false, nil
 	}
+	allow := func(category int64) bool {
+		return only == nil || only[category]
+	}
 	changed := false
 	child, def, _, ok := s.selectedReelPart(ctx, fields, reelPartCatWasher)
-	if ok && child != nil && def != nil {
+	if ok && child != nil && def != nil && allow(reelPartCatWasher) {
 		if _, present, idx := frictionWasherDrag(child); present && idx >= 0 && idx < len(child.Fields) {
 			if rated := itemDefF32(def, gearAttrDragMax) * row.Workmanship; rated > 0 &&
 				setWireFloat(child.Fields, child.Class, idx, rated) {
@@ -367,6 +375,9 @@ func (s *Server) restoreReelInternalsInFields(ctx context.Context, row *store.It
 		}
 	}
 	for _, category := range s.reelWearCategoriesInFields(ctx, fields) {
+		if !allow(category) {
+			continue
+		}
 		part, _, _, found := s.selectedReelPart(ctx, fields, category)
 		if !found || part == nil {
 			continue
@@ -390,7 +401,7 @@ func (s *Server) restoreReelInternals(ctx context.Context, row *store.Item) (boo
 	if err != nil {
 		return false, err
 	}
-	changed, err := s.restoreReelInternalsInFields(ctx, row, fields)
+	changed, err := s.restoreReelInternalsInFields(ctx, row, fields, nil)
 	if err != nil {
 		return false, err
 	}

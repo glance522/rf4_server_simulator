@@ -685,6 +685,40 @@ func bumpCreatedTicks(fields []proto.Field, wireClass string) {
 	}
 }
 
+// itemViewWithStamp 复制一份物品行，只把创建 Ticks（csCreated）换成 stamp，
+// 其余字段保持行里原样。stamp 为 nil 时返回原行副本。
+//
+// 存在的理由是银币排队那个特殊态：item 行**必须**保持磨损态（这是"还没修好"
+// 的证据，不能提前把耐久改回去），但回给客户端的树必须带一个**比客户端手里
+// 更大的**版本戳。客户端按 csCreated 判断要不要采纳一次物品更新，戳没变大就
+// 整包丢弃——连 f24 时效对象一起丢，表现是"下完单界面毫无反应、退出重连才
+// 进入维修中"（2026-11-11 23:41 实测：回包 f21=639300029129805947 与下单前
+// 库里的值一模一样，而任务快照里已经是 639300084682957096）。
+func itemViewWithStamp(row *store.Item, stamp *uint64) *store.Item {
+	if row == nil {
+		return nil
+	}
+	view := *row
+	if stamp == nil {
+		return &view
+	}
+	idx := fieldIdxByCS(row.WireClass, csCreated)
+	if idx < 0 {
+		return &view
+	}
+	vf, err := FieldsFromJSON(row.FieldsJSON)
+	if err != nil || idx >= len(vf) {
+		return &view
+	}
+	vf[idx].Num = stamp
+	vj, jerr := FieldsToJSON(vf)
+	if jerr != nil {
+		return &view
+	}
+	view.FieldsJSON = vj
+	return &view
+}
+
 // saveItemFields 写回字段数组并提高版本戳；其余物品列保持不变。
 func (s *Server) saveItemFields(ctx context.Context, row *store.Item, fields []proto.Field) {
 	bumpCreatedTicks(fields, row.WireClass)

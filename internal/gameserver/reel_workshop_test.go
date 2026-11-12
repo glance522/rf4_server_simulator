@@ -47,13 +47,15 @@ func TestWorkshopExposesAllCompatibleReelParts(t *testing.T) {
 	for _, part := range parts {
 		counts[part.Cat] = len(srv.partAlternatives(ctx, reel.ItemID, part))
 	}
-	// Spark 2 2000S 的精确表含 6 个线杯、6 个齿轮、2 个摩擦片，
-	// 再加当前零件自身；不得被旧的 3/4 个上限截断。
+	// Spark 2 2000S 的精确表含 6 个线杯、2 个摩擦片，再加当前零件自身；
+	// 不得被旧的 3/4 个上限截断。
 	if counts[8] != 7 {
 		t.Fatalf("线杯工单=%d，期望当前件+6个兼容件", counts[8])
 	}
-	if counts[52] != 7 {
-		t.Fatalf("齿轮工单=%d，期望当前件+6个兼容件", counts[52])
+	// 主动齿轮（52）2026-11-11 起只许同型号修理：官服工坊这一行没有"选择替代品"，
+	// 玩家定案"主动齿轮是固定不能换的"。所以工单里只剩当前件本身。
+	if counts[52] != 1 {
+		t.Fatalf("齿轮工单=%d，期望只有当前件（主动齿轮不允许换型号）", counts[52])
 	}
 	if counts[9] != 3 {
 		t.Fatalf("摩擦片工单=%d，期望当前件+2个兼容件", counts[9])
@@ -61,8 +63,10 @@ func TestWorkshopExposesAllCompatibleReelParts(t *testing.T) {
 	if counts[10] != 21 {
 		t.Fatalf("润滑油工单=%d，期望静态库全部21种品质油", counts[10])
 	}
-	if _, ok := counts[34]; !ok {
-		t.Fatal("摇柄应出现在轮子零件诊断中")
+	// 摇柄（34）2026-11-11 起是废弃字段：不磨损、不进聚合，也不出现在工坊零件
+	// 列表里（官服工坊与背包都只有五行）。这里锁死"不能出现"，谁把它加回来都会红。
+	if _, ok := counts[34]; ok {
+		t.Fatal("摇柄已废弃，不应出现在轮子零件诊断/工坊列表中")
 	}
 }
 
@@ -112,6 +116,13 @@ func TestWorkshopOrderRefreshesDragVersionAndPerformance(t *testing.T) {
 		t.Fatalf("工作坊成功后应注册一次 4/22 刷新，实得 %d", len(hctx.afterResponse))
 	}
 
+	// 银币换件要等：入队当场不写 item 行，到期结算才落地。版本戳递增、
+	// 曳力重建、物理参数刷新都发生在结算这一步。
+	expireWorkshopJobs(t, db, uid)
+	if settled := settleWorkshopForTest(t, srv, uid); len(settled) != 1 {
+		t.Fatalf("到期应结算 1 件，实际 %v", settled)
+	}
+
 	fresh, _ := db.GetItemByGUID(ctx, reel.GUID)
 	freshFields, _ := FieldsFromJSON(fresh.FieldsJSON)
 	if got := u64Of(freshFields[createdIdx].Num); got <= beforeVersion {
@@ -151,6 +162,9 @@ func TestWorkshopOrderRefreshesDragVersionAndPerformance(t *testing.T) {
 func TestReelWorkshopStatsSurviveRelogTreeBuild(t *testing.T) {
 	t.Parallel()
 	srv, db := newRigTestServer(t)
+	// 这条用例守的是"重登重建物品树后零件/力度仍对得上"，需要换件当场落库，
+	// 所以显式走即时路径（银币排队的时序由 workshop_repair_queue_test.go 覆盖）。
+	setWorkshopSilverRepairDelay(t, srv, db, false)
 	ctx := context.Background()
 	const uid = int64(1000001)
 	if err := srv.EnsurePlayer(ctx, uid); err != nil {

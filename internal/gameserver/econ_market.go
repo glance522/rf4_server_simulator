@@ -36,8 +36,8 @@ func registerEconMarket(d *Dispatch) {
 	d.Register(20, 4, hMarketSellOffer)
 	d.Register(21, 1, hWorkshopList)
 	d.Register(21, 2, hWorkshopDiag)
-	d.Register(21, 3, hWorkshopOrder) // 官方语义：订购/更换零件（含修理）
-	d.Register(21, 4, hWorkshopOrder) // 官方金币通道同样是换件结构
+	d.Register(21, 3, hWorkshopQuote) // 选中预览：只回当前物品树，不落库不扣费
+	d.Register(21, 4, hWorkshopOrder) // 唯一下单入口（银币排队、金币即时都走这里）
 	d.Register(17, 12, hRodSetDepth)
 	d.Register(17, 13, hRodSetClip)
 	d.Register(17, 14, hRodSetDrag)
@@ -654,10 +654,18 @@ func hWorkshopList(ctx *Ctx) ([]byte, bool) {
 		return nil, false
 	}
 	cctx := ctx.Sess.pushCtx()
+	// 打开工坊前先把到期的修理落地：玩家离线期间修好的东西，一进工坊
+	// 就该是修好的状态，不能等他重登。
+	srv.workshopSettleRepairs(cctx, ctx.Sess.Userid)
 	rows, err := srv.DB.ListRepairItems(cctx, ctx.Sess.Userid)
 	if err != nil {
 		rows = nil
 	}
+	// 在办修理的物品**仍然列出**：官服的工坊面板就是这样——物件还在列表里，
+	// 带一把锁和倒计时，只是点不动（玩家 2026-11-11 口述）。所以这里不做过滤，
+	// "不给入口"由 21/2 不发报价来实现（见 hWorkshopDiag），档位位再改成 5
+	// 让客户端把这一行画成"修理中"。
+	locks := srv.workshopRepairLocks(cctx, ctx.Sess.Userid)
 	out := proto.Args(proto.S("144"))
 	for _, r := range rows {
 		parts := srv.repairPartsOf(cctx, r)
@@ -667,9 +675,13 @@ func hWorkshopList(ctx *Ctx) ([]byte, bool) {
 		}
 		// f1 是完好度（1.0=全新）：客户端实测值为 0.9999x~1.0，不是磨损百分比，
 		// 发 1-durability 会把满耐久物品报成 0% 完好度，修理报价随之算错。
-		// f2 是可修档位（客户端实测 4/5 量级），这里取可修零件数。
+		// f2 是可修档位（客户端实测 4/5 量级）：常态取可修零件数；在办修理时
+		// 官服发 5（实测 4 → 送修后 5），客户端靠这一格把行画成不可操作。
 		condition := r.Durability
 		grade := int64(len(parts))
+		if locks[r.GUID] != nil {
+			grade = workshopRepairingGrade
+		}
 		out.Items = append(out.Items, wiregen.MustMakeObj("ookkpknacja", map[int]*proto.Value{
 			0: proto.Guid(r.GUID),
 			1: proto.U32(proto.F32Bits(float32(condition))),
@@ -683,6 +695,10 @@ func hWorkshopList(ctx *Ctx) ([]byte, bool) {
 	}
 	return body, true
 }
+
+// reelBodyRepairGapTolerance 是"本体比内件综合还差"的判定容差：本体耐久只会被
+// 内件往下拉，正常磨损下两者差不到 1%。超过这个落差就是本体被单独判过坏。
+const reelBodyRepairGapTolerance = 0.02
 
 // repairPart 是修理面板要展示的一个可修零件。
 type repairPart struct {
@@ -773,8 +789,8 @@ func (s *Server) repairPartsOf(ctx context.Context, it *store.Item) []repairPart
 			nid = uint32(u64Of(child.Fields[nidx].Num))
 			cat = catOf(nid)
 		}
-		// 只收零件本身：摇柄(34) 不进工坊列表；线(11)/渔轮(6)/拟饵等
-		// 属于已装配的渔具，不是这根杆子的零件，一律排除。
+		// 只收零件本身：摇柄(34) 已从 workshopPartCategories 移除、不进工坊列表；
+		// 线(11)/渔轮(6)/拟饵等属于已装配的渔具，不是这根杆子的零件，一律排除。
 		if !workshopPartCategories[cat] {
 			continue
 		}
@@ -787,13 +803,41 @@ func (s *Server) repairPartsOf(ctx context.Context, it *store.Item) []repairPart
 	// 本体耐久是轮内零件的综合。正常有磨损零件时让客户端选具体零件，
 	// 只有内部零件都还满、但本体已经掉耐久时，才补一行本体修理入口；
 	// 否则会和整机保养重复报价，也会把正常的零件修理界面挤乱。
-	if !hasWornPart {
-		if def, derr := s.DB.GetItemDefByItemID(ctx, it.ItemID); derr == nil && def != nil &&
-			def.Category == gearCatReel && it.Durability < 1 {
+	//
+	// 第二个条件兜的是"本体被单独判坏"：本体耐久比内件综合还低一截，任何
+	// 磨损都推不出这个落差（本体只会被内件往下拉，不会自己跑掉）。锁轮过载
+	// 断轮、历史脏数据都会造成这种状态——这时如果还不给本体入口，工坊就是
+	// "里面全好、外面是坏的"，玩家换不到件也修不了，只能卡住。
+	if def, derr := s.DB.GetItemDefByItemID(ctx, it.ItemID); derr == nil && def != nil &&
+		def.Category == gearCatReel && it.Durability < 1 {
+		offerBody := !hasWornPart
+		if !offerBody {
+			if body, ok := s.reelBodyDurabilityInFields(ctx, it, fields); ok &&
+				body > it.Durability+reelBodyRepairGapTolerance {
+				offerBody = true
+			}
+		}
+		if offerBody {
 			add(it.GUID, uint32(it.NumericID), uint32(gearCatReel), it.Durability)
 		}
 	}
+	// 展示顺序对齐官服工坊：主动齿轮（齿轮组）→ 轴承 → 摩擦制动器 → 线轴 → 润滑油。
+	// 之前按物品树的物理槽位顺序输出（线轴→摩擦制动器→轴承→摇柄→润滑油→齿轮），
+	// 跟官服列表整个反着排，玩家看着就像"零件对不上"。客户端背包的"零件"面板
+	// 用的也是这一套顺序，可作旁证。摇柄已从 workshopPartCategories 移除，不再出现。
+	sort.SliceStable(out, func(i, j int) bool {
+		return workshopPartRankOf(out[i].Cat) < workshopPartRankOf(out[j].Cat)
+	})
 	return out
+}
+
+// workshopPartRankOf 给出工坊零件行的展示次序；未列出的品类（竿柄/导环/竿坯等）
+// 统一排在润滑油之后，彼此保持物品树里的先后关系（SliceStable）。
+func workshopPartRankOf(cat uint32) int {
+	if rank, ok := workshopPartRank[cat]; ok {
+		return rank
+	}
+	return len(workshopPartRank)
 }
 
 // ---- 工坊零件定价 / 替代件 / 订购 ----
@@ -802,19 +846,41 @@ func (s *Server) repairPartsOf(ctx context.Context, it *store.Item) []repairPart
 var partPriceOnce sync.Once
 var partPriceByItemID map[string][2]int64
 
-// 零件没有独立价目时按品类给基准价，数值参考官方抓包样本
-// （轴承 845/8、摩擦片 754/7、齿轮 296/5、竿坯 1200/12 …）。
+// workshopPartRank 是工坊零件列表的展示次序，与官服工坊截图、以及客户端背包里
+// 的"零件"面板一致：主动齿轮（齿轮组 52）打头，然后轴承 → 摩擦制动器 → 线轴 →
+// 润滑油。官服列表就只有这五行。
+//
+// 摇柄（34）2026-11-11 从表里删掉：它是废弃字段，官服工坊和背包都不显示这一行，
+// 玩家定案"直接隐藏掉，改为不会被损坏，没有磨损"。它仍然会随轮子一起物化
+// （客户端 f5 槽位必需，见 materialize.go 的 reelPartKeys），但既不磨损、不进聚合，
+// 也不出现在任何一份工坊列表里。
+var workshopPartRank = map[uint32]int{
+	52: 0, // 主动齿轮（齿轮组）
+	7:  1, // 轴承
+	9:  2, // 摩擦制动器
+	8:  3, // 线轴
+	10: 4, // 润滑油
+}
+
 // workshopPartCategories 允许出现在工坊零件列表里的品类。
 // 4 竿柄 / 5 导环 / 7 轴承 / 8 线杯 / 9 摩擦片 / 10 轮油 /
-// 34 摇柄 / 36 竿坯 / 52 齿轮 / 63 电机 / 81 引擎
+// 36 竿坯 / 52 齿轮 / 63 电机 / 81 引擎
+//
+// 摇柄（34）2026-11-11 移除，理由见 workshopPartRank 上方的注释。
 var workshopPartCategories = map[uint32]bool{
 	4: true, 5: true, 7: true, 8: true, 9: true, 10: true,
-	34: true, 36: true, 52: true, 63: true, 81: true,
+	36: true, 52: true, 63: true, 81: true,
 }
 
 // noReplaceCategories 不允许更换型号、只能修复的零件品类。
 // 轴承和线杯在精确兼容表中有合法替代件，不能在这里硬禁用。
-var noReplaceCategories = map[int64]bool{5: true, 36: true}
+//
+// 52（主动齿轮）2026-11-11 玩家按官服口径定案："主动齿轮是固定不能换的"。
+// 官服工坊里主动齿轮、轴承、线轴三行都没有"选择替代品"按钮（玩家提供的
+// Beluga BG-GR-IMPC40D / RGM BLG Venga 10000 两张官服截图），齿轮这一格尤其
+// 是轮子的传动核心（传动比写在件上），换型号等于换了一只轮子，所以只允许
+// 同型号修理。这里只挡"换成别的型号"，同型号修理照旧走 21/4 的 repair 分支。
+var noReplaceCategories = map[int64]bool{5: true, 36: true, 52: true}
 
 var partBasePrice = map[int64][2]int64{
 	4:  {600, 6},   // 竿柄
@@ -1002,6 +1068,13 @@ func (s *Server) compatFor(reelItemID, category string) ([]string, bool) {
 	return byCat[category], true
 }
 
+// 工时的口径统一在 workshop_official_price.go 的 workshopPartHours：
+// 官服按**零件品类的固定档位**给，与磨损无关（nc.jsonl 那单五件是
+// 52→2h / 7→36h / 9→24h / 8→36h / 10→18h）。
+//
+// 这里原来有一套"按磨损比例 × 上限小时向上取整"的折算（workshopRepairHours），
+// 是官方样本进来之前的猜测，已经没有任何调用方，删掉以免被误用。
+
 func (s *Server) partAlternatives(ctx context.Context, reelItemID string, part repairPart) []*proto.Value {
 	nid := int64(part.NID)
 	if nid == 0 {
@@ -1036,7 +1109,9 @@ func (s *Server) partAlternatives(ctx context.Context, reelItemID string, part r
 			0: proto.StrVal(itemID),
 			1: comp,
 			2: price,
-			3: proto.U32(2),
+			// f3 = 银币修理要等的小时数。官方截图（2026-11-11）里银币按钮上方
+			// 标「2 小时」、金币按钮标「即时」，两者差的就是这一格。
+			3: proto.U32(s.workshopPartHours(int64(def.Category))),
 		}))
 	}
 	addJob(def.ItemID)
@@ -1250,6 +1325,8 @@ func hWorkshopDiag(ctx *Ctx) ([]byte, bool) {
 		return nil, false
 	}
 	cctx := ctx.Sess.pushCtx()
+	// 同 21/1：报价前先落地到期修理，否则玩家会看到"已修好却还在报价"。
+	srv.workshopSettleRepairs(cctx, ctx.Sess.Userid)
 	guid := ""
 	if gs := deepGUIDs(ctx.Tree); len(gs) > 0 {
 		guid = gs[0]
@@ -1258,28 +1335,34 @@ func hWorkshopDiag(ctx *Ctx) ([]byte, bool) {
 		guid = "00000000000000000000000000000000"
 	}
 	comps := proto.Args(proto.S("143")) // 元素类 hlopebmchhp(poolccanfhd, type_id 504) 的 args code
+	// 在办修理（银币已付、还在等工时）**照常报价**。
+	//
+	// 别再"不发报价挡入口"（2026-11-11 21:31 实机翻车）：那样回的是
+	// args(143) 空表，客户端把整个面板画成空白——零件行、价格、修理按钮全没有，
+	// 玩家看到的就是"修理选项都没有了"。挡重复下单本来就该由 21/4 的幂等分支
+	// 负责（见 hWorkshopOrder 的 workshopPendingRepairJob 判定），它会把重复请求
+	// 回成"已在工坊修理中，还需约 X"，既不重复扣费也不让界面变空。
 	if row, rerr := srv.DB.GetItemByGUID(cctx, guid); rerr == nil && row != nil {
-		// 渔轮同型号修理会整机恢复，21/2 对每个内件都报整机保养价。
-		// 客户端按选中的内件上报 f3；多选时会累加多次，21/3 仍只收一次。
-		reelServiceSilver := int64(-1)
-		if def, derr := srv.itemDefForRow(cctx, row); derr == nil && def != nil && def.Category == gearCatReel {
-			if fields, ferr := FieldsFromJSON(row.FieldsJSON); ferr == nil {
-				reelServiceSilver = int64(math.Round(srv.reelRepairWearInFields(cctx, row, fields) * 500))
-			}
+		if job := srv.workshopPendingRepairJob(cctx, guid); job != nil {
+			ctx.Log.Info("21/2 工坊诊断：物品在办修理，仍按原样报价",
+				"guid", shortGUID(guid), "remain_s", workshopPendingRemainingSeconds(job))
 		}
+		// 渔轮同型号修理会整机恢复，21/2 对每个内件都报整机保养价。
+		// 客户端按选中的内件上报 f3；多选时只发一帧、只收一次。
 		for _, p := range srv.repairPartsOf(cctx, row) {
-			// f3 = 该零件的修理报价（按磨损计价，完好度 1.0 → 0）；渔轮为整机保养价。
-			repairSilver := int64(math.Round(math.Max(0, 1-p.Cond) * 500))
-			// 本体行只在内部零件都满时出现，不能套用内件整机保养价，
-			// 否则本体 0.0 会显示成免费修理。
-			if reelServiceSilver >= 0 && p.Cat != uint32(gearCatReel) {
-				repairSilver = reelServiceSilver
-			}
+			// f3 = 手头这个旧件的残值（银, 金），**不是修理费**。
+			// 客户端拿 (该行 hpopgbjohpk.f2 的新件价 − 这一格) 算出 21/4 的
+			// 下单报价，服务端按同一公式收钱，界面与实扣才会一致。旧口径按
+			// 磨损发"修理费"，客户端当成 0 折抵 → 界面报全价、我们只收几银
+			// （实测界面 2197 / 实扣 3、界面 3756 / 实扣 62）。
+			// 见 workshop_official_price.go。
+			baseSilver, baseGold := srv.partRepairBasePrice(cctx, p)
+			repairSilver, repairGold := srv.workshopPartResidual(int64(p.Cat), baseSilver, baseGold)
 			comps.Items = append(comps.Items, wiregen.MustMakeObj("hlopebmchhp", map[int]*proto.Value{
 				0: proto.Guid(p.GUID),
 				1: proto.U32(proto.F32Bits(float32(p.Cond))),
 				2: proto.U32(4), // 官方固定 4
-				3: priceObj(repairSilver, 0),
+				3: priceObj(repairSilver, repairGold),
 				4: proto.U32(0),
 				// f5 = 可更换件工单列表（hpopgbjohpk[]），客户端据此显示
 				// "选择替代品（有 N 种可选的变体）"。
@@ -1298,7 +1381,7 @@ func hWorkshopDiag(ctx *Ctx) ([]byte, bool) {
 	return body, true
 }
 
-// partOrder 是 21/3 请求里的一个换件条目。
+// partOrder 是 21/4 请求里的一个换件条目。
 type partOrder struct {
 	Cat   uint32
 	SysID string
@@ -1344,7 +1427,118 @@ func workshopQuoteCovers(clientCost, serverCost int64) bool {
 	return clientCost >= floor
 }
 
-// hWorkshopOrder 处理 21/3：按客户端提交的条目更换零件、扣费并返回更新后的物品树。
+// replayWorkshopItem 把"这次工坊操作已经无事可做"当成幂等成功回给客户端：
+// 回当前物品树 + 补一次 4/22 刷新，不扣费、不写库。
+//
+// 为什么必须这样：客户端会重发同一帧（2026-11-11 15:26 实测，同 GUID
+// 同品类同件，间隔 17ms）。第一次真的把零件修满了，第二次算出来的磨损是 0，
+// 价格自然是 0。老代码把"价格为 0"当异常拒绝 → 落到兜底链 → 回 7 字节空 args，
+// 客户端解析失败弹「发生内部错误」。而磨损 0 恰恰说明**东西已经好了**，
+// 这是个幂等重放，本该成功。
+func (s *Server) replayWorkshopItem(ctx *Ctx, cctx context.Context, row *store.Item) ([]byte, bool) {
+	tree, terr := s.ItemToTree(cctx, row)
+	if terr != nil {
+		return nil, false
+	}
+	// 幂等重放同样要抬戳：item 行在排队期间保持磨损态、戳一直没动，回一棵
+	// 旧戳的树等于让客户端忽略它（连同 f24 那把锁）。真正发出去的 4/22 在
+	// scheduleWorkshopItemPush 里还会再抬高一次。
+	stampWorkshopTree(tree)
+	body, ok := workshopOrderReplyBytes(ctx, tree)
+	if !ok {
+		return nil, false
+	}
+	ctx.AfterResponse(func() {
+		// 幂等重放这条同样要延迟：客户端重发同一帧时，第二次的回包之后
+		// 只隔几毫秒就贴一条 4/22，和第一次一样会弹「发生内部错误」。
+		scheduleWorkshopItemPush(ctx.Sess, tree)
+	})
+	return body, true
+}
+
+// workshopOrderVerb 把本次 21/4 的动作说成人话，只用于系统提示。
+//
+// 换件与修理共用同一条排队通道（同一张任务表、同一套在线工时），但玩家看到
+// 的必须是"更换零件"：2026-11-11 21:31 实机，玩家换了一只零件，回执却写
+// 「已送工坊修理」，他以为自己点错了东西。
+func workshopOrderVerb(hasRepair, hasPartOrder bool) string {
+	switch {
+	case hasRepair && !hasPartOrder:
+		return "修理"
+	case hasPartOrder && !hasRepair:
+		return "更换零件"
+	default:
+		return "修理和更换零件"
+	}
+}
+
+// hWorkshopQuote 处理 21/3：客户端在工坊界面上每勾选/取消一个部位就重发一次，
+// 条目是**累积**的（n=1 → n=2 → n=3），这一帧只是"选中预览"，不是下单。
+//
+// 2026-11-12 01:0x 把 logs 里 107 帧工坊请求全解码后确认：
+//
+//	23:07:52  21/3  826e09da  n=1  cat=36            勾竿坯
+//	23:07:53  21/3  826e09da  n=2  cat=36,4          再勾手柄
+//	23:07:54  21/3  826e09da  n=3  cat=36,4,5        再勾导环
+//	23:07:55  21/4  826e09da  n=3  cost=2176         ← 点"修理"才是下单
+//
+// 取消勾选同理（16:01:22→32 连发 n=1,2,3,4 又回到 3,2,1），整段一次 21/4 都没有。
+// 以前把 21/3 当成交，结果第一帧就入队扣费，后面几帧全都撞在办任务分支被当成
+// 幂等重放**吞掉**——玩家勾了 3 个部位、界面写着 2176 银，实际只修 1 个、只扣 8 银。
+//
+// 本函数只回当前物品树：不改耐久、不扣费、不登记任务、不推 4/22。物品若已在
+// 工坊排队，树上照样带时效对象（ItemToTree 从任务表投影），玩家看到的就是
+// "修理中"，这是对的。
+//
+// 请求结构与 21/4 相同（args(524)，见 hWorkshopOrder）。
+func hWorkshopQuote(ctx *Ctx) ([]byte, bool) {
+	srv := ctx.Sess.Srv
+	if !srv.requireDB(ctx) {
+		return nil, false
+	}
+	cctx := ctx.Sess.pushCtx()
+	tree := ctx.Tree
+	if tree == nil || tree.Kind != proto.KindArgs || len(tree.Items) < 2 {
+		return nil, false
+	}
+	body := tree.Items[1]
+	if body == nil || body.Kind != proto.KindObj || body.FieldCount() < 1 {
+		return nil, false
+	}
+	gf := body.Field(0)
+	itemGUID := gf.GuidHex()
+	if itemGUID == "" {
+		return nil, false
+	}
+	row, err := srv.DB.GetItemByGUID(cctx, itemGUID)
+	if err != nil || row == nil || row.UID != ctx.Sess.Userid {
+		return nil, false
+	}
+	out, terr := srv.ItemToTree(cctx, row)
+	if terr != nil {
+		return nil, false
+	}
+	// 每一帧预览都要带一个**比此前所有下发都大**的版本戳（csCreated）。
+	// 客户端按这一格判断要不要采纳一棵物品树，戳持平或回退就整包丢弃，
+	// 连 f24 那把锁一起丢。原来这里直接回 item 行，行里是物品的旧戳：
+	// 下单后这一帧会把客户端手里的戳从"下单时 bump 的新值"**拉回旧值**，
+	// 紧接着那条 4/22 推送用的又正是下单时的值——客户端已经见过，于是判旧
+	// 丢弃，面板停在"修好了"，退出重连（走 4/5 全量背包、不参与版本比较）
+	// 才变"修理中"。2026-11-12 01:31 那单实测：
+	//   21/3 回包 …462105 → 21/4 回包 …955954 → 21/3 回包 …462105 → 4/22 …955954
+	// 官服同一条链路帧帧递增、从不持平（logs/nc.jsonl s2c#334 …103456 →
+	// #336 …057829 → #337 …058188 → #338 …974643），这里照抄这个口径。
+	stampWorkshopTree(out)
+	raw, berr := proto.EncodeValue(out, ctx.Sess.Table())
+	if berr != nil {
+		return nil, false
+	}
+	return raw, true
+}
+
+// hWorkshopOrder 处理 21/4：按客户端提交的条目更换零件、扣费并返回更新后的物品树。
+//
+// 这是**唯一**的下单入口。21/3 只是选中预览（见 hWorkshopQuote），不在这里处理。
 //
 // 官方请求结构（抓包确认）：
 //
@@ -1352,6 +1546,9 @@ func workshopQuoteCovers(clientCost, serverCost int64) bool {
 //	            nfmkdcbnkhp { itemGUID,
 //	                          args(503)[ {BYTE 品类, STR 新件 systemID} ... ],
 //	                          是否金币, 客户端报价 } ]
+//
+// 其中"客户端报价"在 21/3 上恒为 0（客户端还没有价），到 21/4 才回填成本次
+// 选中部位的总价（实测：同一单 21/3 f3=0 → 21/4 f3=2176）。
 func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	srv := ctx.Sess.Srv
 	if !srv.requireDB(ctx) {
@@ -1396,6 +1593,10 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	if cf := body.Field(3); cf.Num != nil {
 		clientCost = int64(cf.U64())
 	}
+	// 工坊 id 在 args[0]（"workshop_01" 这种字符串）。银币排队期间物品树的
+	// 时效对象要把这个 id 原样回显给客户端（f24.f0），所以随任务一起落库，
+	// 不能事后猜一个写死的值。
+	storeID, _, _, _ := parseRepairRequest(tree)
 
 	row, err := srv.DB.GetItemByGUID(cctx, itemGUID)
 	if err != nil || row == nil || row.UID != ctx.Sess.Userid {
@@ -1413,12 +1614,39 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	}
 
 	silver, gold := int64(0), int64(0)
+	// fullSilver / fullGold 是**不打残值折抵**的新件全价合计，只用来给客户端
+	// 报价封顶：界面上的价最多就是新件全价（旧件零折抵），超过它只能是客户端
+	// 把同一个件列了两次。见下面的换件报价校验。
+	fullSilver, fullGold := int64(0), int64(0)
 	changed := false
+	// didWork 表示这次请求**真的需要动东西**（有件被换、或有件耐久 <1 被修满）。
+	// 和 changed 的区别：changed 只说明"请求能读懂、指向了有效条目"，didWork 才说明
+	// "算出来的账应该大于 0"。客户端重放同一条已完成的修理时 changed=true 而
+	// didWork=false，那种情况必须幂等成功，不能当成零金额交易拒掉。
+	didWork := false
+	// partSwapped 表示这次请求里有**换件**（装上去一个新型号），而不是纯修理。
+	// 用途只有一个：区分两种"算出来 0 银币"。
+	//   - 纯修理算出 0：磨损不足 1 分钱（`round((1-0.9992)*500)=0`），这是合法
+	//     的免费维修，必须放行——拒绝会让客户端弹「发生内部错误」；
+	//   - 换件算出 0：item_price 里没有这件新件的标价，属于价格表缺口，
+	//     放行等于白送，必须拒绝。
+	partSwapped := false
+	// unresolved 表示有条目指向了树里找不到的零件，或换件构造失败。这种是真失败，
+	// 不能走幂等成功（否则客户端会以为换上了，实际没换）。
+	unresolved := false
 	hasRepair := false
 	bodyRepair := false
 	hasPartOrder := false
 	allRepairs := true
+	// 同一品类在一次下单里重复出现时只算一次。客户端多选聚合/重发时会把同一个
+	// 件塞进 args(503) 两次，逐条计价就会把同一件收两遍钱（旧模型按"整机保养
+	// 只收一次"绕过去了，官服按件收费之后必须自己去重）。
+	seenOrderCat := map[uint32]bool{}
 	for _, o := range orders {
+		if seenOrderCat[o.Cat] {
+			continue
+		}
+		seenOrderCat[o.Cat] = true
 		if o.Cat == uint32(gearCatReel) &&
 			(o.SysID == "" || strings.EqualFold(o.SysID, row.ItemID)) {
 			if !bodyRepair {
@@ -1441,6 +1669,7 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		}
 		if idx < 0 {
 			allRepairs = false
+			unresolved = true
 			continue
 		}
 		// 同型号 = 修理（恢复耐久，按磨损计价）；不同型号 = 更换。
@@ -1451,7 +1680,21 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 			if didx := fieldIdxByCS(ch.Class, csDurability); didx >= 0 && didx < ch.FieldCount() {
 				old := float64(math.Float32frombits(ch.Fields[didx].U32()))
 				ch.Fields[didx].Num = ptrU64(uint64(math.Float32bits(1.0)))
-				silver += int64(math.Round(math.Max(0, 1-old) * 500))
+				// 官服的"修理"就是换一个同型号新件：付 (新件价 − 旧件残值)。
+				// 旧口径只收 round(磨损×500)，比客户端界面的报价低一到两个
+				// 数量级（实测界面 2197 / 实扣 3），玩家看到的就是"钱扣错了"。
+				// 见 workshop_official_price.go。
+				ps, pg := srv.partRepairBasePrice(cctx, repairPart{Cat: o.Cat, NID: childNumericID(ch)})
+				rs, rg := srv.workshopPartResidual(int64(o.Cat), ps, pg)
+				silver += ps - rs
+				gold += pg - rg
+				fullSilver += ps
+				fullGold += pg
+				// 已经满耐久的件是"无事可做"，不能算干活，否则会把幂等重放
+				// 误判成零金额交易。
+				if old < 1 {
+					didWork = true
+				}
 			}
 			changed = true
 			continue
@@ -1470,9 +1713,16 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		setReelChildDurability(child, 1)
 		fields[idx].Val = child
 		ps, pg := srv.partPrice(cctx, o.SysID, def.Category)
-		silver += ps
-		gold += pg
+		// 换件同样按 (新件价 − 旧件残值) 收：官服 21/2 的 f3 就是旧件残值，
+		// 客户端按差额报价，服务端必须按同一个数收，否则界面与实扣对不上。
+		rs, rg := srv.workshopPartResidual(def.Category, ps, pg)
+		silver += ps - rs
+		gold += pg - rg
+		fullSilver += ps
+		fullGold += pg
 		changed = true
+		didWork = true
+		partSwapped = true
 	}
 	if !changed {
 		return nil, false
@@ -1482,49 +1732,176 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		return nil, false
 	}
 	wholeItemRepair := bodyRepair || (hasPartOrder && allRepairs)
+	// 本次订单真正付了钱的品类。整机恢复只动这些件，没勾选的件保持原样：
+	// 官服按件收费（nc.jsonl 那次 21/4 只有一个条目），顺手修好未勾选的件
+	// 等于白送；而客户端只按勾选件报价，服务端多收又会让界面和实扣对不上。
+	selectedCats := map[int64]bool{}
+	for _, o := range orders {
+		if o.Cat != uint32(gearCatReel) {
+			selectedCats[int64(o.Cat)] = true
+		}
+	}
 	if hasPartOrder && allRepairs {
 		if isReel {
-			if _, ierr := srv.restoreReelInternalsInFields(cctx, row, fields); ierr != nil {
+			if _, ierr := srv.restoreReelInternalsInFields(cctx, row, fields, selectedCats); ierr != nil {
 				ctx.Log.Warn("工坊修理：轮内零件恢复失败", "guid", shortGUID(row.GUID), "err", ierr)
 				return nil, false
 			}
-			// 整机保养会恢复全部内件。本体耐久是内件的综合，收费取
-			// “零件总磨损”和“本体磨损”的较大值，不能重复相加。
 			bodyWear := math.Max(0, 1-row.Durability)
-			silver = int64(math.Round(math.Max(reelWearBefore, bodyWear) * 500))
+			if reelWearBefore > 0 || bodyWear > 0 {
+				didWork = true
+			}
+			// 费用就是上面循环里按**被勾选件**累加出来的那个数，与客户端界面
+			// 的 Σ(新件价 − 残值) 同源；恢复也只动被勾选的件（见 selectedCats），
+			// 没勾的件不会被顺手修好，不会白送、也不会出现"界面报 A、实扣 B"。
+			if silver <= 0 {
+				// 老档缺零件定义（repairPartsOf 收不到内件）时，退回按本体磨损
+				// 计价的兜底，避免整机保养变成免费。
+				silver = int64(math.Round(math.Max(reelWearBefore, bodyWear) * 500))
+			}
+			// 银币支付不扣金币部分，与官服一致（那一单新件含 5 金，实扣只有 30 银）。
 			gold = 0
 		}
 	} else if bodyRepair && isReel {
 		// 内部零件都满、只有本体掉耐久：只收本体这一格的钱。
 		bodyWear := math.Max(0, 1-row.Durability)
+		if bodyWear > 0 {
+			didWork = true
+		}
 		silver += int64(math.Round(bodyWear * 500))
 		gold = 0
 	}
 	costSilver, costGold := silver, gold
+	// 银币修理要走排队（官服口径：银币要等、金币即时）。开关关掉时保持
+	// "付钱立即修好"的原行为，用于出问题时秒级回滚。
+	//
+	// 提前算出来，是为了让下面"在办任务"的判定和后面的落库分支用同一个结论：
+	// 开关关掉后队列已经停用，就不该再拦着重放请求——否则回滚只回滚了"新订单"，
+	// 老订单照样把人拦在幂等分支里出不来。
+	//
+	// 注意费用已经算完、余额也已经校验过，所以 deferred 只决定"什么时候把结果
+	// 落地"，不影响收多少钱。
+	deferred := !useGold && srv.workshopSilverRepairOn()
+	// 已在办 = 这件物品已经排过银币修理队，还没到期。
+	//
+	// 必须挡在计价之后、扣费之前：客户端连发两次相同订单时（2026-11-11
+	// 15:26 实测，间隔 17ms），第一次入队但没改 item 行，第二次看到的仍是
+	// 磨损状态，价格照算照扣——不挡就会排两次队、扣两次钱，到期还只生效一次。
+	//
+	// 回的是**当前**物品树（还是磨损的），因为修理确实还没完成。客户端拿到
+	// 有效响应就不会弹「发生内部错误」，界面上仍然是"修理中"的状态。
+	if pending := srv.workshopPendingRepairJob(cctx, row.GUID); pending != nil && deferred {
+		remain := workshopPendingRemainingSeconds(pending)
+		ctx.Log.Info("工坊修理：已有在办任务，按幂等成功回当前状态",
+			"item", row.ItemID, "guid", shortGUID(row.GUID), "remain_s", remain)
+		if body, ok := srv.replayWorkshopItem(ctx, cctx, row); ok {
+			// 重复下单不能再扣钱，但也不能装作"刚刚修好了"：明确告诉玩家
+			// 这件东西已经在工坊里、还剩多久，免得他以为操作没生效又点一次。
+			ctx.AfterResponse(func() {
+				ctx.Sess.pushSystemChat(fmt.Sprintf("《%s》%s还在工坊排队，还需约 %s",
+					srv.lootItemName(cctx, row.ItemID),
+					workshopOrderVerb(hasRepair, hasPartOrder), workshopRemainText(remain)))
+			})
+			return body, true
+		}
+		return nil, false
+	}
+	// 无事可做 = 客户端在重放一条已经完成的修理（零件本来就是满的）。
+	// 这时价格算出来必然是 0，但这不是"零金额交易"，而是"已经修好了"。
+	// 必须幂等成功回当前物品树，不能拒绝——拒绝会落兜底链回空 args，
+	// 客户端当场弹「发生内部错误」（2026-11-11 15:26 实测）。
+	if !didWork && !unresolved {
+		ctx.Log.Info("工坊修理：零件已满，按幂等成功回当前状态",
+			"item", row.ItemID, "guid", shortGUID(row.GUID), "parts", len(orders))
+		if body, ok := srv.replayWorkshopItem(ctx, cctx, row); ok {
+			return body, true
+		}
+		return nil, false
+	}
 	if useGold {
 		if costGold <= 0 {
 			ctx.Log.Warn("工坊换件：金币价格为 0，拒绝零金额交易", "item", shortGUID(itemGUID))
 			return nil, false
 		}
 	} else if costSilver <= 0 {
-		ctx.Log.Warn("工坊换件：银币价格为 0，拒绝零金额交易", "item", shortGUID(itemGUID))
-		return nil, false
+		// 银币侧的 0 元有两种，必须分开：
+		//
+		//   - **纯修理**算出 0：磨损不足 1 个计费单位。`silver` 按
+		//     `round((1-耐久)*500)` 折，耐久 0.9992 的竿折出来就是 0。
+		//     这不是价格缺失，是"这活几乎不磨损"，客户端自己算的报价也是 0
+		//     （`f3=0`）。拒绝它就等于把"修几乎全新的装备"整条路砍掉，
+		//     客户端收到空 args 当场弹「发生内部错误」——2026-11-12 00:27 实测，
+		//     玩家修一根 0.9992 的竿就是这么报错的。放行，0 元成交。
+		//   - **换件**算出 0：新件在 item_price 里没有标价，属于价格表缺口。
+		//     这种必须继续拒绝，否则等于白送一件新件。
+		if didWork && !partSwapped {
+			ctx.Log.Info("工坊修理：磨损不足最小计费单位，按 0 银币成交",
+				"item", shortGUID(itemGUID), "parts", len(orders))
+		} else {
+			ctx.Log.Warn("工坊换件：银币价格为 0，拒绝零金额交易", "item", shortGUID(itemGUID))
+			return nil, false
+		}
 	}
 	if clientCost > 0 {
 		quotedCost := costSilver
 		if useGold {
 			quotedCost = costGold
 		}
-		if wholeItemRepair && isReel {
+		// 纯修理走"客户端报价不低于服务端"的宽松口径，换件必须严格对上。
+		//
+		// 原因：客户端给同型号部位报的价来自 21/2 里那条同型号工单的 f2，而我们
+		// 发的是**换件价**（`partAlternatives` 用 partPrice：竿坯 1200 来自
+		// partBasePrice[36]、齿轮 2496 来自 480×传动比），客户端再自己减掉旧件
+		// 折抵；我们按 `round(磨损×500)` 收。两个口径差几个数量级——
+		// 实测齿轮客户端报 2472 / 服务端收 24，竿坯客户端报 1200 / 服务端收 0。
+		// 严格比对必然失败 → return nil,false → 兜底空 args → 客户端弹
+		// 「发生内部错误」。修理一律按宽松口径放行不会让玩家少付：服务端价格
+		// 是权威，且它总是远低于客户端那个"以旧换新价"。
+		//
+		// 换件则相反：f2 就是换件价，客户端回填的应当与我们算的一分不差，
+		// 对不上就是价格表缺口，必须拒掉（否则等于白送一件新件）。
+		if (wholeItemRepair && isReel) || !partSwapped {
 			if !workshopQuoteCovers(clientCost, quotedCost) {
-				ctx.Log.Warn("工坊修理：客户端报价异常", "item", shortGUID(itemGUID),
+				ctx.Log.Warn("工坊修理：客户端报价低于服务端", "item", shortGUID(itemGUID),
 					"client", clientCost, "server", quotedCost, "gold", useGold)
 				return nil, false
 			}
 		} else if !workshopQuoteMatches(clientCost, quotedCost) {
-			ctx.Log.Warn("工坊换件：客户端报价异常", "item", shortGUID(itemGUID),
-				"client", clientCost, "server", quotedCost, "gold", useGold)
-			return nil, false
+			// 换件报价对不上有两种成因，处理方式不同：
+			//
+			//  1. 客户端报价**高于**我们算的、但没超过新件全价：它没有把
+			//     我们发的残值折抵算进去（或者这个品类的残值率还没对上）。
+			//     2026-11-12 03:28 实测：轮油 21/2 我们发 f3=19，客户端仍按
+			//     全价 50 报，严格比对失败 → 玩家点「更换」直接弹「发生内部
+			//     错误」。这种必须按**界面上的数字**收：收少了是白送，收多了
+			//     是界面与实扣不一致，拒绝则是报错，只有按界面收玩家看不出问题。
+			//  2. 客户端报价超过新件全价：只能是同一件被列了两次（去重只按
+			//     品类算一次），按去重后的价收，不能跟着翻倍。
+			//
+			// 低于服务端报价的仍然拒绝：那是压价，不是折抵口径差异。
+			fullCost := fullSilver
+			if useGold {
+				fullCost = fullGold
+			}
+			if clientCost < quotedCost {
+				ctx.Log.Warn("工坊换件：客户端报价低于服务端", "item", shortGUID(itemGUID),
+					"client", clientCost, "server", quotedCost, "gold", useGold)
+				return nil, false
+			}
+			if clientCost <= fullCost {
+				ctx.Log.Info("工坊换件：客户端未折抵残值，按界面报价收",
+					"item", shortGUID(itemGUID), "client", clientCost,
+					"server", quotedCost, "full", fullCost, "gold", useGold)
+				if useGold {
+					costGold = clientCost
+				} else {
+					costSilver = clientCost
+				}
+			} else {
+				ctx.Log.Warn("工坊换件：客户端报价超过新件全价，按去重后的价收",
+					"item", shortGUID(itemGUID), "client", clientCost,
+					"server", quotedCost, "full", fullCost, "gold", useGold)
+			}
 		}
 	}
 	p, perr := srv.DB.EnsureProfile(cctx, ctx.Sess.Userid)
@@ -1543,7 +1920,9 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		}
 	}
 	// 版本戳必须严格递增，否则客户端会忽略更新后的物品树，工作坊停在转圈状态。
-	bumpCreatedTicks(fields, row.WireClass)
+	// 走工坊序号发放而不是 bumpCreatedTicks：这一单随后还要发预览回包和 4/22，
+	// 三棵树的戳必须一段比一段大（见 stampWorkshopTree）。
+	bumpWorkshopCreated(fields, row.WireClass)
 	fj, jerr := FieldsToJSON(fields)
 	if jerr != nil {
 		return nil, false
@@ -1559,7 +1938,17 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	}
 	snapshot.FieldsJSON = fj
 	newDurability := row.Durability
-	if wholeItemRepair {
+	if bodyRepair || !isReel {
+		// 渔轮：只有**明确下单了本体**（21/4 里 cat=6）才把那一格补到 1.0。
+		// 官服按件收费之后，wholeItemRepair 只表示"这一单的条目全是同型号
+		// 修理"，不再等于"整机保养"：nc.jsonl 那单只列了齿轮，官服回包的
+		// 21/2 里轴承和摩擦片的 GUID 一个都没动。旧口径在这里把本体耐久
+		// 直接写成 1.0，等于玩家只付了齿轮的钱、却白拿了整机保养。
+		//
+		// 非渔轮（竿/工具）保持整机恢复：它们没有 `reelBodyDurabilityInFields`
+		// 那种"本体 = 内件聚合"的模型，本体耐久就是玩家背包里看到的那个数。
+		// 只按件修会出现"付了钱、界面一点没变"，比多恢复一档更伤。竿的
+		// 各部位官方样本我们也没有，等抓到再收窄。
 		newDurability = 1.0
 	}
 	var preparedPerf *store.ReelPerformance
@@ -1576,6 +1965,32 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		if perr != nil {
 			ctx.Log.Warn("工坊换件：轮子物理参数计算失败", "guid", shortGUID(row.GUID), "err", perr)
 			return nil, false
+		}
+	}
+	// 银币排队时的工时：官服按零件品类的**固定档位**，与磨损无关。
+	// nc.jsonl 同一单五件的 hpopgbjohpk.f3 分别是齿轮 2 / 轴承 36 / 摩擦片 24 /
+	// 线轴 36 / 轮油 18 —— 单位是**游戏内小时**，而回包的锁 RemainMin=120
+	// 正好等于齿轮那 2 游戏小时（120 游戏分钟）。
+	// 客户端界面上的「N 小时」读的也是这一格（见 partAlternatives 的 f3），
+	// 两处必须同源，否则玩家看到的小时数和实际等待时间对不上。
+	// 折成现实等待由 workshopRepairSeconds 负责：1 游戏小时 = 150 现实秒。
+	// 一次多件取最长的那一档：工坊是串行的，取短的会让界面显示"马上就好"。
+	jobHours := uint32(1)
+	if deferred {
+		jobHours = 0
+		for _, o := range orders {
+			if h := srv.workshopPartHours(int64(o.Cat)); h > jobHours {
+				jobHours = h
+			}
+		}
+		// 只按**订单里列出的件**取最长档，不再遍历全部内件。
+		//
+		// 官服工时是"这件活要多久"：nc.jsonl 那单只修齿轮，回包的锁就是
+		// RemainMin=120（2 游戏小时 = 齿轮档位）。旧口径在有同型号修理时会
+		// 把未勾选的轴承（36 游戏小时，折 90 现实分钟）一起算进来，
+		// 玩家只修个齿轮却要把轴承的工时也等满。
+		if jobHours == 0 {
+			jobHours = 1
 		}
 	}
 	tx, terr := beginEconomyTx(cctx, srv.DB)
@@ -1598,6 +2013,83 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		ctx.Log.Warn("工坊换件：扣费失败", "guid", shortGUID(row.GUID), "err", err)
 		return nil, false
 	}
+	if deferred {
+		// 银币排队：钱扣掉、结果写进任务表，**不动 item 行**。
+		// item 保持磨损态正是"还没修好"的证据，完工后由 workshopSettleRepairs
+		// 把快照落地。这样即使玩家中途下线/重启进程，工时也不会丢。
+		//
+		// 计时基准从现在开始：remaining_s 是"还需在线多少秒"，tick_ts 是上次
+		// 扣时的时间戳（下线后不再前进，所以离线不改 remaining_s）。
+		nowTS := float64(time.Now().Unix())
+		remainS := workshopRepairSeconds(jobHours)
+		job := store.WorkshopRepairJob{
+			GUID: row.GUID, UID: ctx.Sess.Userid,
+			DueTS:      nowTS + remainS,
+			RemainingS: remainS,
+			TickTS:     nowTS,
+			FieldsJSON: fj, Durability: newDurability,
+			SilverPaid: costSilver, Parts: len(seenOrderCat),
+			CreatedTS: nowTS,
+			// 工坊 id：在办期间物品树的时效对象要原样回显给客户端
+			// （f24.f0），客户端拿它查工坊显示名。
+			StoreID: storeID,
+		}
+		if err := store.UpsertWorkshopRepairJobTx(cctx, tx, job); err != nil {
+			ctx.Log.Warn("工坊修理：登记排队任务失败", "guid", shortGUID(row.GUID), "err", err)
+			return nil, false
+		}
+		if err := tx.Commit(); err != nil {
+			ctx.Log.Warn("工坊修理：事务提交失败", "guid", shortGUID(row.GUID), "err", err)
+			return nil, false
+		}
+		committed = true
+		ctx.Log.Info("21/4 工坊订单已排队（银币）", "item", row.ItemID,
+			"action", workshopOrderVerb(hasRepair, hasPartOrder),
+			"guid", shortGUID(row.GUID), "parts", len(orders),
+			"silver", costSilver, "hours", jobHours, "remain_s", int64(remainS))
+		// 入队后必须让在办任务缓存立刻失效：下面这棵树要带 f24（锁 + 倒计时），
+		// 吃到入队前那份空缓存就等于"下完单一点反应都没有"。
+		srv.invalidateWorkshopRepairLocks(ctx.Sess.Userid)
+		// 回当前（仍是磨损的）物品树：客户端据此显示"修理中"，也不会因为
+		// 拿到空包弹「发生内部错误」。
+		//
+		// **版本戳必须是 bump 后的新值。** 这棵树内容取的是 item 行（旧耐久），
+		// 但 csCreated 要用刚才 bump 进任务快照的那个值：客户端按版本戳决定要不要
+		// 采纳这次物品更新，戳不变就整包丢弃（f24 时效对象一起丢），表现就是
+		// "下完单毫无反应、退出重连才进维修中"。item 行本身不能动——保持磨损态
+		// 正是"还没修好"的证据——所以只把新戳投影到回包这棵树上。
+		var stamp *uint64
+		if si := fieldIdxByCS(row.WireClass, csCreated); si >= 0 && si < len(fields) {
+			stamp = fields[si].Num
+		}
+		out, terr := srv.ItemToTree(cctx, itemViewWithStamp(row, stamp))
+		if terr != nil {
+			return nil, false
+		}
+		// 回包按官服形状摘锁（push 用的 out 仍带锁），见 workshopOrderReplyLock。
+		bodyOut, berr := workshopOrderReplyBytes(ctx, out)
+		if !berr {
+			return nil, false
+		}
+		ctx.AfterResponse(func() {
+			// 4/22 要延迟发：贴着回包发会弹「发生内部错误」，见
+			// workshopOrderPushDelay 的实机对照。系统提示照常立刻发。
+			scheduleWorkshopItemPush(ctx.Sess, out)
+			// 让"在等"有回执：排队期间 item 行不动，界面上那件东西看起来跟
+			// 下单前一模一样（换件甚至看不出零件没换）。这条系统提示说明东西
+			// 在工坊、还要多久，避免玩家以为钱扣了没生效。
+			ctx.Sess.pushSystemChat(fmt.Sprintf("《%s》已送工坊%s，预计 %d 小时后完成",
+				srv.lootItemName(cctx, row.ItemID),
+				workshopOrderVerb(hasRepair, hasPartOrder), jobHours))
+		})
+		// 银币在同一事务里已经扣掉了（applyWalletTx），但客户端显示的余额是它自己
+		// 缓存的档案，不会因为这次扣款自动变。官服的做法是在 21/4 回包**之前**
+		// 先推一条 2/1 档案（nc.jsonl s2c#335 call=201，就在 21/4 的 #336 之前，
+		// f7 银币 5000→4970 正好是这一单的修理费）。这里照抄该顺序：先 2/1 后回包。
+		// 不推的表现是「钱像没扣一样」，要退出重登（重新拉一次档案）才看到扣款。
+		ctx.Sess.Push2_1()
+		return bodyOut, true
+	}
 	if err := srv.DB.UpdateItemFieldsTx(cctx, tx, row.GUID, fj, row.Qty,
 		newDurability, row.Workmanship, row.RigGUID); err != nil {
 		ctx.Log.Warn("工坊换件：物品写库失败", "guid", shortGUID(row.GUID), "err", err)
@@ -1609,27 +2101,44 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 			return nil, false
 		}
 	}
+	// 走即时路径（金币支付，或银币排队开关关掉）时必须清掉在办任务。
+	//
+	// 不清会出事：玩家先用银币排了队，又用金币立刻修好；order 到期时会把
+	// 旧的（付银币时算出的）快照写回去，把金币修好的结果覆盖成过时状态。
+	// 这条删除与本次写库同事务，任何一步失败一起回滚。
+	if err := store.DeleteWorkshopRepairJobTx(cctx, tx, row.GUID); err != nil {
+		ctx.Log.Warn("工坊修理：清理在办任务失败", "guid", shortGUID(row.GUID), "err", err)
+		return nil, false
+	}
 	if err := tx.Commit(); err != nil {
 		ctx.Log.Warn("工坊换件：事务提交失败", "guid", shortGUID(row.GUID), "err", err)
 		return nil, false
 	}
 	committed = true
+	// 即时修好就必须立刻摘锁：金币修理或关掉排队开关都走这条路，
+	// 不失效缓存的话，下面这棵"已经修好"的树还会带着 f24，客户端继续
+	// 把它画成修理中（而且 4/22 推送也带着）。
+	srv.invalidateWorkshopRepairLocks(ctx.Sess.Userid)
 	row.FieldsJSON = fj
 	row.Durability = newDurability
 	out, terr := srv.ItemToTree(cctx, row)
 	if terr != nil {
 		return nil, false
 	}
-	bodyOut, berr := proto.EncodeValue(out, ctx.Sess.Table())
-	if berr != nil {
+	bodyOut, berr := workshopOrderReplyBytes(ctx, out)
+	if !berr {
 		return nil, false
 	}
-	// 官方顺序是先回 21/3，再用 4/22 刷新客户端物品缓存。
+	// 官方顺序是先回 21/4，再用 4/22 刷新客户端物品缓存；这条 4/22 必须延后发，
+	// 贴着回包发客户端当场弹「发生内部错误」（见 workshopOrderPushDelay）。
 	ctx.AfterResponse(func() {
-		ctx.Sess.Push(4, 22, proto.Args(proto.S("61"), out))
+		scheduleWorkshopItemPush(ctx.Sess, out)
 	})
-	ctx.Log.Info("21/3 工坊换件完成", "item", row.ItemID, "guid", shortGUID(row.GUID),
+	ctx.Log.Info("21/4 工坊换件完成", "item", row.ItemID, "guid", shortGUID(row.GUID),
 		"parts", len(orders), "silver", costSilver, "gold", costGold)
+	// 即时路径（金币修理/换件）也扣了钱，同样要在回包前推一次档案刷新余额；
+	// 理由与银币排队分支相同（官服 2/1 先于 21/4 回包）。
+	ctx.Sess.Push2_1()
 	return bodyOut, true
 }
 
@@ -1709,7 +2218,7 @@ func hWorkshopRepair(useGold bool) Handler {
 			if ferr != nil {
 				return nil, false
 			}
-			changed, ierr := srv.restoreReelInternalsInFields(cctx, row, fields)
+			changed, ierr := srv.restoreReelInternalsInFields(cctx, row, fields, nil)
 			if ierr != nil {
 				ctx.Log.Warn("修理：轮内零件恢复失败，本次修理未生效", "guid", shortGUID(guid), "err", ierr)
 				return nil, false

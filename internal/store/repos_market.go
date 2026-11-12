@@ -291,6 +291,176 @@ func (d *DB) SetItemDurability(ctx context.Context, guid string, value float64) 
 	return err
 }
 
+// ---- 工坊修理排队（银币修理要等，金币即时） ----
+
+// WorkshopRepairJob 是"银币修理进行中"的一件在办任务。
+//
+// 只保存剩余工时尚和修理完成后的快照：完工时把 FieldsJSON/Durability 写回 item
+// 行即可，不重放计价逻辑（钱在入队时就扣过了）。
+//
+// 工时按**在线时长**计（官服口径：下线倒计时冻结）：
+//   - RemainingS 是唯一判定依据，只有玩家在线时才被 TickWorkshopRepairJobs 扣减；
+//   - TickTS 是上一次扣时的 unix 秒，下线后不再前进，下次登录会先重置再结算；
+//   - DueTS 只是"假设一直在线"的展示投影（= TickTS + RemainingS），不要拿它判定。
+type WorkshopRepairJob struct {
+	GUID       string
+	UID        int64
+	DueTS      float64
+	RemainingS float64
+	TickTS     float64
+	FieldsJSON string
+	Durability float64
+	SilverPaid int64
+	Parts      int
+	CreatedTS  float64
+	// StoreID 是排队时用的工坊 id（21/3 请求的 args[0]，例如 "workshop_01"）。
+	// 在办期间物品树的时效对象要把它原样回显给客户端（见
+	// gameserver/workshop_repair_lock.go），所以必须落库而不是现猜。
+	StoreID string
+}
+
+// workshopJobCols 是 WorkshopRepairJob 的固定列序，读写两处必须一致。
+const workshopJobCols = `guid, uid, due_ts, remaining_s, tick_ts, fields_json,
+	durability, silver_paid, parts, created_ts, store_id`
+
+// workshopJobScanner 抽出 *sql.Row / *sql.Rows 共有的 Scan，省一份重复的列序。
+type workshopJobScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanWorkshopRepairJob(sc workshopJobScanner) (*WorkshopRepairJob, error) {
+	j := &WorkshopRepairJob{}
+	if err := sc.Scan(&j.GUID, &j.UID, &j.DueTS, &j.RemainingS, &j.TickTS,
+		&j.FieldsJSON, &j.Durability, &j.SilverPaid, &j.Parts, &j.CreatedTS,
+		&j.StoreID); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+// UpsertWorkshopRepairJobTx 在事务内登记（或覆盖）一件在办修理。
+//
+// 用 UPSERT 而不是 INSERT：客户端会连发两次相同 21/3（同 GUID 同件，间隔 17ms），
+// 两次都必须落在同一行上，否则会排两次队、第二次覆盖第一次的到期时间。
+func UpsertWorkshopRepairJobTx(ctx context.Context, tx *sql.Tx, j WorkshopRepairJob) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO workshop_repair_job(guid, uid, due_ts, remaining_s, tick_ts,
+		                                fields_json, durability, silver_paid, parts, created_ts,
+		                                store_id)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(guid) DO UPDATE SET
+			due_ts=excluded.due_ts, remaining_s=excluded.remaining_s,
+			tick_ts=excluded.tick_ts, fields_json=excluded.fields_json,
+			durability=excluded.durability, silver_paid=excluded.silver_paid,
+			parts=excluded.parts, created_ts=excluded.created_ts,
+			store_id=excluded.store_id`,
+		j.GUID, j.UID, j.DueTS, j.RemainingS, j.TickTS, j.FieldsJSON, j.Durability,
+		j.SilverPaid, j.Parts, j.CreatedTS, j.StoreID)
+	return err
+}
+
+// WorkshopRepairJobFor 读取某件物品在办的任务；没有任务返回 (nil, nil)。
+func (d *DB) WorkshopRepairJobFor(ctx context.Context, guid string) (*WorkshopRepairJob, error) {
+	row := d.SQL.QueryRowContext(ctx,
+		`SELECT `+workshopJobCols+` FROM workshop_repair_job WHERE guid=?`, guid)
+	j, err := scanWorkshopRepairJob(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return j, nil
+}
+
+// PendingWorkshopRepairJobs 返回该玩家**仍在等**（remaining_s>0）的在办任务，
+// 按物品 guid 索引。
+//
+// 为什么不复用 DueWorkshopRepairJobs：那个是"到期该落地"的判定入口，这里要的
+// 正好相反——只有还在等的物品才该画锁和倒计时。已完工但尚未结算（remaining_s
+// 归零、快照还没写回）的行故意不返回：倒计时归零那一刻锁就该消失，之后再显示
+// 一个 0:00 的"修理中"是错的表现。
+//
+// 一次查询取该玩家的全部任务，供物品树组装做 map 命中，避免每件物品各查一次。
+func (d *DB) PendingWorkshopRepairJobs(ctx context.Context, uid int64) (map[string]*WorkshopRepairJob, error) {
+	rows, err := d.SQL.QueryContext(ctx,
+		`SELECT `+workshopJobCols+` FROM workshop_repair_job
+		  WHERE uid=? AND remaining_s>0`, uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]*WorkshopRepairJob)
+	for rows.Next() {
+		j, serr := scanWorkshopRepairJob(rows)
+		if serr != nil {
+			return nil, serr
+		}
+		out[j.GUID] = j
+	}
+	return out, rows.Err()
+}
+
+// DueWorkshopRepairJobs 返回该玩家所有已完工（remaining_s<=0）的在办任务。
+func (d *DB) DueWorkshopRepairJobs(ctx context.Context, uid int64) ([]WorkshopRepairJob, error) {
+	rows, err := d.SQL.QueryContext(ctx,
+		`SELECT `+workshopJobCols+` FROM workshop_repair_job
+		  WHERE uid=? AND remaining_s<=0 ORDER BY created_ts`, uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []WorkshopRepairJob
+	for rows.Next() {
+		j, serr := scanWorkshopRepairJob(rows)
+		if serr != nil {
+			return nil, serr
+		}
+		out = append(out, *j)
+	}
+	return out, rows.Err()
+}
+
+// TickWorkshopRepairJobs 给该玩家的在办任务扣一次**在线**工时。
+//
+// 只在玩家在线时调用（后台扫描按在线名单逐个来、打开工坊时也会补一次）。
+// 扣减量 = now - tick_ts，所以调用方必须保证"离线期间不调"——一调就会把
+// 离线时段算成在线。玩家上线时先用 ResetWorkshopRepairTick 把 tick_ts 拨到
+// 当前时刻，才不会把下线那段补扣进去。
+//
+// 一条 UPDATE 搞定所有行：SQLite 的 SET 右侧都取原值，所以 remaining_s 和
+// due_ts 用同一个 delta 计算不会互相污染。
+func (d *DB) TickWorkshopRepairJobs(ctx context.Context, uid int64, now float64) error {
+	_, err := d.SQL.ExecContext(ctx, `
+		UPDATE workshop_repair_job
+		   SET remaining_s = MAX(0, remaining_s -
+		         CASE WHEN tick_ts>0 THEN MAX(0, ?-tick_ts) ELSE 0 END),
+		       due_ts = ? + MAX(0, remaining_s -
+		         CASE WHEN tick_ts>0 THEN MAX(0, ?-tick_ts) ELSE 0 END),
+		       tick_ts = ?
+		 WHERE uid=? AND remaining_s>0`,
+		now, now, now, now, uid)
+	return err
+}
+
+// ResetWorkshopRepairTick 把该玩家在办任务的计时基准拨到 now，**不扣任何时间**。
+//
+// 登录时调用：玩家离线那段必须冻结，所以不能按 now-tick_ts 补扣，只能重置。
+// 代价是"掉线到重登之间最后不到 5 秒的在线时长"会丢，这是冻结语义的必然，
+// 也正好是官服的表现（下线即停表）。
+func (d *DB) ResetWorkshopRepairTick(ctx context.Context, uid int64, now float64) error {
+	_, err := d.SQL.ExecContext(ctx, `
+		UPDATE workshop_repair_job SET tick_ts=?, due_ts=?+remaining_s
+		 WHERE uid=?`, now, now, uid)
+	return err
+}
+
+// DeleteWorkshopRepairJobTx 在事务内删除任务（应用完快照后调用）。
+func DeleteWorkshopRepairJobTx(ctx context.Context, tx *sql.Tx, guid string) error {
+	_, err := tx.ExecContext(ctx, `DELETE FROM workshop_repair_job WHERE guid=?`, guid)
+	return err
+}
+
 // ---- 命名鱼 ----
 
 // NamedFishIsNamed 报告该鱼是否已被命名。

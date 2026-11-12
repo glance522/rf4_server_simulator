@@ -11,6 +11,57 @@ import (
 	"rf4server/internal/wiregen"
 )
 
+// expectProfilePush 校验下单后紧跟的第一条推送是 2/1 档案（刷新余额）。
+//
+// 工坊 21/4 扣完钱要先推一次档案，再回包，最后才是延迟发的 4/22。官服同一单的
+// 顺序是 nc.jsonl s2c#335 2/1（银币 5000→4970，正是这单修理费）→ #336 21/4← →
+// #337 4/22。少了这条，客户端显示的余额不会变，玩家要退出重登才看到扣款。
+// 这里顺带把「余额刷新必须存在」钉成契约，别在重构时漏掉。
+func expectProfilePush(t *testing.T, env *proto.Envelope) {
+	t.Helper()
+	if env == nil {
+		t.Fatal("下单后应有一条 2/1 档案推送，实际没有")
+	}
+	if env.Main != 2 || env.Sub != 1 {
+		t.Fatalf("下单后第一条推送应是 2/1 档案（刷新余额），实得 %d/%d", env.Main, env.Sub)
+	}
+}
+
+// assertRefreshMatchesReply 比对 4/22 推送与回包的物品树。
+//
+// 除版本戳（csCreated）之外必须一模一样，而且推送的戳必须**更大**：客户端按这一格
+// 决定要不要采纳一次物品刷新，戳没变大就整包丢弃（连 f24 那把锁一起丢），面板会
+// 一直停在"修好了"，要退出重连才变"修理中"。推送是延迟发的，发之前会把戳抬到
+// 工坊链路的下一个号，见 stampWorkshopTree。官服同一单的 21/4 回包（s2c#336）与
+// 4/22（s2c#337）也只差这一格。
+func assertRefreshMatchesReply(t *testing.T, srv *Server, item, reply *proto.Value,
+	replyBody []byte, label string) {
+	t.Helper()
+	if item == nil || item.Kind != proto.KindObj {
+		t.Fatalf("%s: 推送里没有物品树", label)
+	}
+	if reply == nil || reply.Kind != proto.KindObj {
+		t.Fatalf("%s: 回包不是物品树", label)
+	}
+	pi := fieldIdxByCS(item.Class, csCreated)
+	ri := fieldIdxByCS(reply.Class, csCreated)
+	if pi < 0 || ri < 0 {
+		t.Fatalf("%s: 物品树没有版本戳 %s", label, csCreated)
+	}
+	if u64Of(item.Fields[pi].Num) <= u64Of(reply.Fields[ri].Num) {
+		t.Fatalf("%s: 4/22 的版本戳必须比回包更新，否则客户端按 csCreated 丢弃这次刷新",
+			label)
+	}
+	item.Fields[pi].Num = reply.Fields[ri].Num
+	got, err := proto.EncodeValue(item, srv.Table())
+	if err != nil {
+		t.Fatalf("%s: 编码推送树失败: %v", label, err)
+	}
+	if string(got) != string(replyBody) {
+		t.Fatalf("%s: 除版本戳之外，4/22 推送必须与回包一致", label)
+	}
+}
+
 func snapshotFields(t *testing.T, raw string) []proto.Field {
 	t.Helper()
 	fields, err := FieldsFromJSON(raw)
@@ -123,6 +174,10 @@ func TestReelPartSnapshotWorkshop(t *testing.T) {
 			t.Parallel()
 			srv, db := newStaticRigTestServer(t)
 			defer db.Close()
+			// 这组用例守的是"零件树快照装配"，不是排队时序：工坊换件必须当场
+			// 落库才谈得上比对响应/推送与库内状态，所以显式打到即时路径。
+			// 银币排队的语义由 workshop_repair_queue_test.go 单独覆盖。
+			setWorkshopSilverRepairDelay(t, srv, db, false)
 			ctx := t.Context()
 			const uid = int64(1000001)
 			if err := srv.EnsurePlayer(ctx, uid); err != nil {
@@ -183,7 +238,9 @@ func TestReelPartSnapshotWorkshop(t *testing.T) {
 				if err != nil || partDef == nil {
 					t.Fatalf("读取零件定义失败: %v", err)
 				}
-				wantSilver, _ := srv.partPrice(ctx, id, partDef.Category)
+				baseSilver, _ := srv.partPrice(ctx, id, partDef.Category)
+				residual, _ := srv.workshopPartResidual(partDef.Category, baseSilver, 0)
+				wantSilver := baseSilver - residual
 				if balanceBefore.Silver-balanceAfter.Silver != wantSilver {
 					t.Fatalf("工坊扣费=%d，期望服务端价格=%d",
 						balanceBefore.Silver-balanceAfter.Silver, wantSilver)
@@ -203,6 +260,7 @@ func TestReelPartSnapshotWorkshop(t *testing.T) {
 				for _, fn := range c.afterResponse {
 					fn()
 				}
+				expectProfilePush(t, awaitPushEnvelope(t, peer))
 				push := awaitPushEnvelope(t, peer)
 				if push.Main != 4 || push.Sub != 22 {
 					t.Fatalf("wrong push %d/%d", push.Main, push.Sub)
@@ -211,13 +269,8 @@ func TestReelPartSnapshotWorkshop(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				pushed, err := proto.EncodeValue(v.ArgItem(0), srv.Table())
-				if err != nil {
-					t.Fatal(err)
-				}
-				if string(pushed) != string(body) {
-					t.Fatal("AfterResponse differs from response")
-				}
+				assertRefreshMatchesReply(t, srv, v.ArgItem(0), reply, body,
+					"AfterResponse differs from response")
 				def, defErr := db.GetItemDefByItemID(ctx, id)
 				if defErr != nil || def == nil {
 					t.Fatalf("gear definition: %v", defErr)
@@ -228,7 +281,9 @@ func TestReelPartSnapshotWorkshop(t *testing.T) {
 				}
 				previousRatio = ratio
 			}
-			// Same-model repair is a full reel service, not a single-part patch.
+			// 同型号修理也是**按件**：21/4 只处理 args(503) 里列出的件。
+			// nc.jsonl 那一单只列了齿轮，官服回包的 21/2 里轴承/摩擦片的 GUID
+			// 一个都没动。旧口径在这里当成"整机大保养"，等于付一件的钱修整机。
 			fresh := mustItem(t, db, reel.GUID)
 			fs := snapshotFields(t, fresh.FieldsJSON)
 			gear, _ := snapshotPart(t, srv, fs, 52)
@@ -263,27 +318,29 @@ func TestReelPartSnapshotWorkshop(t *testing.T) {
 			if repairedDef.ItemID != "rgm_ef_spark10021" {
 				t.Fatal("gear repair response model")
 			}
+			// 摩擦片没下单，还是 0.4 那一档，所以根受力也只能停在 0.4 倍额定值上。
 			fresh = assertReelSnapshot(t, srv, reel.GUID, "rgm_ef_spark10021",
-				itemDefF32(washerDef, gearAttrDragMax)*fresh.Workmanship)
-			if fresh.Durability != 1 {
-				t.Fatalf("same-model repair should restore body durability, got %v", fresh.Durability)
+				itemDefF32(washerDef, gearAttrDragMax)*fresh.Workmanship*.4)
+			if math.Abs(fresh.Durability-.6) > 1e-6 {
+				t.Fatalf("只换齿轮时本体耐久应保持 0.6，实得 %v", fresh.Durability)
 			}
 			fs = snapshotFields(t, fresh.FieldsJSON)
 			gear, _ = snapshotPart(t, srv, fs, 52)
 			if snapshotFloat(gear.Fields, gear.Class, csDurability) != 1 {
 				t.Fatal("gear not repaired")
 			}
+			// 没下单的件必须原样留着：官服按件收费，顺手刷满就是白送。
 			bearing, _ = snapshotPart(t, srv, fs, 7)
-			if snapshotFloat(bearing.Fields, bearing.Class, csDurability) != 1 {
-				t.Fatal("bearing should be repaired with the reel")
+			if got := snapshotFloat(bearing.Fields, bearing.Class, csDurability); math.Abs(got-.4) > 1e-6 {
+				t.Fatalf("没下单的轴承应保持 0.4，实得 %v", got)
 			}
 			washer, washerDef = snapshotPart(t, srv, fs, 9)
-			if snapshotFloat(washer.Fields, washer.Class, csDurability) != 1 {
-				t.Fatal("friction washer durability should be restored with the reel")
+			if got := snapshotFloat(washer.Fields, washer.Class, csDurability); math.Abs(got-.4) > 1e-6 {
+				t.Fatalf("没下单的摩擦片应保持 0.4，实得 %v", got)
 			}
 			if current, present, _ := frictionWasherDrag(washer); !present ||
-				math.Abs(current-itemDefF32(washerDef, gearAttrDragMax)*fresh.Workmanship) > 1e-6 {
-				t.Fatalf("friction washer drag should be restored, got %v", current)
+				math.Abs(current-itemDefF32(washerDef, gearAttrDragMax)*fresh.Workmanship*.4) > 1e-6 {
+				t.Fatalf("没下单的摩擦片拖曳应停在 0.4 档，实得 %v", current)
 			}
 			if err := db.SetItemDurability(ctx, reel.GUID, .6); err != nil {
 				t.Fatal(err)
@@ -399,6 +456,9 @@ func TestReelPartSnapshotBatchAndUnrelatedParts(t *testing.T) {
 			t.Parallel()
 			srv, db := newStaticRigTestServer(t)
 			defer db.Close()
+			// 与 TestReelPartSnapshotWorkshop 同理：这里比对的是多件同批换装后
+			// 库内零件树，必须当场落库，所以显式走即时路径。
+			setWorkshopSilverRepairDelay(t, srv, db, false)
 			ctx := t.Context()
 			const uid = int64(1000001)
 			if err := srv.EnsurePlayer(ctx, uid); err != nil {
@@ -471,6 +531,8 @@ func TestReelPartSnapshotBatchAndUnrelatedParts(t *testing.T) {
 			if _, ok := hWorkshopOrder(c); !ok {
 				t.Fatal("gear-only order failed")
 			}
+			// 这一单也扣了钱，同样会先推一次 2/1；读掉它，后面的批量单才是干净的序列。
+			expectProfilePush(t, awaitPushEnvelope(t, peer))
 			checkProtected()
 			assertReelSnapshot(t, srv, reel.GUID, "rgm_zmn_jet_jsg-r", drag)
 			// The protocol accepts multiple part orders in the same request.
@@ -517,21 +579,18 @@ func TestReelPartSnapshotBatchAndUnrelatedParts(t *testing.T) {
 				t.Fatal("batch refresh missing")
 			}
 			c.afterResponse[0]()
+			// 批量单自己的 2/1，之后才是 4/22。
+			expectProfilePush(t, awaitPushEnvelope(t, peer))
 			push := awaitPushEnvelope(t, peer)
 			if push.Main != 4 || push.Sub != 22 {
-				t.Fatal("wrong refresh command")
+				t.Fatalf("wrong refresh command: %d/%d", push.Main, push.Sub)
 			}
 			value, _, err := proto.DecodeValue(push.Body, 0, srv.Table())
 			if err != nil {
 				t.Fatal(err)
 			}
-			pushed, err := proto.EncodeValue(value.ArgItem(0), srv.Table())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(pushed) != string(body) {
-				t.Fatal("batch refresh differs from response")
-			}
+			assertRefreshMatchesReply(t, srv, value.ArgItem(0), reply, body,
+				"batch refresh differs from response")
 			// Even after building and sending a projected tree, the persistent child state remains untouched.
 			checkProtected()
 		})
@@ -545,6 +604,8 @@ func TestReelZeroDragRootPaths(t *testing.T) {
 			t.Parallel()
 			srv, db := newStaticRigTestServer(t)
 			defer db.Close()
+			// workshop 分支要比对换件后库内根字段，必须当场落库 → 即时路径。
+			setWorkshopSilverRepairDelay(t, srv, db, false)
 			ctx := t.Context()
 			const uid = int64(1000001)
 			if err := srv.EnsurePlayer(ctx, uid); err != nil {

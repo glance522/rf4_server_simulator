@@ -69,8 +69,14 @@ func TestWorkshopRepairsReelBodyWhenAllPartsLookFull(t *testing.T) {
 		}
 		break
 	}
-	if bodyQuote != 500 {
-		t.Fatalf("满磨损本体修理报价应为 500 银，实得 %d", bodyQuote)
+	// 官服口径：21/2 的 hlopebmchhp.f3 是**旧件残值**，不是修理费。
+	// 本体满磨损时这一格就是"本体标价 × 残值率"，客户端拿它去减新件价
+	// 得到下单报价。
+	bodyPrice, _ := srv.partPrice(t.Context(), reel.ItemID, gearCatReel)
+	wantResidual, _ := srv.workshopPartResidual(gearCatReel, bodyPrice, 0)
+	if bodyQuote != wantResidual {
+		t.Fatalf("21/2 本体报价应为旧件残值 %d（本体标价 %d），实得 %d",
+			wantResidual, bodyPrice, bodyQuote)
 	}
 
 	c := &Ctx{
@@ -80,6 +86,11 @@ func TestWorkshopRepairsReelBodyWhenAllPartsLookFull(t *testing.T) {
 	}
 	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
 		t.Fatal("本体修理订单应成功")
+	}
+	// 银币修理要等：到期结算后本体才回到满耐久。
+	expireWorkshopJobs(t, db, uid)
+	if settled := settleWorkshopForTest(t, srv, uid); len(settled) != 1 {
+		t.Fatalf("到期应结算 1 件，实际 %v", settled)
 	}
 	fresh := mustItem(t, db, reel.GUID)
 	if fresh.Durability != 1 {

@@ -343,6 +343,12 @@ func (s *Server) ItemToTree(ctx context.Context, it *store.Item) (*proto.Value, 
 	// 损坏态投影：耐久耗尽的装备点亮客户端红框/折断渲染（只动 wire，不落库）。
 	// 必须放在 rebuildRod 之后——竿的 hgaijieklek 会按定义基值重建，之前写入会被抹掉。
 	applyBrokenItemState(class, obj, it.Durability)
+	// 工坊在办修理：填 f24 时效对象，客户端据此进 kItemState_Repairing
+	// （背包里带锁置灰、点不动，工坊面板显示剩余时间）。只动 wire 不落库，
+	// 完工后任务行一删，下一次下发自然就没有锁了。
+	if lock := s.workshopRepairLockFor(ctx, it); lock != nil {
+		applyWorkshopRepairLock(class, obj, lock)
+	}
 	return obj, nil
 }
 

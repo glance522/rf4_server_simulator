@@ -1,0 +1,15 @@
+-- 记下玩家是在哪家工坊排的队（我方独占号段 9100009）。
+--
+-- 为什么需要：银币修理在办期间，物品树的 f24（wire 类 lcjcffibmbi，DTO
+-- jgjlgegndbk）要原样回显工坊 id。官服实测值（2026-11-11 20:10 抓包）：
+--
+--      f24 = lcjcffibmbi{ f0="workshop_01", f1=1, f2=597, f3=120 }
+--
+-- 客户端判定见 knmjphiefdm.falmopiaoca：物品的时效对象 != null 且类型位 == 1
+-- 才进 kItemState_Repairing（"在工作坊里 X 天后修理完"，背包里带锁置灰）。
+-- f0 是这家工坊的 id，客户端拿它去查工坊显示名；不存就只能猜一个写死，
+-- 玩家在 workshop_02 排的队会显示成 workshop_01，或者干脆查不到。
+--
+-- 默认空串：迁移前已存在的任务行没有这个信息（当时也没发给客户端），
+-- 读取侧对空串照旧回显，不额外编造。
+ALTER TABLE workshop_repair_job ADD COLUMN store_id TEXT NOT NULL DEFAULT '';

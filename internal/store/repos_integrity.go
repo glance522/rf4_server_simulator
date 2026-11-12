@@ -27,6 +27,9 @@ var PlayerTables = []string{
 	// 窝料账本随玩家投放/咬口/衰减变化，必须进玩家存档与备份；
 	// groundbait_recipe 记的是每袋自制窝料实例的用料，丢了就等于把配方忘了。
 	"groundbait_deposit", "groundbait_clock", "groundbait_recipe", "fish_hunt_state",
+	// workshop_repair_job 记的是"已经付过银币、还没到期的修理"，里面存着修好后的
+	// 字段快照。漏登记会让玩家库拆分/备份丢任务行：钱已经扣了，东西永远修不好。
+	"workshop_repair_job",
 	// 配方模板是玩家在制作页自建的模板，随玩家操作增删；不进玩家存档
 	// 就等于每次重登都把玩家保存的模板丢掉（9/5 列表因此恒空）。
 	"craft_template",
