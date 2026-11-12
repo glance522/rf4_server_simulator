@@ -274,6 +274,8 @@ func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weig
 	if s.DB == nil {
 		return nil, nil
 	}
+	// fish_bait_strict_recipe=1 时只认食谱（fish_bait_pref），忽略实战样本表。
+	strictRecipe := s.tunableF("fish_bait_strict_recipe", 0) > 0
 	c := rollContext(contexts)
 	ctx := s.dbCtx()
 	var baits []ruleBait
@@ -356,7 +358,7 @@ func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weig
 			}
 			score := 0.0
 			variation := fishVariation(fmt.Sprintf("%s/%s/%s/%d", loc, key, b.id, period))
-			if allowed || evidence[j][key] > 0 || localEvidence[j][key] {
+			if allowed || (!strictRecipe && (evidence[j][key] > 0 || localEvidence[j][key])) {
 				preferred++
 				score = 1.0 + 0.5*variation
 			} else if b.legalAlternative(r) {

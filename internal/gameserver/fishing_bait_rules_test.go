@@ -131,6 +131,42 @@ func TestFishBaitSwitchFiltersAndRestoresLegacy(t *testing.T) {
 	}
 }
 
+// TestFishBaitStrictRecipeIgnoresEvidence 验证 fish_bait_strict_recipe 开关：
+// 关闭时实战样本可补充食谱，打开后只认 fish_bait_pref 里的组合。
+// 用拟饵（cat 17）做样本，因为天然饵还会走 legalAlternative 的低权重杂口分支。
+func TestFishBaitStrictRecipeIgnoresEvidence(t *testing.T) {
+	s, db := seedBaitRuleTest(t)
+	if err := db.TunableSet(context.Background(), "bait_pref_scale", "0", "test"); err != nil {
+		t.Fatal(err)
+	}
+	setBaitRuleSwitch(t, s, "1")
+	if _, err := db.SQL.Exec(`INSERT INTO companion_bait_fish(bait_id,fish_key,tier,evidence) VALUES('rule_lure','frog',1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	// 默认关闭：样本补充生效。
+	if f := s.rollFish("level_900_rules", "rule_lure"); f == nil || f.Species != "frog" {
+		t.Fatalf("evidence ignored while strict recipe is off: %+v", f)
+	}
+	if err := db.TunableSet(context.Background(), "fish_bait_strict_recipe", "1", "test"); err != nil {
+		t.Fatal(err)
+	}
+	s.tunMu.Lock()
+	s.tunAt = time.Time{}
+	s.tunMu.Unlock()
+	// 打开后：样本不再补充，食谱外的饵被排除。
+	for range 16 {
+		if f := s.rollFish("level_900_rules", "rule_lure"); f != nil {
+			t.Fatalf("strict recipe accepted evidence bait: %s", f.Species)
+		}
+	}
+	// 食谱内的饵不受影响。
+	for range 16 {
+		if f := s.rollFish("level_900_rules", "rule_worm"); f == nil || (f.Species != "c.roach" && f.Species != "frog") {
+			t.Fatalf("strict recipe broke recipe bait: %+v", f)
+		}
+	}
+}
+
 func TestFishBaitNoCandidateTimerAndHotReload(t *testing.T) {
 	s, db := seedBaitRuleTest(t)
 	// 先读入旧缓存，再走管理指令刷新，验证真实的热更新路径。
