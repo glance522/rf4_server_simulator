@@ -173,7 +173,18 @@ func TestWorkshopSameModelRepairRestoresItemDurability(t *testing.T) {
 	}
 }
 
-func TestWorkshopOrderRejectsLowClientQuote(t *testing.T) {
+// TestWorkshopOrderChargesLowClientQuote 记录 2026-11-12 的结算口径变更：
+// **界面报价就是结算价，偏低不再拒单**。
+//
+// 以前这里断言"1 银币伪造报价应被拒绝"，那套校验正是玩家反复弹
+// 「发生内部错误」的根源——客户端有它自己的价格表（`location_index` /
+// 按部位的 `repair_price_multiplier`），我们算的价天然跟它对不上，
+// 一对不上就拒单。官服的做法是按客户端报的价收（nc.jsonl 那单 30 = 30）。
+//
+// 代价是改过的客户端可以少付；这一条是明确接受的取舍，理由与完整规则见
+// econ_market.go 里 hWorkshopOrder 的结算段注释。要恢复拒单，得先把配件价
+// 校准到官方口径。
+func TestWorkshopOrderChargesLowClientQuote(t *testing.T) {
 	srv, db := newStaticRigTestServer(t)
 	rod, partID := seedWornWorkshopRod(t, srv, db, .8, .5)
 	ctx := t.Context()
@@ -190,24 +201,26 @@ func TestWorkshopOrderRejectsLowClientQuote(t *testing.T) {
 		Tree: snapshotWorkshopRequestPart(rod.GUID, 4, partID, 1),
 		Log:  logging.Discard(),
 	}
-	if _, ok := hWorkshopOrder(c); ok {
-		t.Fatal("1 银币伪造报价应被拒绝")
+	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
+		t.Fatal("低报价不再拒单：拒单在客户端就是「发生内部错误」")
 	}
 	profile, err := db.GetProfile(ctx, uid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if profile.Silver != 1000 {
-		t.Fatalf("报价被拒绝后余额应保持 1000，实得 %d", profile.Silver)
+	if got := int64(1000) - profile.Silver; got != 1 {
+		t.Fatalf("应按界面报价扣 1，实扣 %d", got)
 	}
 	fresh := mustItem(t, db, rod.GUID)
-	if fresh.Durability != .5 {
-		t.Fatalf("报价被拒绝后本体耐久应保持 0.5，实得 %v", fresh.Durability)
-	}
+	// 1 银币也是成交：件必须真的修好，否则就是"扣了钱没修"。
+	// 银币修理要排队，先让任务到期再结算。
+	expireWorkshopJobs(t, db, uid)
+	settleWorkshopForTest(t, srv, uid)
+	fresh = mustItem(t, db, rod.GUID)
 	fields := snapshotFields(t, fresh.FieldsJSON)
 	part, _ := snapshotPart(t, srv, fields, 4)
-	if got := snapshotFloat(part.Fields, part.Class, csDurability); math.Abs(got-.8) > 1e-6 {
-		t.Fatalf("报价被拒绝后竿柄耐久应保持 0.8，实得 %v", got)
+	if got := snapshotFloat(part.Fields, part.Class, csDurability); math.Abs(got-1) > 1e-6 {
+		t.Fatalf("成交后竿柄耐久应为 1，实得 %v", got)
 	}
 }
 
@@ -598,7 +611,7 @@ func TestWorkshopReelRepairAcceptsAggregatedClientQuote(t *testing.T) {
 	}
 }
 
-func TestWorkshopReelRepairRejectsLowQuote(t *testing.T) {
+func TestWorkshopReelRepairChargesLowQuote(t *testing.T) {
 	srv, db := newStaticRigTestServer(t)
 	defer db.Close()
 	reel, gearID := seedWornWorkshopReel(t, srv, db, .8, .2, .5, .5)
@@ -616,15 +629,16 @@ func TestWorkshopReelRepairRejectsLowQuote(t *testing.T) {
 		Tree: snapshotWorkshopRequestPart(reel.GUID, uint32(reelPartCatGear), gearID, 1),
 		Log:  logging.Discard(),
 	}
-	if _, ok := hWorkshopOrder(c); ok {
-		t.Fatal("低于整机保养价的客户端报价应被拒绝")
+	// 与 TestWorkshopOrderChargesLowClientQuote 同一条口径：界面报价就是结算价。
+	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
+		t.Fatal("低报价不再拒单：拒单在客户端就是「发生内部错误」")
 	}
 	profile, err := db.GetProfile(ctx, uid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if profile.Silver != 10000 {
-		t.Fatalf("低报价被拒绝后余额应保持 10000，实得 %d", profile.Silver)
+	if got := int64(10000) - profile.Silver; got != 1 {
+		t.Fatalf("应按界面报价扣 1，实扣 %d", got)
 	}
 }
 
@@ -812,16 +826,49 @@ func TestWorkshopSwapRejectsQuoteAboveFullPrice(t *testing.T) {
 
 	fields := snapshotFields(t, reel.FieldsJSON)
 	_, gearDef := snapshotPart(t, srv, fields, reelPartCatGear)
-	var alt string
-	if err := db.SQL.QueryRowContext(ctx,
-		`SELECT item_id FROM item_def WHERE category=? AND item_id<>? ORDER BY numeric_id LIMIT 1`,
-		reelPartCatGear, gearDef.ItemID).Scan(&alt); err != nil {
+	// 挑一件**比现有齿轮更贵**的新件换上。本用例只验"翻倍报价按去重后收"，
+	// 必须避开"旧件折抵抵光新件价"那条分支（那里应收 0，期望值算法不同，
+	// 由 TestWorkshopSwapOldPartWorthMoreThanNewPart 单独覆盖）。
+	// 先把候选件收齐再算价：partPrice 内部还要查库，在 rows.Next() 里查会
+	// 跟这条游标抢同一个 SQLite 连接，直接死锁。
+	rows, err := db.SQL.QueryContext(ctx,
+		`SELECT item_id FROM item_def WHERE category=? AND item_id<>?`,
+		reelPartCatGear, gearDef.ItemID)
+	if err != nil {
 		t.Fatalf("找不到第二种齿轮: %v", err)
 	}
-	full, _ := srv.partPrice(ctx, alt, reelPartCatGear)
-	// 去重后的应收价 = 目标新件价 − 残值（与 21/2 界面同源）。
-	residual, _ := srv.workshopPartResidual(reelPartCatGear, full, 0)
-	page := full - residual
+	var candidates []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			t.Fatalf("扫描齿轮: %v", err)
+		}
+		candidates = append(candidates, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		t.Fatalf("遍历齿轮: %v", err)
+	}
+	rows.Close()
+	var alt string
+	var full int64
+	for _, id := range candidates {
+		if p, _ := srv.partPrice(ctx, id, reelPartCatGear); p > full {
+			alt, full = id, p
+		}
+	}
+	if alt == "" || full <= 0 {
+		t.Fatal("找不到可比价的第二种齿轮")
+	}
+	// 去重后的应收价 = 目标新件价 − **旧件**残值（与 21/2 界面同源）。
+	oldBase, _ := srv.partPrice(ctx, gearDef.ItemID, reelPartCatGear)
+	oldResidual, _ := srv.workshopPartResidual(reelPartCatGear, oldBase, 0)
+	if full <= oldResidual {
+		t.Fatalf("用例前提不成立：新件 %s 价 %d 应高于旧件残值 %d（旧件 %s 价 %d）",
+			alt, full, oldResidual, gearDef.ItemID, oldBase)
+	}
+	page := full - oldResidual
 
 	c := &Ctx{
 		Sess: newProbeSess(srv), Main: 21, Sub: 3,
@@ -837,5 +884,108 @@ func TestWorkshopSwapRejectsQuoteAboveFullPrice(t *testing.T) {
 	}
 	if got := int64(100000) - profile.Silver; got != page {
 		t.Fatalf("报价超过新件全价时应按去重后 %d 收，实扣 %d", page, got)
+	}
+}
+
+// TestWorkshopSwapOldPartWorthMoreThanNewPart 锁定玩家 2026-11-12 报的第二个场景：
+// 「我本身的零件回收价比更换的零件价格更高，导致报错」。
+//
+// 机制：客户端算报价 = 新件价 − 该槽位**旧件**残值。旧件比新件值钱时这个差是
+// 负数，客户端把它按 0 显示/上报；旧实现服务端算的是"新件价 − 新件残值"（正数），
+// 一看客户端报 0 就落进"零金额换件 → 拒绝"，玩家点「更换」当场弹
+// 「发生内部错误」。日志现场：03:43:17 client=100 server=259 → 拒单。
+//
+// 现在两处都改对了：残值取旧件的、差额按 0 收，这种单子必须正常成交。
+func TestWorkshopSwapOldPartWorthMoreThanNewPart(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	defer db.Close()
+	reel, _ := seedWornWorkshopReel(t, srv, db, .8, .2, .5, .5)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 10000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	fields := snapshotFields(t, reel.FieldsJSON)
+	_, bearingDef := snapshotPart(t, srv, fields, reelPartCatBearing)
+	oldPS, _ := srv.partPrice(ctx, bearingDef.ItemID, reelPartCatBearing)
+	oldRS, _ := srv.workshopPartResidual(reelPartCatBearing, oldPS, 0)
+	// 品质 10 的便宜轴承：新件价比旧件残值还低，正好是玩家遇到的那种组合。
+	const cheapBearing = "ef-sp_001_bb"
+	newPS, _ := srv.partPrice(ctx, cheapBearing, reelPartCatBearing)
+	if newPS <= 0 || newPS >= oldRS {
+		t.Fatalf("用例前提不成立：新件 %d 应低于旧件残值 %d（旧件 %s 价 %d）",
+			newPS, oldRS, bearingDef.ItemID, oldPS)
+	}
+
+	c := &Ctx{
+		Sess: newProbeSess(srv), Main: 21, Sub: 3,
+		// 客户端算出来是负数，按 0 上报。
+		Tree: snapshotWorkshopRequestPart(reel.GUID, uint32(reelPartCatBearing), cheapBearing, 0),
+		Log:  logging.Discard(),
+	}
+	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
+		t.Fatal("旧件比新件值钱时换件被拒——这就是玩家看到的「发生内部错误」")
+	}
+	profile, err := db.GetProfile(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Silver != 10000 {
+		t.Fatalf("旧件折抵已覆盖新件价，应 0 元成交，实扣 %d", int64(10000)-profile.Silver)
+	}
+}
+
+// TestWorkshopMixedRepairAndSwapInOneOrder 锁定玩家报的第一个场景：
+// 「修理一个零件、更换另一个零件会报错」。
+//
+// 同一帧 21/4 里既有同型号修理、又有换件时，旧实现按"换件"走严格比对：
+// 服务端把换件那一行的残值算成**新件**的（100−38=62），客户端算的是**旧件**的
+// （100−287<0→0）。两边差 62 → 严格比对失败 → 拒单。玩家换的那只件只要比
+// 旧件便宜，混单就必错——这正是"第一个场景其实也是第二个场景引起的"。
+//
+// 日志现场：03:12:56 混单 client=2046 server=550 → 拒单；同一分钟第二次只勾了
+// 一个件（parts=1）就过了。
+func TestWorkshopMixedRepairAndSwapInOneOrder(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	defer db.Close()
+	reel, _ := seedWornWorkshopReel(t, srv, db, .8, .2, .5, .5)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 10000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	fields := snapshotFields(t, reel.FieldsJSON)
+	_, spoolDef := snapshotPart(t, srv, fields, reelPartCatSpool)
+	spoolPS, _ := srv.partPrice(ctx, spoolDef.ItemID, reelPartCatSpool)
+	spoolRS, _ := srv.workshopPartResidual(reelPartCatSpool, spoolPS, 0)
+	// 客户端报价 = 换件那行 0（旧件折抵覆盖）+ 同型号修理那行（新件价 − 旧件残值）。
+	clientQuote := spoolPS - spoolRS
+
+	c := &Ctx{
+		Sess: newProbeSess(srv), Main: 21, Sub: 3,
+		Tree: snapshotWorkshopRequestParts(reel.GUID, []workshopEntry{
+			{Cat: uint32(reelPartCatBearing), SysID: "ef-sp_001_bb"}, // 换件：旧件更值钱
+			{Cat: uint32(reelPartCatSpool), SysID: spoolDef.ItemID},  // 同型号修理
+		}, uint64(clientQuote), false),
+		Log: logging.Discard(),
+	}
+	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
+		t.Fatal("修理+换件混单被拒——玩家看到的就是「发生内部错误」")
+	}
+	profile, err := db.GetProfile(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 换件那行折抵覆盖（0）+ 修理那行按界面价：合起来必须等于客户端报价。
+	if got := int64(10000) - profile.Silver; got != clientQuote {
+		t.Fatalf("混单应按界面报价扣 %d，实扣 %d", clientQuote, got)
 	}
 }

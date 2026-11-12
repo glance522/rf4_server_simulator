@@ -222,6 +222,12 @@ func TestReelPartSnapshotWorkshop(t *testing.T) {
 					t.Fatal(err)
 				}
 				c := &Ctx{Sess: session, Main: 21, Sub: 3, Tree: decoded, DecodeOK: true, ExpectResponse: true, Log: logging.Discard()}
+				// 残值按槽位里**当前装着的旧件**折（客户端报价也是这么算的：
+				// Σ(新件价 − 该槽位旧件残值)）。换型号时新旧两件价不同，拿新件
+				// 价再折一次会算错差额 —— 这正是 2026-11-12 那三种报错的根因。
+				curRow := mustItem(t, srv.DB, reel.GUID)
+				_, curGearDef := snapshotPart(t, srv, snapshotFields(t, curRow.FieldsJSON), 52)
+				oldBase, _ := srv.partPrice(ctx, curGearDef.ItemID, 52)
 				balanceBefore, err := db.EnsureProfile(ctx, uid)
 				if err != nil {
 					t.Fatal(err)
@@ -239,8 +245,12 @@ func TestReelPartSnapshotWorkshop(t *testing.T) {
 					t.Fatalf("读取零件定义失败: %v", err)
 				}
 				baseSilver, _ := srv.partPrice(ctx, id, partDef.Category)
-				residual, _ := srv.workshopPartResidual(partDef.Category, baseSilver, 0)
+				residual, _ := srv.workshopPartResidual(partDef.Category, oldBase, 0)
 				wantSilver := baseSilver - residual
+				if wantSilver < 0 {
+					// 旧件比新件值钱：差额按 0 收（以旧换新不退差价）。
+					wantSilver = 0
+				}
 				if balanceBefore.Silver-balanceAfter.Silver != wantSilver {
 					t.Fatalf("工坊扣费=%d，期望服务端价格=%d",
 						balanceBefore.Silver-balanceAfter.Silver, wantSilver)

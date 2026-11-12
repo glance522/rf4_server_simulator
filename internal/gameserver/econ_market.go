@@ -1403,7 +1403,11 @@ type partOrder struct {
 }
 
 // workshopQuoteMatches 只接受与服务端价格接近的客户端报价，允许少量整数取整
-// 误差；实际扣费始终使用服务端价格，客户端无法通过伪造 f3 压价。
+// 误差。
+//
+// 21/4 主结算已经改成"按客户端界面报价收"（见 hWorkshopOrder 里的结算段），
+// 这个严格比对只剩 hWorkshopRepair（21/3/21/4 整件修理的旧处理器，目前未注册）
+// 在用。留着是为了那个处理器万一重新挂上时不用再写一遍。
 func workshopQuoteMatches(clientCost, serverCost int64) bool {
 	if clientCost <= 0 {
 		return true
@@ -1420,26 +1424,6 @@ func workshopQuoteMatches(clientCost, serverCost int64) bool {
 		delta = -delta
 	}
 	return delta <= tolerance
-}
-
-// workshopQuoteCovers 接受不低于服务端价格的客户端报价。渔轮多选时客户端会把
-// 每个内件的整机保养价累加，报价可能高于实际只收一次的服务端价格。
-func workshopQuoteCovers(clientCost, serverCost int64) bool {
-	if clientCost <= 0 {
-		return true
-	}
-	if serverCost < 0 {
-		return false
-	}
-	tolerance := serverCost / 20
-	if tolerance < 1 {
-		tolerance = 1
-	}
-	floor := serverCost - tolerance
-	if floor < 0 {
-		floor = 0
-	}
-	return clientCost >= floor
 }
 
 // replayWorkshopItem 把"这次工坊操作已经无事可做"当成幂等成功回给客户端：
@@ -1649,6 +1633,9 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	//   - 换件算出 0：item_price 里没有这件新件的标价，属于价格表缺口，
 	//     放行等于白送，必须拒绝。
 	partSwapped := false
+	// 换件时旧件折抵已经把新件价抵光的标记（旧件比新件还值钱）。
+	// 用途：这种"算出来 0 银币"是正常成交，不是价格表缺口，不能拒。
+	swapCovered := false
 	// unresolved 表示有条目指向了树里找不到的零件，或换件构造失败。这种是真失败，
 	// 不能走幂等成功（否则客户端会以为换上了，实际没换）。
 	unresolved := false
@@ -1726,14 +1713,40 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		if cerr != nil || child == nil {
 			continue
 		}
+		// 换件前先把槽位里那件旧件记下来：下面 fields[idx].Val 会被替换成新件，
+		// 之后再想取旧件的 numeric_id 就晚了（换型号时两者的 nid 不同，取错了
+		// 残值就变成按新件价折，旧件贵于新件时差额算成负数、结算跟界面差一个
+		// 新件残值，2026-11-12 03:43:17 的 client=100 server=62 就是这么来的）。
+		oldChild := fields[idx].Val
 		// 全新件必须写满耐久：轮内零件耐久会聚合成本体那一格，换上去就缺耐久
 		// 等于给玩家装了一只坏件，本体永远抬不回来。
 		setReelChildDurability(child, 1)
 		fields[idx].Val = child
 		ps, pg := srv.partPriceForStore(cctx, storeID, partMapKey, o.SysID, def.Category)
-		// 换件同样按 (新件价 − 旧件残值) 收：官服 21/2 的 f3 就是旧件残值，
-		// 客户端按差额报价，服务端必须按同一个数收，否则界面与实扣对不上。
-		rs, rg := srv.workshopPartResidual(def.Category, ps, pg)
+		// 残值要取**旧件**（这个槽位现在装着的那件）的，不是新件的。
+		//
+		// 客户端算报价 = Σ(所选新件价 f2 − 该槽位旧件残值 f3)：f3 是 21/2 里
+		// 按**槽位**发下去的，跟"要换成哪一件"无关。旧实现拿新件的价再折一次
+		// 残值，同型号换（官服抓包那一单）两者相等所以没暴露，换型号时就是两个数：
+		//
+		//   旧件比新件贵 → 客户端的差额比我们小 → 被判"压价"拒单。
+		//     2026-11-12 03:43:17 实测 client=100 server=259 就是这么报错的
+		//     （玩家原话："我本身的零件回收价比更换的零件价格更高，导致报错"）。
+		//   旧件比新件便宜 → 客户端的差额比我们大 → 以前靠"未折抵残值"分支
+		//     兜住，结果凑巧对，但那是靠兜底撑的，一改口径就崩。
+		//
+		// 取旧件价要用 oldChild（替换前的那个对象），且取价链路必须和 21/2 发
+		// 给客户端的 f3 完全一致，否则客户端算的差额和我们算的对不上。
+		oldPS, oldPG := srv.partRepairBasePrice(cctx, storeID, partMapKey,
+			repairPart{Cat: o.Cat, NID: childNumericID(oldChild)})
+		rs, rg := srv.workshopPartResidual(def.Category, oldPS, oldPG)
+		// 旧件比新件还值钱：差额为负没有意义，按 0 收（以旧换新不退差价，
+		// 与界面上显示的 0 一致）。记下这个状态，否则会被下面的"零金额"
+		// 判定当成价格表缺口拒掉，玩家点「更换」就弹「发生内部错误」。
+		if rs > ps {
+			swapCovered = ps > 0
+			rs = ps
+		}
 		silver += ps - rs
 		gold += pg - rg
 		fullSilver += ps
@@ -1749,7 +1762,6 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		ctx.Log.Warn("工坊修理：同型号修理仅支持银币支付", "guid", shortGUID(row.GUID))
 		return nil, false
 	}
-	wholeItemRepair := bodyRepair || (hasPartOrder && allRepairs)
 	// 本次订单真正付了钱的品类。整机恢复只动这些件，没勾选的件保持原样：
 	// 官服按件收费（nc.jsonl 那次 21/4 只有一个条目），顺手修好未勾选的件
 	// 等于白送；而客户端只按勾选件报价，服务端多收又会让界面和实扣对不上。
@@ -1836,90 +1848,101 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		}
 		return nil, false
 	}
+	// 结算口径（2026-11-12 定案）：**界面显示多少就收多少**，只在两种情况下
+	// 改用服务端估价封顶。
+	//
+	// 官服就是这个口径：nc.jsonl 那一单客户端 21/4 报 f3=30（= 296−266），
+	// 官服实扣 30，一分不差——它没有另算一遍再比对。我们原来的做法是"服务端
+	// 自己重算，再拿客户端报价去校验，对不上就拒单"，只要两边口径差一点，
+	// 玩家就弹「发生内部错误」：
+	//
+	//	03:12:56  修理+换件混单      client=2046 server=550   → 报错
+	//	03:34:17  换件              client=565  server=742   → 报错
+	//	03:43:17  换件（旧件更值钱） client=100  server=259   → 报错
+	//
+	// 而配件价公式本身与官方差 60%~800%（齿轮 2592 vs 官方 296、轴承 100 vs
+	// 845，见 26 条官方报价样本），客户端还有一份我们没有的价格数据
+	// （`basement_gear_price_increment` / `location_index` / 按部位的
+	// `repair_price_multiplier`），两边的数**不可能**永远相等。硬比必然天天
+	// 打架，打架的表现就是玩家点一下弹一次「发生内部错误」。
+	//
+	// 规则：
+	//   1. 同一品类在 args(503) 里出现两次以上（客户端多选聚合会这么干）→
+	//      按服务端**去重后**的估价收，不跟着翻倍；
+	//   2. 客户端报价 ≤ 新件全价 → 按客户端报价收（界面 == 实扣）；
+	//   3. 客户端报价 > 新件全价 → 按服务端估价收（只可能是重放/脏报价）；
+	//   4. 客户端报价 = 0 → 按服务端估价收（估价 0 见下面的零金额判定）。
+	//
+	// 注意规则 2 覆盖了"客户端报价低于服务端估价"这种情况（旧件比新件值钱、
+	// 客户端折抵算得比我们多）。以前这里是拒单，等于把这条正常交易判成报错——
+	// 玩家原话："我本身的零件回收价比更换的零件价格更高，导致报错"。
+	//
+	// 代价（明确写在这里）：服务端不再校验"报价是否偏低"，改过的客户端可以
+	// 少付。换来的是任何组合都不再报错、界面与实扣一致。要恢复严格校验，
+	// 需要先把配件价表校准到官方口径（见 docs 的 26 条官方报价）。
+	if clientCost > 0 {
+		ourCost := costSilver
+		fullCost := fullSilver
+		if useGold {
+			ourCost = costGold
+			fullCost = fullGold
+		}
+		duplicated := len(orders) > len(seenOrderCat)
+		charge := clientCost
+		switch {
+		case duplicated:
+			charge = ourCost
+			ctx.Log.Info("工坊结算：同一件被列了多次，按去重后的价收",
+				"item", shortGUID(itemGUID), "client", clientCost, "server", ourCost,
+				"orders", len(orders), "cats", len(seenOrderCat), "gold", useGold)
+		case clientCost > fullCost:
+			charge = ourCost
+			ctx.Log.Warn("工坊结算：客户端报价超过新件全价，按服务端估价收",
+				"item", shortGUID(itemGUID), "client", clientCost, "server", ourCost,
+				"full", fullCost, "gold", useGold)
+		default:
+			if math.Abs(float64(clientCost)-float64(ourCost)) > math.Max(1, float64(ourCost))*0.2 {
+				// 只做观测：两边差这么大说明某类件的价格公式还错着，
+				// 日志里连续出现就用它去校准（见 26 条官方报价样本）。
+				ctx.Log.Warn("工坊结算：客户端报价与服务端估价不一致，按界面报价收",
+					"item", shortGUID(itemGUID), "client", clientCost, "server", ourCost,
+					"full", fullCost, "gold", useGold, "parts", len(seenOrderCat),
+					"repair", hasRepair, "swap", partSwapped, "covered", swapCovered)
+			}
+		}
+		if useGold {
+			costGold = charge
+		} else {
+			costSilver = charge
+		}
+	}
+	// 零金额判定放在"按界面收"之后：界面报 0 才是真的 0。
+	//
+	// 银币侧的 0 元有三种，前两种必须放行：
+	//
+	//   - **纯修理**算出 0：磨损不足 1 个计费单位。耐久 0.9992 的竿折出来就是 0，
+	//     这不是价格缺失，是"这活几乎不磨损"。拒绝它等于把"修几乎全新的装备"
+	//     整条路砍掉（2026-11-12 00:27 实测：修一根 0.9992 的竿就是空 args 报错）。
+	//   - **换件算出 0 且是旧件折抵抵掉的**（swapCovered）：旧件比新件还值钱，
+	//     界面显示 0，这里也按 0 成交。拒绝它就是玩家说的"回收价高于新件价就报错"。
+	//   - **换件算出 0 而旧件没有折抵**：新件在 item_price 里没标价，属于价格表
+	//     缺口，必须拒绝，否则等于白送一件新件。
 	if useGold {
 		if costGold <= 0 {
 			ctx.Log.Warn("工坊换件：金币价格为 0，拒绝零金额交易", "item", shortGUID(itemGUID))
 			return nil, false
 		}
 	} else if costSilver <= 0 {
-		// 银币侧的 0 元有两种，必须分开：
-		//
-		//   - **纯修理**算出 0：磨损不足 1 个计费单位。`silver` 按
-		//     `round((1-耐久)*500)` 折，耐久 0.9992 的竿折出来就是 0。
-		//     这不是价格缺失，是"这活几乎不磨损"，客户端自己算的报价也是 0
-		//     （`f3=0`）。拒绝它就等于把"修几乎全新的装备"整条路砍掉，
-		//     客户端收到空 args 当场弹「发生内部错误」——2026-11-12 00:27 实测，
-		//     玩家修一根 0.9992 的竿就是这么报错的。放行，0 元成交。
-		//   - **换件**算出 0：新件在 item_price 里没有标价，属于价格表缺口。
-		//     这种必须继续拒绝，否则等于白送一件新件。
-		if didWork && !partSwapped {
+		switch {
+		case didWork && !partSwapped:
 			ctx.Log.Info("工坊修理：磨损不足最小计费单位，按 0 银币成交",
 				"item", shortGUID(itemGUID), "parts", len(orders))
-		} else {
+		case partSwapped && swapCovered:
+			ctx.Log.Info("工坊换件：旧件折抵已覆盖新件价，按 0 银币成交",
+				"item", shortGUID(itemGUID), "parts", len(orders))
+		default:
 			ctx.Log.Warn("工坊换件：银币价格为 0，拒绝零金额交易", "item", shortGUID(itemGUID))
 			return nil, false
-		}
-	}
-	if clientCost > 0 {
-		quotedCost := costSilver
-		if useGold {
-			quotedCost = costGold
-		}
-		// 纯修理走"客户端报价不低于服务端"的宽松口径，换件必须严格对上。
-		//
-		// 原因：客户端给同型号部位报的价来自 21/2 里那条同型号工单的 f2，而我们
-		// 发的是**换件价**（`partAlternatives` 用 partPrice：竿坯 1200 来自
-		// partBasePrice[36]、齿轮 2496 来自 480×传动比），客户端再自己减掉旧件
-		// 折抵；我们按 `round(磨损×500)` 收。两个口径差几个数量级——
-		// 实测齿轮客户端报 2472 / 服务端收 24，竿坯客户端报 1200 / 服务端收 0。
-		// 严格比对必然失败 → return nil,false → 兜底空 args → 客户端弹
-		// 「发生内部错误」。修理一律按宽松口径放行不会让玩家少付：服务端价格
-		// 是权威，且它总是远低于客户端那个"以旧换新价"。
-		//
-		// 换件则相反：f2 就是换件价，客户端回填的应当与我们算的一分不差，
-		// 对不上就是价格表缺口，必须拒掉（否则等于白送一件新件）。
-		if (wholeItemRepair && isReel) || !partSwapped {
-			if !workshopQuoteCovers(clientCost, quotedCost) {
-				ctx.Log.Warn("工坊修理：客户端报价低于服务端", "item", shortGUID(itemGUID),
-					"client", clientCost, "server", quotedCost, "gold", useGold)
-				return nil, false
-			}
-		} else if !workshopQuoteMatches(clientCost, quotedCost) {
-			// 换件报价对不上有两种成因，处理方式不同：
-			//
-			//  1. 客户端报价**高于**我们算的、但没超过新件全价：它没有把
-			//     我们发的残值折抵算进去（或者这个品类的残值率还没对上）。
-			//     2026-11-12 03:28 实测：轮油 21/2 我们发 f3=19，客户端仍按
-			//     全价 50 报，严格比对失败 → 玩家点「更换」直接弹「发生内部
-			//     错误」。这种必须按**界面上的数字**收：收少了是白送，收多了
-			//     是界面与实扣不一致，拒绝则是报错，只有按界面收玩家看不出问题。
-			//  2. 客户端报价超过新件全价：只能是同一件被列了两次（去重只按
-			//     品类算一次），按去重后的价收，不能跟着翻倍。
-			//
-			// 低于服务端报价的仍然拒绝：那是压价，不是折抵口径差异。
-			fullCost := fullSilver
-			if useGold {
-				fullCost = fullGold
-			}
-			if clientCost < quotedCost {
-				ctx.Log.Warn("工坊换件：客户端报价低于服务端", "item", shortGUID(itemGUID),
-					"client", clientCost, "server", quotedCost, "gold", useGold)
-				return nil, false
-			}
-			if clientCost <= fullCost {
-				ctx.Log.Info("工坊换件：客户端未折抵残值，按界面报价收",
-					"item", shortGUID(itemGUID), "client", clientCost,
-					"server", quotedCost, "full", fullCost, "gold", useGold)
-				if useGold {
-					costGold = clientCost
-				} else {
-					costSilver = clientCost
-				}
-			} else {
-				ctx.Log.Warn("工坊换件：客户端报价超过新件全价，按去重后的价收",
-					"item", shortGUID(itemGUID), "client", clientCost,
-					"server", quotedCost, "full", fullCost, "gold", useGold)
-			}
 		}
 	}
 	p, perr := srv.DB.EnsureProfile(cctx, ctx.Sess.Userid)
@@ -1958,8 +1981,8 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	newDurability := row.Durability
 	if bodyRepair || !isReel {
 		// 渔轮：只有**明确下单了本体**（21/4 里 cat=6）才把那一格补到 1.0。
-		// 官服按件收费之后，wholeItemRepair 只表示"这一单的条目全是同型号
-		// 修理"，不再等于"整机保养"：nc.jsonl 那单只列了齿轮，官服回包的
+		// 官服按件收费之后，"条目全是同型号修理"不再等于"整机保养"：
+		// nc.jsonl 那单只列了齿轮，官服回包的
 		// 21/2 里轴承和摩擦片的 GUID 一个都没动。旧口径在这里把本体耐久
 		// 直接写成 1.0，等于玩家只付了齿轮的钱、却白拿了整机保养。
 		//
