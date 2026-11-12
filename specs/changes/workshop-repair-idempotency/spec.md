@@ -18,12 +18,14 @@ Status: done
 ## Solution
 
 纯修理落到零价按幂等成功处理（不扣费、不写流水、回当前物品树并伴随 4/22
-刷新），同时把本体与循环里顺带修掉的子件耐久一并落库；幂等成功仅限纯修理
-（无换件条目，或条目全是同型号修理），带换件条目却算出零价仍按定价缺失拒绝；
-竿类修理对齐渔轮整机保养口径，一次恢复全部出厂件并按磨损总量计价；只有本次
-实际恢复耐久的子件与换装的新型号子件使用新 guid 驱动客户端重渲染；
-rebuildRod 只整体保留换过型号的子件，出厂默认件仍按定义重建（静态定义更新
-可通过默认槽位重新派生），重建时保留原子件 guid 与耐久。
+刷新）；凡有实际变化（本体耐久、子件耐久、子件 guid）必须真实落库并抬版本
+戳——客户端只接受版本戳变大的 4/22 更新，只刷本体没有子件修理时也一样；
+落库与成功路径同走事务，任何一步失败按失败拒绝，不能返回成功却没修。幂等
+成功仅限纯修理（无换件条目，或条目全是同型号修理），带换件条目却算出零价
+仍按定价缺失拒绝；竿类修理对齐渔轮整机保养口径，一次恢复全部出厂件并按磨
+损总量计价；只有本次实际恢复耐久的子件与换装的新型号子件使用新 guid 驱动
+客户端重渲染；rebuildRod 只整体保留换过型号的子件，出厂默认件仍按定义重建
+（静态定义更新可通过默认槽位重新派生），重建时保留原子件 guid 与耐久。
 
 ## User Stories
 
@@ -37,7 +39,8 @@ rebuildRod 只整体保留换过型号的子件，出厂默认件仍按定义重
 ## Implementation Decisions
 
 - `internal/gameserver` econ_market.go：21/3/21/4 处理器 hWorkshopOrder 的
-  零价幂等分支、整竿保养分支、子件 guid 策略；hWorkshopDiag 对竿报整机价。
+  零价幂等分支（有变化即事务落库并抬版本戳，失败拒绝）、整竿保养分支、
+  子件 guid 策略；hWorkshopDiag 对竿报整机价。
 - `internal/gameserver` items.go：rebuildRod 只整体保留换过型号的子件，
   出厂默认件按定义重建并保留原子件 guid 与耐久。
 - 不改表结构、不改协议字段形状（21/3 请求/响应形状与字段语义不变）。
@@ -58,14 +61,23 @@ rebuildRod 只整体保留换过型号的子件，出厂默认件仍按定义重
   - 整竿保养恢复全部出厂件并按总量计价
     （TestWorkshopRodRepairRestoresAllFactoryParts）。
   - 实际修理过的子件换新 guid（TestWorkshopSameModelRepairRefreshesChildGuid）。
-  - 零价修理把循环顺带修掉的子件一并落库并换 guid，重复请求 guid 稳定
-    （TestWorkshopZeroCostRepairPersistsChildRepair）。
+  - 零价修理把循环顺带修掉的子件一并落库并换 guid、抬版本戳，重复请求
+    guid 稳定（TestWorkshopZeroCostRepairPersistsChildRepair）。
+  - 零价只刷本体也抬版本戳，推送树（ItemToTree）版本戳与落库一致、本体
+    耐久投影为 1（TestWorkshopZeroCostRepairRefillsBodyDurability 扩展
+    断言；TestWorkshopZeroCostRepairPushesVersionedTree 走真实信封链路
+    断言 4/22 推送帧）。
+  - 零价落库失败按失败拒绝，耐久与版本戳保持原值
+    （TestWorkshopZeroCostRepairFailsWhenPersistFails）。
   - 本体修理搭带换件条目的零价请求被拒绝，不静默丢换件
     （TestWorkshopZeroCostBodyRepairWithLooseOrderRejected）。
   - 整机保养只给实际恢复耐久的子件换 guid，满耐久子件 guid 不变
     （TestWorkshopReelWholeServiceOnlyRefreshesWornGuids）。
   - 下发渲染/启动修复保留修理刷新的默认件 guid
     （TestWorkshopRenderKeepsRepairedDefaultPartGuid）。
+  - 21/3 经统一回执中间件：同 call_id 重试/重连重放只扣一次费、响应逐字节
+    重放（TestWorkshopRepairReplayThroughReceiptsChargesOnce）；并发同 key
+    请求只执行一次、只扣一次（TestWorkshopRepairConcurrentDuplicatesChargeOnce）。
 - 回滚本提交后以上测试变红（旧口径为拒绝零价/单件修理/重建换装/全量换
   guid/丢弃零价子件修理）。
 
@@ -74,10 +86,16 @@ rebuildRod 只整体保留换过型号的子件，出厂默认件仍按定义重
 - 21/4 金币通道的 useGold 字段解析（当前金币修理本就被拒绝，另行处理）。
 - 客户端侧渲染逻辑。
 - 渔轮性能表与磨损模型。
-- 21/3 的回执幂等（键 = token 哈希 + main + sub + call_id）：顺序连发的重复
-  请求本 PR 已兜住，但并发重复请求（两次读都发生在第一次提交前）仍会各自按
-  旧磨损计价扣费，响应丢失后先用装备再重试同一 call_id 也会再扣费。补回执键
-  另行处理（drink_use.go 已有现成写法）。
+- 21/3/21/4 的扣费回执幂等由统一请求回执中间件承担，不在本 PR 范围内重复
+  实现：dispatchRequest 对所有命令（豁免表仅 24/1）按 token 哈希 + main +
+  sub + call_id 原子抢占回执（request_receipts 表），先落回执再发送响应；
+  顺序重发与并发重复只执行一次，其余重放已存响应，body 指纹不一致则拒绝
+  执行。（初稿把"并发重复会各自扣费"列为遗留问题，是对中间件机制的误读，
+  已更正。）剩余边界：call_id 每次连接重新编号，重连后同一动作拿到新
+  call_id 会按当次磨损重新计价（call_id 键控方案的共性，drink_use.go 同）；
+  处理器事务提交后、回执落库前进程崩溃时，2 分钟 stale 接管按 at-least-once
+  重执行（store 层注释明示）；回执重放只回 21/3 响应体，不再补推 4/22
+  （首执行时已推送，极端丢帧场景面板重开即刷新）。
 - 21/2 每个零件行都报整机保养价：这是报价契约——客户端按选中行的 f3 报价，
   只在首行报整机价会让非首行发起的修理因报价低于服务端价格被拒。多选累加
   的展示差异由 workshopQuoteCovers 容忍，服务端只收一次。

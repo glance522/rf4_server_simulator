@@ -21,6 +21,7 @@ type receiptTestSession struct {
 	sess      *Session
 	peer      *tunnel.Conn
 	responses chan *proto.Envelope
+	pushes    chan *proto.Envelope // 服务端推送（Session.Push 以请求信封 -1 下发）
 }
 
 func newReceiptTestServer(t *testing.T, dbPath string) (*Server, *store.DB) {
@@ -67,6 +68,7 @@ func newReceiptTestSession(t *testing.T, srv *Server, sid uint64, token string) 
 		sess:      newSession(srv, sid, token, 1000001, serverConn),
 		peer:      peer,
 		responses: make(chan *proto.Envelope, 32),
+		pushes:    make(chan *proto.Envelope, 32),
 	}
 	go func() {
 		defer close(h.responses)
@@ -79,8 +81,14 @@ func newReceiptTestSession(t *testing.T, srv *Server, sid uint64, token string) 
 				continue
 			}
 			env, ok := proto.ParseEnvelope(payload)
-			if ok && (env.Marker == -2 || env.Marker == -3) {
+			if !ok {
+				continue
+			}
+			switch env.Marker {
+			case -2, -3:
 				h.responses <- env
+			case -1:
+				h.pushes <- env
 			}
 		}
 	}()
@@ -106,6 +114,20 @@ func waitReceiptResponse(t *testing.T, h *receiptTestSession) *proto.Envelope {
 		return env
 	case <-time.After(2 * time.Second):
 		t.Fatal("等待响应超时")
+		return nil
+	}
+}
+
+func waitReceiptPush(t *testing.T, h *receiptTestSession) *proto.Envelope {
+	t.Helper()
+	select {
+	case env, ok := <-h.pushes:
+		if !ok {
+			t.Fatal("推送通道已关闭")
+		}
+		return env
+	case <-time.After(2 * time.Second):
+		t.Fatal("等待推送超时")
 		return nil
 	}
 }

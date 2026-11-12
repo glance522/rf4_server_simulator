@@ -1642,31 +1642,57 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		// 槽位），继续走拒绝，不能让换件被静默丢弃。
 		if wholeItemRepair && (!hasPartOrder || allRepairs) {
 			// 零价不代表物品已满：本体可能还差极小耐久。修理语义是恢复整个
-			// 物品，这里把本体也刷满并落库；轮子同步性能表里的耐久快照。
-			// 写库失败退回纯幂等，不让这次修理变成报错。
-			if row.Durability < 1 {
-				if serr := srv.DB.SetItemDurability(cctx, row.GUID, 1.0); serr == nil {
-					row.Durability = 1
-					if isReel {
-						if perf, perr := srv.DB.GetReelPerformance(cctx, row.GUID); perr == nil && perf != nil {
-							perf.Durability = 1
-							_ = srv.DB.UpsertReelPerformance(cctx, *perf)
+			// 物品，本体与循环里顺带修掉的零价子件（渔轮整机保养更会把全部
+			// 内件刷满）必须真实落库——与成功路径同走事务，任何一步失败让
+			// 本次修理报错重试，不能返回成功却没修。
+			bodyRepaired := row.Durability < 1
+			if bodyRepaired || len(repairedGUIDs) > 0 {
+				// 版本戳必须严格递增（只有本体耐久变化、没有子件修理时也
+				// 一样），否则客户端忽略 4/22 更新，面板耐久停在旧值——
+				// 本次要修的"修理后差一点不刷新"会以另一种形式复发。
+				refreshRepairedGUIDs()
+				bumpCreatedTicks(fields, row.WireClass)
+				fj, jerr := FieldsToJSON(fields)
+				if jerr != nil {
+					return nil, false
+				}
+				newDurability := row.Durability
+				if bodyRepaired {
+					newDurability = 1
+				}
+				tx, terr := beginEconomyTx(cctx, srv.DB)
+				if terr != nil {
+					ctx.Log.Warn("工坊修理：零价落库事务启动失败", "guid", shortGUID(row.GUID), "err", terr)
+					return nil, false
+				}
+				committed := false
+				defer func() {
+					if !committed {
+						_ = tx.Rollback()
+					}
+				}()
+				if err := srv.DB.UpdateItemFieldsTx(cctx, tx, row.GUID, fj, row.Qty,
+					newDurability, row.Workmanship, row.RigGUID); err != nil {
+					ctx.Log.Warn("工坊修理：零价落库写物品失败", "guid", shortGUID(row.GUID), "err", err)
+					return nil, false
+				}
+				if isReel && bodyRepaired {
+					// 轮子同步性能表里的耐久快照。
+					if perf, perr := srv.DB.GetReelPerformance(cctx, row.GUID); perr == nil && perf != nil {
+						perf.Durability = 1
+						if err := srv.DB.UpsertReelPerformanceTx(cctx, tx, *perf); err != nil {
+							ctx.Log.Warn("工坊修理：零价落库轮子性能失败", "guid", shortGUID(row.GUID), "err", err)
+							return nil, false
 						}
 					}
 				}
-			}
-			// 同型号修理循环顺带修掉的零价子件（渔轮整机保养更会把全部内件
-			// 刷满）也要落库：返回成功就必须真的修好，不能回一棵数据库里的
-			// 旧树把这些子件修理丢掉。换新 guid 与版本戳同成功路径口径。
-			if len(repairedGUIDs) > 0 {
-				refreshRepairedGUIDs()
-				bumpCreatedTicks(fields, row.WireClass)
-				if fj, jerr := FieldsToJSON(fields); jerr == nil {
-					if ferr := srv.DB.UpdateItemFields(cctx, row.GUID, fj, row.Qty,
-						row.Durability, row.Workmanship, row.RigGUID); ferr == nil {
-						row.FieldsJSON = fj
-					}
+				if err := tx.Commit(); err != nil {
+					ctx.Log.Warn("工坊修理：零价落库事务提交失败", "guid", shortGUID(row.GUID), "err", err)
+					return nil, false
 				}
+				committed = true
+				row.FieldsJSON = fj
+				row.Durability = newDurability
 			}
 			tree, terr := srv.ItemToTree(cctx, row)
 			if terr != nil {

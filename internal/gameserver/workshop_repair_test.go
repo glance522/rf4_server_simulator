@@ -3,6 +3,7 @@ package gameserver
 import (
 	"fmt"
 	"math"
+	"sync"
 	"testing"
 
 	"rf4server/internal/logging"
@@ -526,9 +527,23 @@ func TestWorkshopReelRepairRejectsLowQuote(t *testing.T) {
 	}
 }
 
+// itemVersionTicks 读物品字段树里的版本戳（csCreated）：客户端只接受版本戳
+// 变大的 4/22 更新。
+func itemVersionTicks(t *testing.T, srv *Server, guid string) uint64 {
+	t.Helper()
+	row := mustItem(t, srv.DB, guid)
+	fields := snapshotFields(t, row.FieldsJSON)
+	idx := fieldIdxByCS(row.WireClass, csCreated)
+	if idx < 0 || idx >= len(fields) || fields[idx].Num == nil {
+		t.Fatalf("物品 %s 缺版本戳字段", guid)
+	}
+	return u64Of(fields[idx].Num)
+}
+
 // TestWorkshopZeroCostRepairRefillsBodyDurability 钉住"返回成功就必须修满"：
 // 零件磨损四舍五入为 0 但本体还差千分之几时，零价修理必须把本体刷满落库，
-// 而不是幂等返回一棵耐久没变的树。
+// 而不是幂等返回一棵耐久没变的树。只刷本体（没有子件修理）也一样要抬版本戳，
+// 否则客户端按版本号忽略 4/22，面板耐久停在旧值。
 func TestWorkshopZeroCostRepairRefillsBodyDurability(t *testing.T) {
 	srv, db := newStaticRigTestServer(t)
 	// 竿柄 0.9995 → Round(0.0005*500)=Round(0.25)=0，整机价必然为零。
@@ -541,6 +556,7 @@ func TestWorkshopZeroCostRepairRefillsBodyDurability(t *testing.T) {
 	if err := db.UpdateBalance(ctx, uid, 1000, 0, 0); err != nil {
 		t.Fatal(err)
 	}
+	beforeTicks := itemVersionTicks(t, srv, rod.GUID)
 
 	c := &Ctx{
 		Sess: newProbeSess(srv), Main: 21, Sub: 3,
@@ -560,6 +576,23 @@ func TestWorkshopZeroCostRepairRefillsBodyDurability(t *testing.T) {
 	fresh := mustItem(t, db, rod.GUID)
 	if fresh.Durability != 1 {
 		t.Fatalf("零价修理后本体耐久必须刷满 1，实得 %v", fresh.Durability)
+	}
+	afterTicks := itemVersionTicks(t, srv, rod.GUID)
+	if afterTicks <= beforeTicks {
+		t.Fatalf("只刷本体也必须抬版本戳（否则客户端忽略 4/22）：before=%d after=%d",
+			beforeTicks, afterTicks)
+	}
+	// 推送树与落库同源（ItemToTree）：版本戳一致、本体耐久投影为 1。
+	tree, terr := srv.ItemToTree(ctx, mustItem(t, db, rod.GUID))
+	if terr != nil {
+		t.Fatal(terr)
+	}
+	if tidx := fieldIdxByCS(tree.Class, csCreated); tidx < 0 || u64Of(tree.Fields[tidx].Num) != afterTicks {
+		t.Fatalf("推送树版本戳应与落库一致，实得 %d != %d",
+			u64Of(tree.Fields[fieldIdxByCS(tree.Class, csCreated)].Num), afterTicks)
+	}
+	if got := snapshotFloat(tree.Fields, tree.Class, csDurability); math.Abs(got-1) > 1e-6 {
+		t.Fatalf("推送树本体耐久应为 1，实得 %v", got)
 	}
 }
 
@@ -899,6 +932,7 @@ func TestWorkshopZeroCostRepairPersistsChildRepair(t *testing.T) {
 	}
 
 	_, beforeGUID := partState()
+	beforeTicks := itemVersionTicks(t, srv, rod.GUID)
 	c := &Ctx{
 		Sess: newProbeSess(srv), Main: 21, Sub: 3,
 		Tree: snapshotWorkshopRequestPart(rod.GUID, 4, partID, 0),
@@ -920,6 +954,9 @@ func TestWorkshopZeroCostRepairPersistsChildRepair(t *testing.T) {
 	}
 	if afterGUID == beforeGUID {
 		t.Fatal("零价修理实际恢复了子件耐久，guid 必须换新落库")
+	}
+	if got := itemVersionTicks(t, srv, rod.GUID); got <= beforeTicks {
+		t.Fatalf("零价修理恢复子件耐久必须抬版本戳：before=%d after=%d", beforeTicks, got)
 	}
 
 	// 子件已满的重复请求：不再换 guid、不再落库，保持幂等。
@@ -1106,5 +1143,227 @@ func TestWorkshopRenderKeepsRepairedDefaultPartGuid(t *testing.T) {
 	}
 	if got := childGUID(); got != repaired {
 		t.Fatalf("启动修复把手柄 guid 打回 %s（应为 %s）", got, repaired)
+	}
+}
+
+// TestWorkshopRepairReplayThroughReceiptsChargesOnce 钉住 21/3 的回执幂等：
+// 统一 dispatchRequest 中间件按 token 哈希 + main + sub + call_id 原子抢占
+// 回执、先落回执再发送响应。同一 call_id 的重复请求（同会话重发、重连后同
+// token 会话重发）只重放第一次的响应，不得再次扣费或再次修理。
+func TestWorkshopRepairReplayThroughReceiptsChargesOnce(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	rod, partID := seedWornWorkshopRod(t, srv, db, .4, .5)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 10000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	body, err := proto.EncodeValue(snapshotWorkshopRequestPart(rod.GUID, 4, partID, 0), srv.Table())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newReceiptTestSession(t, srv, 1, "1|2|1000001|workshop-replay")
+	h.send(21, 3, 501, body, 0x00)
+	// 首执行随附的 4/22 物品刷新推送走 marker -1（推送信封），本测试管道
+	// 只捕获 -2/-3，不可见也无需处理。
+	first := waitReceiptResponse(t, h)
+
+	wantCost := int64(math.Round(0.6 * 500)) // 手柄 0.4 磨损 → 300 银
+	profile, err := db.GetProfile(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := int64(10000) - profile.Silver; got != wantCost {
+		t.Fatalf("首执行应扣 %d，实扣 %d", wantCost, got)
+	}
+
+	// 同会话重试同一 call_id：只重放，不再扣费。
+	h.send(21, 3, 501, body, 0x00)
+	replay := waitReceiptResponse(t, h)
+	if string(replay.Body) != string(first.Body) {
+		t.Fatalf("重放必须返回第一次的响应: first=%x replay=%x", first.Body, replay.Body)
+	}
+
+	// 重连后的新会话（同 token、同 call_id、同 body）同样只重放。
+	h2 := newReceiptTestSession(t, srv, 2, "1|2|1000001|workshop-replay")
+	h2.send(21, 3, 501, body, 0x00)
+	replay2 := waitReceiptResponse(t, h2)
+	if string(replay2.Body) != string(first.Body) {
+		t.Fatalf("重连重放响应不符: %x", replay2.Body)
+	}
+
+	profile, err = db.GetProfile(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := int64(10000) - profile.Silver; got != wantCost {
+		t.Fatalf("重放不得二次扣费：应只扣 %d，实扣 %d", wantCost, got)
+	}
+	var txnCount int
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM txn WHERE uid=? AND kind='workshop_part'`, uid).Scan(&txnCount); err != nil {
+		t.Fatal(err)
+	}
+	if txnCount != 1 {
+		t.Fatalf("重试只应有首执行的 1 条流水，实得 %d 条", txnCount)
+	}
+}
+
+// TestWorkshopRepairConcurrentDuplicatesChargeOnce 钉住并发重复请求只执行
+// 一次：N 个并发同 key（token+main+sub+call_id+body）请求经 DB 原子抢占，
+// 只有一个执行扣费，其余等回执落定后重放——并发重复不会各自按旧磨损计价。
+func TestWorkshopRepairConcurrentDuplicatesChargeOnce(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	rod, partID := seedWornWorkshopRod(t, srv, db, .4, .5)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 10000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	body, err := proto.EncodeValue(snapshotWorkshopRequestPart(rod.GUID, 4, partID, 0), srv.Table())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newReceiptTestSession(t, srv, 1, "1|2|1000001|workshop-concurrent")
+	const workers = 4
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			h.send(21, 3, 501, body, 0x00)
+		}()
+	}
+	wg.Wait()
+
+	// 每个请求各收到一帧 21/3 响应（1 条执行 + workers-1 条重放），body
+	// 逐字节相同（4/22 推送走 marker -1，本管道不可见）。
+	firstBody := string(waitReceiptResponse(t, h).Body)
+	for i := 1; i < workers; i++ {
+		if got := string(waitReceiptResponse(t, h).Body); got != firstBody {
+			t.Fatalf("并发响应[%d]与首响应不符: %x != %x", i, got, firstBody)
+		}
+	}
+
+	wantCost := int64(math.Round(0.6 * 500))
+	profile, err := db.GetProfile(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := int64(10000) - profile.Silver; got != wantCost {
+		t.Fatalf("并发重复请求应只扣一次 %d，实扣 %d", wantCost, got)
+	}
+	var txnCount int
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM txn WHERE uid=? AND kind='workshop_part'`, uid).Scan(&txnCount); err != nil {
+		t.Fatal(err)
+	}
+	if txnCount != 1 {
+		t.Fatalf("并发重复请求只应有 1 条流水，实得 %d 条", txnCount)
+	}
+	fresh := mustItem(t, db, rod.GUID)
+	if fresh.Durability != 1 {
+		t.Fatalf("并发重复请求后本体耐久应为 1，实得 %v", fresh.Durability)
+	}
+}
+
+// TestWorkshopZeroCostRepairPushesVersionedTree 钉住零价修理的 4/22 推送：
+// 只刷本体（没有子件修理）也必须抬版本戳——客户端只接受版本戳变大的
+// 4/22 更新，版本不变这帧就会被忽略，面板耐久停在旧值。
+func TestWorkshopZeroCostRepairPushesVersionedTree(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	rod, partID := seedWornWorkshopRod(t, srv, db, 1, 0.9995)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 1000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	before := itemVersionTicks(t, srv, rod.GUID)
+
+	body, err := proto.EncodeValue(snapshotWorkshopRequestPart(rod.GUID, 4, partID, 0), srv.Table())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newReceiptTestSession(t, srv, 1, "1|2|1000001|workshop-push")
+	h.send(21, 3, 501, body, 0x00)
+	if resp := waitReceiptResponse(t, h); len(resp.Body) == 0 {
+		t.Fatal("零价修理应成功回包")
+	}
+	push := waitReceiptPush(t, h)
+	if push.Main != 4 || push.Sub != 22 {
+		t.Fatalf("应推送 4/22 物品刷新，实得 %d/%d", push.Main, push.Sub)
+	}
+	dec, _, err := proto.DecodeValue(push.Body, 0, srv.Table())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dec.Kind != proto.KindArgs || dec.ArgCodeStr() != "61" || dec.ArgCount() < 1 {
+		t.Fatalf("4/22 载荷应为 args(61)[物品树]，实得 kind=%v code=%q n=%d",
+			dec.Kind, dec.ArgCodeStr(), dec.ArgCount())
+	}
+	tree := dec.ArgItem(0)
+	if tree == nil || tree.Kind != proto.KindObj {
+		t.Fatalf("4/22 args[0] 应为物品树 obj，实得 %v", tree.Kind)
+	}
+	after := itemVersionTicks(t, srv, rod.GUID)
+	if after <= before {
+		t.Fatalf("推送树版本戳必须严格递增：before=%d after=%d", before, after)
+	}
+	if tidx := fieldIdxByCS(tree.Class, csCreated); tidx < 0 || u64Of(tree.Fields[tidx].Num) != after {
+		t.Fatalf("推送树版本戳应与落库一致，实得 %d != %d",
+			u64Of(tree.Fields[fieldIdxByCS(tree.Class, csCreated)].Num), after)
+	}
+	if got := snapshotFloat(tree.Fields, tree.Class, csDurability); math.Abs(got-1) > 1e-6 {
+		t.Fatalf("推送树本体耐久应为 1，实得 %v", got)
+	}
+}
+
+// TestWorkshopZeroCostRepairFailsWhenPersistFails 钉住零价落库失败必须报错：
+// 返回成功就必须真的修好，写库失败不能再退回"纯幂等成功"假装修好。
+func TestWorkshopZeroCostRepairFailsWhenPersistFails(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	rod, partID := seedWornWorkshopRod(t, srv, db, 1, 0.9995)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 1000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	beforeTicks := itemVersionTicks(t, srv, rod.GUID)
+	if _, err := db.SQL.ExecContext(ctx, fmt.Sprintf(
+		`CREATE TRIGGER fail_zero_cost_repair BEFORE UPDATE OF fields_json ON item
+		 FOR EACH ROW WHEN OLD.guid='%s'
+		 BEGIN SELECT RAISE(ABORT,'注入零价落库失败'); END`, rod.GUID)); err != nil {
+		t.Fatalf("注入失败: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.SQL.Exec(`DROP TRIGGER IF EXISTS fail_zero_cost_repair`)
+	})
+
+	c := &Ctx{
+		Sess: newProbeSess(srv), Main: 21, Sub: 3,
+		Tree: snapshotWorkshopRequestPart(rod.GUID, 4, partID, 0),
+		Log:  logging.Discard(),
+	}
+	if _, ok := hWorkshopOrder(c); ok {
+		t.Fatal("零价落库失败时修理不应返回成功")
+	}
+	fresh := mustItem(t, db, rod.GUID)
+	if math.Abs(fresh.Durability-0.9995) > 1e-9 {
+		t.Fatalf("落库失败后本体耐久应保持 0.9995，实得 %v", fresh.Durability)
+	}
+	if got := itemVersionTicks(t, srv, rod.GUID); got != beforeTicks {
+		t.Fatalf("落库失败不得抬版本戳：before=%d after=%d", beforeTicks, got)
 	}
 }
