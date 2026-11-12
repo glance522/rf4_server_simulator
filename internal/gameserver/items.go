@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"rf4server/internal/proto"
@@ -734,16 +735,27 @@ func (s *Server) rebuildRod(ctx context.Context, it *store.Item, obj *proto.Valu
 		if !ok || sysID == "" {
 			continue
 		}
-		// 槽位已有可解析的同品类子件时保留玩家装配：工作坊允许把竿柄换成
+		// 槽位为空或子件损坏（解析不出品类/品类不符）时按定义重建；同品类
+		// 子件再分两种：确实换过型号的保留玩家装配（工作坊允许把竿柄换成
 		// 别的型号，buildPartInstance 构造的实例状态位/工艺/耐久齐全。若不
-		// 保留，每次启动（RepairItemPhysics）和每次下发（ItemToTree）都会
-		// 把换装打回出厂默认件。只有槽位为空或子件损坏（解析不出品类/
-		// 品类不符）才按定义重建。
+		// 保留，每次启动 RepairItemPhysics 和每次下发 ItemToTree 都会把换装
+		// 打回出厂默认件）；出厂默认件仍按定义重建，让静态定义的更新（新
+		// 字段/新强度模型）能通过默认槽位重新派生。
+		preserveGUID := ""
 		if old := obj.Fields[i].Val; old != nil && old.Kind == proto.KindObj {
 			if oldCat := s.childCategory(ctx, old); oldCat > 0 {
 				if defChild, derr := s.DB.GetItemDefByItemID(ctx, sysID); derr == nil && defChild != nil &&
 					oldCat == defChild.Category {
-					continue
+					if installed := s.childSystemID(ctx, old); installed != "" &&
+						!strings.EqualFold(installed, sysID) {
+						continue
+					}
+					// 出厂默认件走重建，但保留其 guid：guid 是客户端零件行
+					// 重渲染的触发器，修理刚刷新的 guid 若被重建打回确定性
+					// 派生值，同 guid 的耐久更新不会再触发重渲染。
+					if gidx := fieldIdxByCS(old.Class, csGUID); gidx >= 0 && gidx < old.FieldCount() {
+						preserveGUID = old.Fields[gidx].Hex
+					}
 				}
 			}
 		}
@@ -760,6 +772,13 @@ func (s *Server) rebuildRod(ctx context.Context, it *store.Item, obj *proto.Valu
 		if old := obj.Fields[i].Val; old != nil && old.Kind == proto.KindObj {
 			if dur := reelChildDurability(old); dur < 1 {
 				setReelChildDurability(child, dur)
+			}
+		}
+		if preserveGUID != "" {
+			if gidx := fieldIdxByCS(child.Class, csGUID); gidx >= 0 && gidx < child.FieldCount() {
+				child.Fields[gidx].Hex = preserveGUID
+			} else if fieldOpAt(child.Class, 0) == "GUID16" {
+				child.Fields[0].Hex = preserveGUID
 			}
 		}
 		obj.Fields[i].Val = child

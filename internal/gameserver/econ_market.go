@@ -1457,15 +1457,37 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	allRepairs := true
 	// 本次修理实际恢复了耐久的子件 guid 集合：客户端按子件 guid 缓存零件
 	// 显示，同型号修理原地改耐久 guid 不变不会触发零件行重渲染。落库前给
-	// 这些子件换新 guid，让客户端按新实例重建显示。
+	// 这些子件换新 guid，让客户端按新实例重建显示。满耐久子件不标记，避免
+	// 无谓重渲染。
 	repairedGUIDs := map[string]bool{}
-	markRepaired := func(ch *proto.Value) {
+	childGUIDOf := func(ch *proto.Value) string {
 		if ch == nil || ch.Kind != proto.KindObj {
-			return
+			return ""
 		}
 		if gidx := fieldIdxByCS(ch.Class, csGUID); gidx >= 0 && gidx < ch.FieldCount() {
-			if g := ch.Fields[gidx].Hex; g != "" {
-				repairedGUIDs[g] = true
+			return ch.Fields[gidx].Hex
+		}
+		return ""
+	}
+	markRepaired := func(ch *proto.Value) {
+		if g := childGUIDOf(ch); g != "" {
+			repairedGUIDs[g] = true
+		}
+	}
+	// 落库前把标记过的子件换新 guid（带纳秒时间戳，重复请求不会得到相同值）。
+	refreshRepairedGUIDs := func() {
+		for i := range fields {
+			ch := fields[i].Val
+			if ch == nil || ch.Kind != proto.KindObj {
+				continue
+			}
+			gidx := fieldIdxByCS(ch.Class, csGUID)
+			if gidx < 0 || gidx >= ch.FieldCount() {
+				continue
+			}
+			if g := ch.Fields[gidx].Hex; g != "" && repairedGUIDs[g] {
+				sum := md5.Sum([]byte(g + "|repair|" + strconv.FormatInt(time.Now().UnixNano(), 10)))
+				ch.Fields[gidx].Hex = fmt.Sprintf("%x", sum)
 			}
 		}
 	}
@@ -1538,19 +1560,39 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	wholeItemRepair := bodyRepair || (hasPartOrder && allRepairs)
 	if hasPartOrder && allRepairs {
 		if isReel {
+			// 整机保养会把内件全部刷满：restore 前先记录哪些内件真的掉过
+			// 耐久，之后只给这些子件换 guid——满耐久子件保持原 guid，避免
+			// 无谓重渲染（对齐"实际恢复耐久的子件"口径）。
+			wornGUIDs := map[string]bool{}
+			snapWorn := func(ch *proto.Value) {
+				if g := childGUIDOf(ch); g != "" && reelChildDurability(ch) < 1 {
+					wornGUIDs[g] = true
+				}
+			}
+			if child, _, _, ok := srv.selectedReelPart(cctx, fields, reelPartCatWasher); ok {
+				snapWorn(child)
+			}
+			for _, category := range srv.reelWearCategoriesInFields(cctx, fields) {
+				if child, _, _, ok := srv.selectedReelPart(cctx, fields, category); ok {
+					snapWorn(child)
+				}
+			}
 			if _, ierr := srv.restoreReelInternalsInFields(cctx, row, fields); ierr != nil {
 				ctx.Log.Warn("工坊修理：轮内零件恢复失败", "guid", shortGUID(row.GUID), "err", ierr)
 				return nil, false
 			}
-			// 整机保养恢复全部内件：标记全部内件子件（磨损件会被重渲染，
-			// 满耐久件标记无副作用——只对本次真正落库的修理生效）。
-			if child, _, idx, ok := srv.selectedReelPart(cctx, fields, reelPartCatWasher); ok {
-				_ = idx
-				markRepaired(child)
+			markRestored := func(ch *proto.Value) {
+				if g := childGUIDOf(ch); g != "" && wornGUIDs[g] {
+					repairedGUIDs[g] = true
+				}
+			}
+			// 整机保养恢复全部内件：只标记本次实际恢复过耐久的子件。
+			if child, _, _, ok := srv.selectedReelPart(cctx, fields, reelPartCatWasher); ok {
+				markRestored(child)
 			}
 			for _, category := range srv.reelWearCategoriesInFields(cctx, fields) {
 				if child, _, _, ok := srv.selectedReelPart(cctx, fields, category); ok {
-					markRepaired(child)
+					markRestored(child)
 				}
 			}
 			// 本体耐久是内件的综合，收费取
@@ -1595,8 +1637,10 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		// 客户端对同一修理操作会连发两次 21/3：第二次到达时目标已被第一次
 		// 修满，按磨损计价必然是 0。纯修理落到零价 = 已无磨损可修，按幂等
 		// 成功处理：不扣费、不写流水，回当前物品树（对齐"已完好则不必修理，
-		// 避免白扣费"的口径）。有换件条目却算出零价属于定价缺失，仍然拒绝。
-		if wholeItemRepair {
+		// 避免白扣费"的口径）。幂等成功仅限纯修理（无换件条目，或条目全是
+		// 同型号修理）：带换件条目却算出零价属于定价缺失（或条目解析不到
+		// 槽位），继续走拒绝，不能让换件被静默丢弃。
+		if wholeItemRepair && (!hasPartOrder || allRepairs) {
 			// 零价不代表物品已满：本体可能还差极小耐久。修理语义是恢复整个
 			// 物品，这里把本体也刷满并落库；轮子同步性能表里的耐久快照。
 			// 写库失败退回纯幂等，不让这次修理变成报错。
@@ -1608,6 +1652,19 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 							perf.Durability = 1
 							_ = srv.DB.UpsertReelPerformance(cctx, *perf)
 						}
+					}
+				}
+			}
+			// 同型号修理循环顺带修掉的零价子件（渔轮整机保养更会把全部内件
+			// 刷满）也要落库：返回成功就必须真的修好，不能回一棵数据库里的
+			// 旧树把这些子件修理丢掉。换新 guid 与版本戳同成功路径口径。
+			if len(repairedGUIDs) > 0 {
+				refreshRepairedGUIDs()
+				bumpCreatedTicks(fields, row.WireClass)
+				if fj, jerr := FieldsToJSON(fields); jerr == nil {
+					if ferr := srv.DB.UpdateItemFields(cctx, row.GUID, fj, row.Qty,
+						row.Durability, row.Workmanship, row.RigGUID); ferr == nil {
+						row.FieldsJSON = fj
 					}
 				}
 			}
@@ -1664,20 +1721,7 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		}
 	}
 	// 本次修理恢复过的子件换新 guid，让客户端按新实例重建零件显示。
-	for i := range fields {
-		ch := fields[i].Val
-		if ch == nil || ch.Kind != proto.KindObj {
-			continue
-		}
-		gidx := fieldIdxByCS(ch.Class, csGUID)
-		if gidx < 0 || gidx >= ch.FieldCount() {
-			continue
-		}
-		if g := ch.Fields[gidx].Hex; g != "" && repairedGUIDs[g] {
-			sum := md5.Sum([]byte(g + "|repair|" + strconv.FormatInt(time.Now().UnixNano(), 10)))
-			ch.Fields[gidx].Hex = fmt.Sprintf("%x", sum)
-		}
-	}
+	refreshRepairedGUIDs()
 	// 版本戳必须严格递增，否则客户端会忽略更新后的物品树，工作坊停在转圈状态。
 	bumpCreatedTicks(fields, row.WireClass)
 	fj, jerr := FieldsToJSON(fields)

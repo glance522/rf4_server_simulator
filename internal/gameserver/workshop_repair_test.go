@@ -867,3 +867,244 @@ func TestWorkshopSameModelRepairRefreshesChildGuid(t *testing.T) {
 		t.Fatal("实际修理过的子件 guid 必须换新，否则客户端不重渲染耐久显示")
 	}
 }
+
+// TestWorkshopZeroCostRepairPersistsChildRepair 钉住零价修理也要真的修好：
+// 零件磨损四舍五入为 0 时，同型号修理循环已把子件刷满，零价幂等分支必须把
+// 这次子件修理落库并换 guid，不能回一棵数据库旧树把修理丢掉。重复请求（子件
+// 已满）不得再换 guid，保持幂等。
+func TestWorkshopZeroCostRepairPersistsChildRepair(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	// 竿柄 0.9995 → Round(0.0005*500)=0，整机价必然为零，但子件确实被修了。
+	rod, partID := seedWornWorkshopRod(t, srv, db, .9995, 1)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 1000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	partState := func() (float64, string) {
+		row := mustItem(t, db, rod.GUID)
+		fields := snapshotFields(t, row.FieldsJSON)
+		p, _ := snapshotPart(t, srv, fields, 4)
+		if p == nil {
+			t.Fatal("竿柄子件缺失")
+		}
+		gidx := fieldIdxByCS(p.Class, csGUID)
+		if gidx < 0 {
+			t.Fatal("竿柄子件缺 guid 槽")
+		}
+		return snapshotFloat(p.Fields, p.Class, csDurability), p.Fields[gidx].Hex
+	}
+
+	_, beforeGUID := partState()
+	c := &Ctx{
+		Sess: newProbeSess(srv), Main: 21, Sub: 3,
+		Tree: snapshotWorkshopRequestPart(rod.GUID, 4, partID, 0),
+		Log:  logging.Discard(),
+	}
+	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
+		t.Fatal("零价修理应幂等成功")
+	}
+	profile, err := db.GetProfile(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Silver != 1000 {
+		t.Fatalf("零价修理不得扣费，余额应保持 1000，实得 %d", profile.Silver)
+	}
+	dur, afterGUID := partState()
+	if dur != 1 {
+		t.Fatalf("零价修理后竿柄耐久必须落库刷满 1，实得 %v", dur)
+	}
+	if afterGUID == beforeGUID {
+		t.Fatal("零价修理实际恢复了子件耐久，guid 必须换新落库")
+	}
+
+	// 子件已满的重复请求：不再换 guid、不再落库，保持幂等。
+	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
+		t.Fatal("重复的零价修理应幂等成功")
+	}
+	if _, againGUID := partState(); againGUID != afterGUID {
+		t.Fatal("重复请求没有恢复任何耐久，guid 必须保持稳定")
+	}
+	var txnCount int
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM txn WHERE uid=? AND kind='workshop_part'`, uid).Scan(&txnCount); err != nil {
+		t.Fatal(err)
+	}
+	if txnCount != 0 {
+		t.Fatalf("零价修理不得写流水，实得 %d 条", txnCount)
+	}
+}
+
+// TestWorkshopZeroCostBodyRepairWithLooseOrderRejected 钉住零价幂等只限纯修理：
+// 本体修理条目搭带一条解析不到槽位的换件条目时，整机价算出 0，若按幂等成功
+// 返回，换件条目就被静默丢弃——必须按定价缺失拒绝。
+func TestWorkshopZeroCostBodyRepairWithLooseOrderRejected(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	reel, _ := seedWornWorkshopReel(t, srv, db, 1, 1, 1, 1)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 1000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	orders := proto.Args(proto.S("503"),
+		wiregen.MustMakeObj("gcllbdkgkna", map[int]*proto.Value{
+			0: proto.U32(uint32(gearCatReel)), // 本体修理条目
+			1: proto.StrVal(reel.ItemID),
+		}),
+		wiregen.MustMakeObj("gcllbdkgkna", map[int]*proto.Value{
+			0: proto.U32(63), // 轮上不存在的品类：解析不到槽位，不计价
+			1: proto.StrVal("part_unknown_63"),
+		}),
+	)
+	req := proto.Args524(proto.StrVal("workshop_01"), wiregen.MustMakeObj("nfmkdcbnkhp", map[int]*proto.Value{
+		0: proto.Guid(reel.GUID),
+		1: orders,
+		2: proto.U32(0),
+		3: proto.U64(0),
+	}))
+	c := &Ctx{Sess: newProbeSess(srv), Main: 21, Sub: 3, Tree: req, Log: logging.Discard()}
+	if _, ok := hWorkshopOrder(c); ok {
+		t.Fatal("本体修理搭带换件条目的零价请求应按定价缺失拒绝，而不是幂等成功丢弃换件")
+	}
+	profile, err := db.GetProfile(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Silver != 1000 {
+		t.Fatalf("被拒绝的零价请求不得扣费，余额应保持 1000，实得 %d", profile.Silver)
+	}
+	fresh := mustItem(t, db, reel.GUID)
+	if fresh.Durability != 1 {
+		t.Fatalf("被拒绝的零价请求不得改动物品，本体耐久应保持 1，实得 %v", fresh.Durability)
+	}
+}
+
+// TestWorkshopReelWholeServiceOnlyRefreshesWornGuids 钉住整机保养的 guid 口径：
+// 只有本次实际恢复了耐久的子件才换 guid，满耐久子件保持原 guid，避免客户端
+// 无谓重渲染。
+func TestWorkshopReelWholeServiceOnlyRefreshesWornGuids(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	// 只有齿轮磨损（0.2），摩擦片/轴承/油全满。
+	reel, gearID := seedWornWorkshopReel(t, srv, db, .8, 1, 1, 1)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 10000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	partGUID := func(cat int64) string {
+		row := mustItem(t, db, reel.GUID)
+		fields := snapshotFields(t, row.FieldsJSON)
+		p, _ := snapshotPart(t, srv, fields, cat)
+		if p == nil {
+			t.Fatalf("子件 %d 缺失", cat)
+		}
+		gidx := fieldIdxByCS(p.Class, csGUID)
+		if gidx < 0 {
+			t.Fatalf("子件 %d 缺 guid 槽", cat)
+		}
+		return p.Fields[gidx].Hex
+	}
+	gearBefore, washerBefore, bearingBefore := partGUID(reelPartCatGear), partGUID(reelPartCatWasher), partGUID(reelPartCatBearing)
+
+	c := &Ctx{
+		Sess: newProbeSess(srv), Main: 21, Sub: 3,
+		Tree: snapshotWorkshopRequestPart(reel.GUID, uint32(reelPartCatGear), gearID, 0),
+		Log:  logging.Discard(),
+	}
+	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
+		t.Fatal("整机保养订单失败")
+	}
+	if got := partGUID(reelPartCatGear); got == gearBefore {
+		t.Fatal("恢复过耐久的齿轮 guid 必须换新")
+	}
+	if got := partGUID(reelPartCatWasher); got != washerBefore {
+		t.Fatal("满耐久摩擦片不应换 guid（无谓重渲染）")
+	}
+	if got := partGUID(reelPartCatBearing); got != bearingBefore {
+		t.Fatal("满耐久轴承不应换 guid（无谓重渲染）")
+	}
+	profile, err := db.GetProfile(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := int64(10000) - profile.Silver; got != 100 {
+		t.Fatalf("整机保养应按齿轮磨损收 100，实扣 %d", got)
+	}
+}
+
+// TestWorkshopRenderKeepsRepairedDefaultPartGuid 钉住默认件的重建口径：
+// rebuildRod 对出厂默认件按定义重建（让静态定义更新能重新派生），但必须
+// 保留原子件 guid——修理刚刷新的 guid 若被重建打回确定性派生值，客户端
+// 按 guid 缓存就看不到耐久恢复；换过型号的子件仍然整体保留。
+func TestWorkshopRenderKeepsRepairedDefaultPartGuid(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	rod, partID := seedWornWorkshopRod(t, srv, db, .4, 1)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 100000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	childGUID := func() string {
+		row := mustItem(t, db, rod.GUID)
+		fields := snapshotFields(t, row.FieldsJSON)
+		h, _ := snapshotPart(t, srv, fields, 4)
+		if h == nil {
+			t.Fatal("手柄子件缺失")
+		}
+		gidx := fieldIdxByCS(h.Class, csGUID)
+		return h.Fields[gidx].Hex
+	}
+	c := &Ctx{
+		Sess: newProbeSess(srv), Main: 21, Sub: 3,
+		Tree: snapshotWorkshopRequestPart(rod.GUID, 4, partID, 0),
+		Log:  logging.Discard(),
+	}
+	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
+		t.Fatal("同型号修理失败")
+	}
+	repaired := childGUID()
+
+	// 下发渲染走 rebuildRod：默认件重建后 guid 必须保持修理刷新值。
+	tree, terr := srv.ItemToTree(ctx, mustItem(t, db, rod.GUID))
+	if terr != nil {
+		t.Fatal(terr)
+	}
+	treeGUID := ""
+	for i := range tree.Fields {
+		v := tree.Fields[i].Val
+		if v == nil || v.Kind != proto.KindObj {
+			continue
+		}
+		if srv.childCategory(ctx, v) == 4 {
+			if gidx := fieldIdxByCS(v.Class, csGUID); gidx >= 0 && gidx < v.FieldCount() {
+				treeGUID = v.Fields[gidx].Hex
+			}
+			break
+		}
+	}
+	if treeGUID != repaired {
+		t.Fatalf("下发渲染把修理刷新的手柄 guid 打回 %s（应为 %s）——同 guid 耐久更新不会重渲染",
+			treeGUID, repaired)
+	}
+
+	// 启动修复同样不得打回。
+	if err := srv.RepairItemPhysics(ctx); err != nil {
+		t.Fatalf("启动修复失败: %v", err)
+	}
+	if got := childGUID(); got != repaired {
+		t.Fatalf("启动修复把手柄 guid 打回 %s（应为 %s）", got, repaired)
+	}
+}
