@@ -196,7 +196,7 @@ func itemLengthField(row *store.Item, fields []proto.Field) int64 {
 	if row == nil {
 		return 0
 	}
-	if idx := fieldIdxByCS(row.WireClass, csQty); idx >= 0 && idx < len(fields) {
+	if idx := itemQtyFieldIdx(row.WireClass); idx >= 0 && idx < len(fields) {
 		return int64(u64Of(fields[idx].Num))
 	}
 	if row.Qty > 0 {
@@ -210,7 +210,7 @@ func (s *Server) itemLength(ctx context.Context, row *store.Item) int64 {
 		return 0
 	}
 	if fields, err := FieldsFromJSON(row.FieldsJSON); err == nil {
-		if idx := fieldIdxByCS(row.WireClass, csQty); idx >= 0 && idx < len(fields) {
+		if idx := itemQtyFieldIdx(row.WireClass); idx >= 0 && idx < len(fields) {
 			return int64(u64Of(fields[idx].Num))
 		}
 	}
@@ -224,7 +224,7 @@ func setItemLengthField(row *store.Item, fields []proto.Field, length int64) boo
 	if row == nil || length < 0 {
 		return false
 	}
-	idx := fieldIdxByCS(row.WireClass, csQty)
+	idx := itemQtyFieldIdx(row.WireClass)
 	if idx < 0 || idx >= len(fields) {
 		return false
 	}

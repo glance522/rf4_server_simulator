@@ -240,6 +240,9 @@ func (s *Server) prepareNewItem(ctx context.Context, uid int64, itemID, containe
 			writeItemQty(cls.Class, obj, fieldQty)
 			rowQty = int64(fieldQty)
 		}
+	} else if def.Category == couponCategory {
+		// 一券一实例：数量槽固定 1，与 CreateItem 对称。
+		writeItemQty(cls.Class, obj, 1)
 	}
 	s.materializeInto(ctx, cls.Class, def, obj, guid, 1, 1)
 	if idx := fieldIdxByCS(cls.Class, csCreated); idx >= 0 {
