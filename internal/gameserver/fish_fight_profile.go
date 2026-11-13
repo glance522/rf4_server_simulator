@@ -53,7 +53,7 @@ func fishFightArchetypeFor(species string) fishFightArchetype {
 		"muksun", "peled", "ripus", "vendace", "smelt", "keta", "nerka", "golets", "grayling"):
 		return fishFightArchetypes["salmonid"]
 	case has("pike", "zander", "walleye", "perch", "barsch", "orfe", "asp",
-		"ruffe", "piksha", "sander"):
+		"ruffe", "sander"):
 		return fishFightArchetypes["ambush"]
 	case has("eel", "lamprey", "conger"):
 		return fishFightArchetypes["eel"]
@@ -64,7 +64,11 @@ func fishFightArchetypeFor(species string) fishFightArchetype {
 		return fishFightArchetypes["small"]
 	case has("cod", "herring", "mackerel", "makrel", "tuna", "thynnus",
 		"halibut", "kambala", "coalfish", "pollachius", "merluza", "molva",
-		"hake", "saithe", "turbot", "flounder", "scorpius", "zoarces"):
+		"hake", "saithe", "turbot", "flounder", "scorpius", "zoarces",
+		// 词表修正（搏鱼脱钩方案 §五C）：piksha 实测为海水鲽科，此前按
+		// "pike" 子串误入淡水伏击组；menek/agar/warm/merlang 同为实测海水，
+		// 原先落 default（crucian 池）。
+		"merlang", "menek", "piksha", "agar", "warm"):
 		return fishFightArchetypes["marine"]
 	default:
 		return fishFightArchetypes["default"]

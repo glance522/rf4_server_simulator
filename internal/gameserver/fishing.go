@@ -1600,6 +1600,8 @@ type fishStatics struct {
 	f14 map[int64]float64
 	f15 map[int64]float64
 	f17 map[int64]float64
+	f16 float64 // 激进度/挣脱概率：官方逐鱼种常数（0.13~1.0）
+	f18 float64 // 官方逐鱼种常数（既有种落表时未采到差异，显式 1 维持现行为）
 	f20 float64
 	f9  [2]float64 // A, p
 	f10 [2]float64
@@ -1610,51 +1612,130 @@ type fishStatics struct {
 var officialSpeciesStatics = map[string]*fishStatics{
 	"bream": {
 		f13: map[int64]float64{2: 0.35}, f14: map[int64]float64{2: 2.0}, f15: map[int64]float64{2: 50.0},
-		f17: map[int64]float64{2: 0.8406126}, f20: 0.9978698,
+		f16: 1, f17: map[int64]float64{2: 0.8406126}, f18: 1, f20: 0.9978698,
 		f9: [2]float64{0.159245, 0.2656}, f10: [2]float64{0.153964, 0.2191},
 		f11: [2]float64{0.0991065, 0.2604}, f19: [2]float64{1.60587e-05, 0.7986},
 	},
 	"c.carp": {
 		f13: map[int64]float64{1: 0.25, 2: 0.35}, f14: map[int64]float64{1: 0.5, 2: 0.5},
-		f15: map[int64]float64{1: 4.0, 2: 4.0}, f17: map[int64]float64{1: 0.8406168, 2: 0.8406168},
-		f20: 0.9978698,
-		f9:  [2]float64{0.485972, 0.1722}, f10: [2]float64{0.215219, 0.2493},
+		f15: map[int64]float64{1: 4.0, 2: 4.0},
+		f16: 1, f17: map[int64]float64{1: 0.8406168, 2: 0.8406168}, f18: 1, f20: 0.9978698,
+		f9: [2]float64{0.485972, 0.1722}, f10: [2]float64{0.215219, 0.2493},
 		f11: [2]float64{0.227746, 0.1307}, f19: [2]float64{3.18019e-05, 0.7000},
 	},
 	"c.roach": {
 		f13: map[int64]float64{1: 0.30, 2: 0.15}, f14: map[int64]float64{1: 0.6, 2: 0.7},
-		f15: map[int64]float64{1: 3.0, 2: 15.0}, f17: map[int64]float64{1: 0.8406168, 2: 0.8406168},
-		f20: 0.9978698,
-		f9:  [2]float64{0.414243, 0.2656}, f10: [2]float64{0.369253, 0.2191},
+		f15: map[int64]float64{1: 3.0, 2: 15.0},
+		f16: 1, f17: map[int64]float64{1: 0.8406168, 2: 0.8406168}, f18: 1, f20: 0.9978698,
+		f9: [2]float64{0.414243, 0.2656}, f10: [2]float64{0.369253, 0.2191},
 		f11: [2]float64{0.139494, 0.2604}, f19: [2]float64{1.78540e-05, 0.7986},
 	},
 	"crucian": {
 		f13: map[int64]float64{1: 0.25, 2: 0.35}, f14: map[int64]float64{1: 0.5, 2: 0.5},
-		f15: map[int64]float64{1: 4.0, 2: 4.0}, f17: map[int64]float64{1: 0.8406168, 2: 0.8406168},
-		f20: 0.9978698,
-		f9:  [2]float64{0.452706, 0.1941}, f10: [2]float64{0.233332, 0.2355},
+		f15: map[int64]float64{1: 4.0, 2: 4.0},
+		f16: 1, f17: map[int64]float64{1: 0.8406168, 2: 0.8406168}, f18: 1, f20: 0.9978698,
+		f9: [2]float64{0.452706, 0.1941}, f10: [2]float64{0.233332, 0.2355},
 		f11: [2]float64{0.206706, 0.1482}, f19: [2]float64{3.18023e-05, 0.7000},
 	},
 	"e.chub": {
 		f13: map[int64]float64{1: 0.35, 2: 0.45}, f14: map[int64]float64{1: 0.6, 2: 0.6},
-		f15: map[int64]float64{1: 6.0, 2: 6.0}, f17: map[int64]float64{1: 0.8406126, 2: 0.7030094},
-		f20: 0.9978698,
-		f9:  [2]float64{2.77068, 0.0700}, f10: [2]float64{0.725204, 0.1019},
+		f15: map[int64]float64{1: 6.0, 2: 6.0},
+		f16: 1, f17: map[int64]float64{1: 0.8406126, 2: 0.7030094}, f18: 1, f20: 0.9978698,
+		f9: [2]float64{2.77068, 0.0700}, f10: [2]float64{0.725204, 0.1019},
 		f11: [2]float64{0.27588, 0.1533}, f19: [2]float64{1.01401e-04, 0.5211},
 	},
 	"perch": {
 		f13: map[int64]float64{1: 0.15, 2: 0.24}, f14: map[int64]float64{1: 0.4, 2: 0.5},
-		f15: map[int64]float64{1: 40.0, 2: 40.0}, f17: map[int64]float64{1: 0.8995978, 2: 0.8995978},
-		f20: 0.9979957,
-		f9:  [2]float64{0.589176, 0.2371}, f10: [2]float64{0.182802, 0.2936},
+		f15: map[int64]float64{1: 40.0, 2: 40.0},
+		f16: 1, f17: map[int64]float64{1: 0.8995978, 2: 0.8995978}, f18: 1, f20: 0.9979957,
+		f9: [2]float64{0.589176, 0.2371}, f10: [2]float64{0.182802, 0.2936},
 		f11: [2]float64{0.202101, 0.2187}, f19: [2]float64{3.18016e-05, 0.7000},
 	},
 	"s.bream": {
 		f13: map[int64]float64{2: 0.30}, f14: map[int64]float64{2: 1.2}, f15: map[int64]float64{2: 13.0},
-		f17: map[int64]float64{2: 0.8406126}, f20: 0.9978698,
+		f16: 1, f17: map[int64]float64{2: 0.8406126}, f18: 1, f20: 0.9978698,
 		f9: [2]float64{0.160663, 0.2656}, f10: [2]float64{0.119378, 0.2191},
 		f11: [2]float64{0.0792359, 0.2604}, f19: [2]float64{1.77994e-05, 0.7986},
 	},
+	// 2026-11-13 落表 8 种：19 条官方 14/14 抓包逐种提炼
+	// （specs/changes/fight-statics-official-tables/spec.md，tmp_analysis/extract 解码）。
+	// f13/f14/f15/f17 按档 gradeMapVal（单档样本存样本档位，缺档回落同值）；
+	// f9/f10/f11 多样本 pow 最小二乘拟合（g_carp 5 样本）、单样本存常数（p=0，待补包改 pow）；
+	// f16/f18/f20 逐鱼种常数。f19 仅 taran 有浮钓真值（0.00204695@611g），
+	// 其余样本均为非浮钓 rig（官方非浮钓 f19 恒 1，buildFish27 按钓法覆盖），
+	// 种级 f19 留零走 fallbackFightStatics 体重插值，浮钓族口径不回退。
+	"g_carp": {
+		f13: map[int64]float64{2: 0.60}, f14: map[int64]float64{2: 1.20}, f15: map[int64]float64{2: 6.0},
+		f16: 1, f17: map[int64]float64{2: 0.945041}, f18: 0.950344, f20: 0.999763,
+		f9: [2]float64{0.396833, 0.178503}, f10: [2]float64{1.218483, 0.035711},
+		f11: [2]float64{0.251756, 0.120613},
+	},
+	"b_carp": {
+		f13: map[int64]float64{2: 0.65}, f14: map[int64]float64{2: 1.20}, f15: map[int64]float64{2: 6.0},
+		f16: 1, f17: map[int64]float64{2: 0.945114}, f18: 0.950416, f20: 0.999765,
+		f9: [2]float64{1.92761, 0}, f10: [2]float64{1.67074, 0}, f11: [2]float64{0.731901, 0},
+	},
+	"carp": {
+		f13: map[int64]float64{1: 0.20}, f14: map[int64]float64{1: 1.00}, f15: map[int64]float64{1: 6.0},
+		f16: 1, f17: map[int64]float64{1: 0.927123}, f18: 0.944333, f20: 0.999774,
+		f9: [2]float64{1.46609, 0}, f10: [2]float64{1.06575, 0}, f11: [2]float64{0.633218, 0},
+	},
+	"n.pike": {
+		f13: map[int64]float64{2: 0.50}, f14: map[int64]float64{2: 1.00}, f15: map[int64]float64{2: 20.0},
+		f16: 1, f17: map[int64]float64{2: 0.973469}, f18: 0.993922, f20: 0.999839,
+		f9: [2]float64{4.46105, 0}, f10: [2]float64{1.41526, 0}, f11: [2]float64{1.09221, 0},
+	},
+	"merlang": {
+		f13: map[int64]float64{1: 0.50}, f14: map[int64]float64{1: 25.0}, f15: map[int64]float64{1: 200.0},
+		f16: 0.251768, f17: map[int64]float64{1: 0.947264}, f18: 0.941456, f20: 0.99973,
+		f9: [2]float64{4.60922, 0}, f10: [2]float64{1.29599, 0}, f11: [2]float64{1.06092, 0},
+	},
+	"piksha": {
+		f13: map[int64]float64{2: 0.50}, f14: map[int64]float64{2: 20.0}, f15: map[int64]float64{2: 250.0},
+		f16: 0.129192, f17: map[int64]float64{2: 0.994663}, f18: 0.99352, f20: 0.999811,
+		f9: [2]float64{5.15528, 0}, f10: [2]float64{1.86211, 0}, f11: [2]float64{1.13106, 0},
+	},
+	"taran": {
+		f13: map[int64]float64{2: 0.40}, f14: map[int64]float64{2: 0.80}, f15: map[int64]float64{2: 16.0},
+		f16: 1, f17: map[int64]float64{2: 0.692334}, f18: 1, f20: 0.999452,
+		f9: [2]float64{2.47531, 0}, f10: [2]float64{1.48324, 0}, f11: [2]float64{0.734414, 0},
+		f19: [2]float64{0.00204695, 0},
+	},
+	"b_gill": {
+		f13: map[int64]float64{1: 0.45}, f14: map[int64]float64{1: 0.45}, f15: map[int64]float64{1: 10.0},
+		f16: 1, f17: map[int64]float64{1: 0.94152}, f18: 0.929121, f20: 0.999804,
+		f9: [2]float64{2.98462, 0}, f10: [2]float64{1.06095, 0}, f11: [2]float64{0.737278, 0},
+	},
+}
+
+// fishGroupFightStatics 未实测鱼种的习性组兜底静态参数（搏鱼脱钩方案 §五B /
+// P3 §五）：海水组 = merlang+piksha 两样本均值（鳕科/鲽科细分待 P3 锚点补抓），
+// 鲤科组 f9 沿用 g_carp pow、其余取方案约值与鲤科锚点均值。单样本种均为
+// 常数外推，体重偏离锚点时精度未知。
+var fishGroupFightStatics = map[string]*fishStatics{
+	"marine": {
+		f13: map[int64]float64{1: 0.50}, f14: map[int64]float64{1: 22.5}, f15: map[int64]float64{1: 225.0},
+		f16: 0.19048, f17: map[int64]float64{1: 0.970964}, f18: 0.967488, f20: 0.9997705,
+		f9: [2]float64{4.88225, 0}, f10: [2]float64{1.57905, 0}, f11: [2]float64{1.09599, 0},
+	},
+	"cyprinid": {
+		f13: map[int64]float64{1: 0.35}, f14: map[int64]float64{1: 1.00}, f15: map[int64]float64{1: 6.0},
+		f16: 1, f17: map[int64]float64{1: 0.93}, f18: 0.948364, f20: 0.999767,
+		f9: [2]float64{0.401, 0.179}, f10: [2]float64{1.6, 0}, f11: [2]float64{0.71, 0},
+	},
+}
+
+// fishGroupStaticsFor 习性组兜底：归组复用 fishFightArchetypeFor 词表——
+// marine → 海水组、cyprinid → 鲤科组；其余组（salmonid/small/…）与未命中
+// 返回 nil，走 fallbackFightStatics 第三层（保持现状可回滚）。
+func fishGroupStaticsFor(species string) *fishStatics {
+	switch fishFightArchetypeFor(species) {
+	case fishFightArchetypes["marine"]:
+		return fishGroupFightStatics["marine"]
+	case fishFightArchetypes["cyprinid"]:
+		return fishGroupFightStatics["cyprinid"]
+	}
+	return nil
 }
 
 // staticPow 计算 A*w^p，重量单位为克。
@@ -1734,6 +1815,9 @@ func (s *Server) fishStaminaForProfile(f *RolledFish, profile fishFightProfile) 
 		// 未实测种维持旧口径（2.388/g × archetype 耐力倍率）。
 		if rate, ok := fishStaminaRatePerGram[f.Species]; ok {
 			stamina = rate * float64(f.WeightG)
+		} else if rate := fishStaminaRateGroupFor(f.Species); rate > 0 {
+			// 组兜底同官方口径：直接 rate×体重，不乘 StaminaScale。
+			stamina = rate * float64(f.WeightG)
 		} else {
 			stamina = verifiedStaminaPerGram * float64(f.WeightG) * profile.StaminaScale
 		}
@@ -1795,7 +1879,21 @@ var fishF6Step = map[string]struct {
 	"crucian": {AboveG: 450, F6: 0.60},
 }
 
-// fishF6For 返回本鱼 f6：实测种量化表（含体重台阶）→ 旧版校准常数 fallback。
+// fishStaminaRateGroupFor 未实测鱼种的 f5 每克组均值：海水组 8.445
+// （merlang 10.50 与 piksha 6.39 均值）、鲤科组 2.5（方案约值）；
+// 未命中返回 0 走旧口径。归组复用 fishFightArchetypeFor 词表。
+func fishStaminaRateGroupFor(species string) float64 {
+	switch fishFightArchetypeFor(species) {
+	case fishFightArchetypes["marine"]:
+		return 8.445
+	case fishFightArchetypes["cyprinid"]:
+		return 2.5
+	}
+	return 0
+}
+
+// fishF6For 返回本鱼 f6：实测种量化表（含体重台阶）→ 海水组兜底 0.50
+// （merlang/piksha 实测均 0.50）→ 旧版校准常数 fallback。
 func (s *Server) fishF6For(f *RolledFish) float64 {
 	if f == nil {
 		return s.fishInitialStaminaRatio()
@@ -1805,6 +1903,9 @@ func (s *Server) fishF6For(f *RolledFish) float64 {
 			return step.F6
 		}
 		return v
+	}
+	if fishFightArchetypeFor(f.Species) == fishFightArchetypes["marine"] {
+		return 0.50
 	}
 	return s.fishInitialStaminaRatio()
 }
@@ -1817,6 +1918,53 @@ func (s *Server) fishInitialStaminaRatio() float64 {
 	return math.Max(0.05, math.Min(1.0, ratio))
 }
 
+// fish27Statics 汇聚 27 对象 f9~f20 静态参数（f7/f12 官方恒 0，不在列）。
+type fish27Statics struct {
+	f9, f10, f11  float64
+	f13, f14, f15 float64
+	f16, f17, f18 float64
+	f19, f20      float64
+}
+
+// fight27StaticsFor 三层回退：实测种（officialSpeciesStatics）→ 习性组
+// （fishGroupStaticsFor）→ 旧 fallbackFightStatics（保持现状可回滚）。
+// f19 特例：只有浮钓族生效（buildFish27 对其余钓法强制 1）；taran 有浮钓
+// 真值，其余落表种样本均为非浮钓 rig，种级 f19 留零时沿用 fallback
+// 的体重插值（与落表前浮钓行为逐字节一致）。
+func fight27StaticsFor(species string, w float64, grade int64) fish27Statics {
+	src := officialSpeciesStatics[species]
+	if src == nil {
+		src = fishGroupStaticsFor(species)
+	}
+	if src != nil {
+		out := fish27Statics{
+			f9:  staticPow(src.f9, w),
+			f10: staticPow(src.f10, w),
+			f11: staticPow(src.f11, w),
+			f13: gradeMapVal(src.f13, grade),
+			f14: gradeMapVal(src.f14, grade),
+			f15: gradeMapVal(src.f15, grade),
+			f16: src.f16,
+			f17: gradeMapVal(src.f17, grade),
+			f18: src.f18,
+			f20: src.f20,
+		}
+		if src.f19[0] > 0 {
+			out.f19 = staticPow(src.f19, w)
+		} else {
+			out.f19 = fallbackFightStatics(w)[19]
+		}
+		return out
+	}
+	fb := fallbackFightStatics(w)
+	return fish27Statics{
+		f9: fb[9], f10: fb[10], f11: fb[11],
+		f13: fb[13], f14: fb[14], f15: fb[15],
+		f16: fb[16], f17: fb[17], f18: fb[18],
+		f19: fb[19], f20: fb[20],
+	}
+}
+
 // buildFish27 构造 27 判鱼对象。
 // rigType 决定 27.f19 口径：官方真服抓包（2026-11-10/11，11 个 14/14）显示
 // 沉底/海钓/路亚的 f19 恒为 1.0（精确值 0x3f800000），浮钓族则是 0.001~0.0024
@@ -1827,28 +1975,11 @@ func (s *Server) fishInitialStaminaRatio() float64 {
 // 用于浮钓静置不上钩的应急恢复）。
 func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string, rigType int64) *proto.Value {
 	w := float64(f.WeightG)
-	st := officialSpeciesStatics[f.Species]
-	var f9, f10, f11, f12v, f13v, f14v, f15v, f16v, f17v, f18v, f19v, f20v float64
-	if st != nil {
-		f9 = staticPow(st.f9, w)
-		f10 = staticPow(st.f10, w)
-		f11 = staticPow(st.f11, w)
-		f13v = gradeMapVal(st.f13, f.Grade)
-		f14v = gradeMapVal(st.f14, f.Grade)
-		f15v = gradeMapVal(st.f15, f.Grade)
-		f12v = 0
-		f16v = 1
-		f17v = gradeMapVal(st.f17, f.Grade)
-		f18v = 1
-		f19v = staticPow(st.f19, w)
-		f20v = st.f20
-	} else {
-		fb := fallbackFightStatics(w)
-		f9, f10, f11 = fb[9], fb[10], fb[11]
-		f12v, f13v, f14v, f15v = fb[12], fb[13], fb[14], fb[15]
-		f16v, f17v, f18v = fb[16], fb[17], fb[18]
-		f19v, f20v = fb[19], fb[20]
-	}
+	st := fight27StaticsFor(f.Species, w, f.Grade)
+	f9, f10, f11 := st.f9, st.f10, st.f11
+	f12v, f13v, f14v, f15v := 0.0, st.f13, st.f14, st.f15
+	f16v, f17v, f18v := st.f16, st.f17, st.f18
+	f19v, f20v := st.f19, st.f20
 	if !floatRigTypes[rigType] || s.tunableF("float_f19_force_one", 0) != 0 {
 		f19v = 1
 	}
