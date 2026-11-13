@@ -751,6 +751,9 @@ type NamedFish struct {
 	Grade   int64
 	TS      float64
 	Catches int64
+	// CatchID/Bait 来自同一条鱼的结算记录，供 24/24 的 history 条目使用。
+	CatchID int64
+	Bait    string
 }
 
 func (d *DB) NamedFishGet(ctx context.Context, fishID string) (*NamedFish, error) {

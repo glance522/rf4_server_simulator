@@ -88,3 +88,25 @@ func TestCatchRecordsAndBestByWater(t *testing.T) {
 		t.Fatalf("missing=%+v err=%v", missing, err)
 	}
 }
+
+func TestNamedFishListFilterByPlace(t *testing.T) {
+	db := openSocialTestDB(t)
+	ctx := context.Background()
+	rows := []NamedFish{
+		{FishID: "f1", Species: "chan_m", Name: "Blue", Owner: "a", Place: "loc16_29", WeightG: 3235, Grade: 4, TS: 20},
+		{FishID: "f2", Species: "perch", Name: "Green", Owner: "b", Place: "loc16_31", WeightG: 900, Grade: 4, TS: 10},
+	}
+	for i := range rows {
+		if err := db.NamedFishInsert(ctx, &rows[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	all, err := db.NamedFishList(ctx, "")
+	if err != nil || len(all) != 2 || all[0].FishID != "f1" {
+		t.Fatalf("all=%+v err=%v", all, err)
+	}
+	one, err := db.NamedFishList(ctx, "loc16_31")
+	if err != nil || len(one) != 1 || one[0].FishID != "f2" {
+		t.Fatalf("filtered=%+v err=%v", one, err)
+	}
+}

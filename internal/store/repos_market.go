@@ -302,6 +302,36 @@ func (d *DB) NamedFishIsNamed(ctx context.Context, fishID string) bool {
 	return err == nil && nf != nil
 }
 
+// NamedFishList 返回命名鱼；place 非空时只返回该地点的记录。
+func (d *DB) NamedFishList(ctx context.Context, place string) ([]NamedFish, error) {
+	const cols = `n.fish_id, n.species, n.name, COALESCE(n.owner,''), COALESCE(n.place,''),
+		COALESCE(n.weight_g,0), COALESCE(n.length_m,0), COALESCE(n.grade,0), COALESCE(n.ts,0), n.catches,
+		COALESCE(c.id,0), COALESCE(c.bait,'')`
+	q := `SELECT ` + cols + ` FROM named_fish n
+		LEFT JOIN catch_log c ON c.id = (SELECT id FROM catch_log WHERE catch_guid=n.fish_id ORDER BY id LIMIT 1)`
+	args := make([]any, 0, 1)
+	if place != "" {
+		q += ` WHERE n.place=?`
+		args = append(args, place)
+	}
+	q += ` ORDER BY n.ts DESC, n.fish_id ASC`
+	rows, err := d.SQL.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]NamedFish, 0)
+	for rows.Next() {
+		var nf NamedFish
+		if err := rows.Scan(&nf.FishID, &nf.Species, &nf.Name, &nf.Owner, &nf.Place,
+			&nf.WeightG, &nf.LengthM, &nf.Grade, &nf.TS, &nf.Catches, &nf.CatchID, &nf.Bait); err != nil {
+			return nil, err
+		}
+		out = append(out, nf)
+	}
+	return out, rows.Err()
+}
+
 // NamedFishNoteRecatch 将被命名鱼的钓获次数加一。
 func (d *DB) NamedFishNoteRecatch(ctx context.Context, fishID string) {
 	if fishID == "" {
