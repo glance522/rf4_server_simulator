@@ -14,8 +14,24 @@ const (
 	castBaseLureM    float32 = 7.1598907
 	castBaseDefaultM float32 = castBaseFloatM
 
+	// 基准距离（= 所有修正系数恰为 1.0 时的参考距离），2026-11-13 由实钓资料反推。
+	//
+	// 锚点（远投实测，用户提供的实钓记录）：
+	//   10 ft（3.05 m）远投竿 + 65 g 铁板/雷德 + 15 lb 编织，技术到位 → 约 100 m
+	//   10 ft 轻远投竿 + 40 g 拟饵 + 15 lb 编织，「轻松一甩」→ 约 100 m
+	// 把 3.05 m 竿 / 50 g 载荷 / 0.15~0.20 mm 编织代入本模型：
+	//   竿长 (3.05/2.7)^1.1 = 1.1435、匹配 ≈0.95、载荷 (50/20)^0.25 = 1.257、
+	//   线径 ×1.12、伸展 ×1.03、编织 ×1.035 → 系数乘积 ≈ 1.63
+	//   基准 = 100 / 1.63 ≈ 61 → 取 60（略保守）。
+	//
+	// 交叉校验（底钓/远投）：4.2 m 竿 + 100 g 坠 + 细编织
+	//   → 60 × 1.626 × 0.890 × 1.495 ≈ 129 m，落在实钓 90~150 m、低于赛事 236 m，合理。
+	//
+	// 两族取同一基准：路亚与底钓的差别由「竿长」与「绝对载荷」两个因子承担。
+	// 旧值 45/60 无测量来源（由一条测试反推）；本次曾误用美式鲈钓估算表（7 ft 竿），
+	// 其「最远 44 m」与 10 ft 竿实测 100 m 明显冲突，已弃用。
 	castNominalDefaultM = 60.0
-	castNominalLureM    = 45.0
+	castNominalLureM    = 60.0
 	castMinPoweredM     = 8.0
 )
 
@@ -99,8 +115,10 @@ var builtInCastModifiers = []CastDistanceModifier{
 		if c.RodLengthM <= 0 {
 			return 1
 		}
-		// 2.4m≈0.99，3.6m≈1.07；长竿有更大的有效加速行程。
-		return clampFloat(0.82+0.07*c.RodLengthM, 0.85, 1.18)
+		// 竿尖线速度与竿长近似同阶，距离按 (L/2.7m)^1.1 归一：
+		// 1.8m≈0.64，2.7m=1.00，3.9m≈1.50，4.2m≈1.63。
+		// 旧式 (0.82+0.07L, 0.85..1.18) 把 2.4~3.6 m 的差距压到 8%，长竿抛不远。
+		return clampFloat(math.Pow(c.RodLengthM/2.7, 1.1), 0.45, 1.9)
 	}},
 	castDistanceModifierFunc{name: "rod_action", fn: func(c CastDistanceContext) float64 {
 		return castRodActionFactor(c.RodAction)
@@ -110,6 +128,9 @@ var builtInCastModifiers = []CastDistanceModifier{
 	}},
 	castDistanceModifierFunc{name: "rod_test_payload", fn: func(c CastDistanceContext) float64 {
 		return rodTestWeightFactor(c.PayloadWeightG, c.RodTestMinG, c.RodTestMaxG)
+	}},
+	castDistanceModifierFunc{name: "payload_mass", fn: func(c CastDistanceContext) float64 {
+		return castPayloadMassFactor(c.PayloadWeightG)
 	}},
 	castDistanceModifierFunc{name: "fishing_skill", fn: func(c CastDistanceContext) float64 {
 		return castMasteryFactor(c.SkillMastery)
@@ -138,8 +159,11 @@ var builtInCastModifiers = []CastDistanceModifier{
 	castDistanceModifierFunc{name: "reel_type", fn: func(c CastDistanceContext) float64 {
 		return castReelTypeFactor(c.ReelType)
 	}},
+	// 抛投力度随体力（精力）下降：满体力 = 满力度，体力 50% 时力度掉到 90~100
+	// （实测口径：满体力 130 力度，半体力约 90~100）。饱食度不参与——饥饿只影响
+	// 体力恢复速度与健康，不直接削减力度（上游 #462 同一口径）。
 	castDistanceModifierFunc{name: "player_state", fn: func(c CastDistanceContext) float64 {
-		return castPlayerStateFactor(c.PlayerPrimary, c.PlayerSecondary)
+		return castEnergyStateFactor(c.PlayerPrimary)
 	}},
 	castDistanceModifierFunc{name: "reel_friction", fn: func(c CastDistanceContext) float64 {
 		return clampFloat(c.ReelEfficiency, 0.25, 1)
@@ -287,37 +311,30 @@ func castLineMassFactor(weightG float64) float64 {
 }
 
 func castSpoolSizeFactor(size int64) float64 {
-	// 线杯规格 1～7 对应常见纺车轮 1000～7000。小杯转动惯量低，
-	// 同竿同线同饵时抛得更远；规格 5（6000）作为当前大杯基准。
-	switch size {
-	case 1:
-		return 0.90
-	case 2:
-		return 0.84
-	case 3:
-		return 0.79
-	case 4:
-		return 0.75
-	case 5:
-		return 0.72
-	case 6:
-		return 0.68
-	case 7:
-		return 0.65
-	case 8:
-		return 0.84 // 低轮廓线杯
-	case 9, 10, 11, 12, 13, 14:
-		return 0.90 - 0.020*float64(size-9)
-	case 15, 16, 17, 18, 19, 20:
-		return 0.72 - 0.012*float64(size-15)
-	case 21, 22:
-		return 0.82
-	case 23:
-		return 0.56
-	case 24:
-		return 0.52
-	default:
+	// 线杯规格对抛投的影响：小线杯出线更顺（杯口小、出线角度更集中、出线阻力低、
+	// 转动惯量小），大线杯储线多但出线阻力与转动惯量更大，同等条件应略近。
+	// 旧实现注释写的是「小杯转动惯量低，同竿同线同饵时抛得更远」，但数值表却是
+	// 小杯折减（1→0.90）、大杯折减更少（7→0.65），注释与实现自相矛盾。
+	// SpoolSize 是线杯档位枚举（1 最小 … 7 最大），不是容量毫升数。
+	// 2026-11-13 重标定：以 4~5 档（5000~6000，路亚/远投常用杯）为中性 1.0，
+	// 小杯 1 档 +3%、2 档 +2%，大杯 6 档 −1%、7 档 −3%，整体落差 ≈6%。
+	// 容量本身由 spool_capacity / spool_fill 单独承担，此处不重复计。
+	if size <= 0 {
 		return 1
+	}
+	switch {
+	case size <= 1:
+		return 1.03
+	case size == 2:
+		return 1.02
+	case size == 3:
+		return 1.01
+	case size <= 5:
+		return 1.00
+	case size == 6:
+		return 0.99
+	default:
+		return 0.97
 	}
 }
 
@@ -360,6 +377,17 @@ func castPlayerStateFactor(primary, secondary float64) float64 {
 	return clampFloat(state, 0.70, 1.03)
 }
 
+// castEnergyStateFactor 是官方口径的抛投力度系数：只认体力（精力）。
+// 实测口径——满体力 130 力度；体力降到 50% 时力度掉到约 90~100，即系数 ≈0.70~0.77。
+// clamp(体力/0.85, 0.70, 1.03) 恰好复现：满体力 1.00（130）、半体力 0.70（91）。
+// 上限 1.03 对应"体力被消耗品顶到 1.0 时比自然满值再远 3%"。
+func castEnergyStateFactor(primary float64) float64 {
+	if defaultPlayerConditionPrimary <= 0 {
+		return 1
+	}
+	return clampFloat(primary/defaultPlayerConditionPrimary, 0.70, 1.03)
+}
+
 func clampFloat(v, lo, hi float64) float64 {
 	if v < lo {
 		return lo
@@ -400,7 +428,9 @@ func castNominalDistanceM(rigType int64) float64 {
 // 炸杆仍由搏鱼张力决定（见 gear_damage.go）。
 func rodTestWeightFactor(payloadG, testMinG, testMaxG float64) float64 {
 	if testMaxG <= 0 {
-		return 1
+		// Test 缺失（静态库 1043 根竿里有 218 根没登记 Test）：既不白给满分，
+		// 也不能按超载重罚，取中性偏保守。
+		return 0.85
 	}
 	if testMinG < 0 {
 		testMinG = 0
@@ -409,30 +439,42 @@ func rodTestWeightFactor(payloadG, testMinG, testMaxG float64) float64 {
 		testMinG, testMaxG = testMaxG, testMinG
 	}
 	if payloadG <= 0 {
-		return 0.80
+		return 0.35
 	}
-	effectiveMin := testMinG
-	if effectiveMin <= 0 {
-		effectiveMin = math.Max(0.1, testMaxG*0.10)
+	ratio := payloadG / testMaxG
+	bandLo := 0.10
+	if testMinG > 0 {
+		bandLo = testMinG / testMaxG
 	}
-	referenceG := (effectiveMin + testMaxG) * 0.5
-	if referenceG <= 0 {
-		return 1
+	if bandLo <= 0.01 || bandLo >= 1 {
+		bandLo = 0.10
 	}
-	inBand := func(g float64) float64 {
-		return 0.80 + 0.12*math.Log1p(g/referenceG)
+	if ratio > 1 {
+		// 超载：竿梢被压死，沿用 0.70 衰减（2× Test ≈ 峰值 58.8%）。
+		return clampFloat(1/(1+rodTestOverloadDecay*(ratio-1)), 0.22, 1)
 	}
-	if payloadG <= testMaxG {
-		return inBand(payloadG)
+	if ratio >= bandLo {
+		// 区间内：Test 下限处 0.78 → Test 上限处 1.00（上限比下限远 28%），
+		// 与实钓资料「额定区间上限比下限远 20~30%」一致。逐竿用自己的
+		// testMin/testMax 归一，所以 1043 根竿各自自动对齐，无需逐竿标定。
+		return clampFloat(0.78+0.22*(ratio-bandLo)/(1-bandLo), 0.78, 1)
 	}
-	// 峰值取 Test 上限处的储能，超出后按超重倍率 r=payload/testMax 衰减。
-	// 相对峰值的比例恒为 1/(1+rodTestOverloadDecay*(r-1))，只与超重倍率
-	// 有关、与竿型无关：1.5×→74.1%，2×→58.8%，3×→41.7%。
-	// r 很大时会撞到 clampFloat 的绝对下限 0.22（那是系数绝对值，不是
-	// "剩峰值的 22%"）；下限用于避免"抛在脚边"的极端值。
-	peak := inBand(testMaxG)
-	overRatio := payloadG/testMaxG - 1
-	return clampFloat(peak/(1+rodTestOverloadDecay*overRatio), 0.22, peak)
+	// 低于额定下限：欠载、竿身蓄不起来，按平方根继续掉。
+	return clampFloat(0.78*math.Sqrt(ratio/bandLo), 0.35, 0.78)
+}
+
+// castPayloadMassFactor 是「绝对载荷」对距离的贡献，与竿的额定区间无关。
+// 同竿同线时载荷越重，空气阻力相对动能越小、越能保持速度，因而抛得越远；
+// 这也是 UL 竿只能在 10~17 m、XH 竿能到 40~50 m 的根本原因之一。
+// 以 20 g = 1.0 归一，(g/20)^0.25，钳在 [0.35, 1.8]：
+//
+//	1 g→0.47  3 g→0.62  10 g→0.84  20 g→1.00
+//	50 g→1.26 100 g→1.50 200 g→1.78
+func castPayloadMassFactor(payloadG float64) float64 {
+	if payloadG <= 0 {
+		return 0.35
+	}
+	return clampFloat(math.Pow(payloadG/20, 0.25), 0.35, 1.8)
 }
 
 // rodTestOverloadDecay 控制超重衰减陡度。2 倍 Test 上限时 r=2，系数为
