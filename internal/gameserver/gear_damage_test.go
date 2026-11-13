@@ -711,8 +711,9 @@ func TestTerminalComponentBreakRechecksAttachment(t *testing.T) {
 	}
 }
 
-// 断竿后果：竿子断梢——竿本体（0 耐久）和竿上的渔轮保留，主线与挂线配件
-// 全部丢失销毁，销毁件进 11028 移除列表让客户端清掉线组 UI。
+// 断竿后果：竿子断梢——竿本体（0 耐久）和竿上的渔轮保留；主线只按上报放线
+// 米数扣（扣剩的线留在断竿上），挂线配件全部丢失销毁，销毁件进 11028 移除
+// 列表让客户端清掉线组 UI。
 func TestRodBreakDestroysRigGearKeepsBrokenRod(t *testing.T) {
 	t.Parallel()
 	srv, db := newRigTestServer(t)
@@ -739,9 +740,11 @@ func TestRodBreakDestroysRigGearKeepsBrokenRod(t *testing.T) {
 	mountGearForTest(t, srv, sess, rod.GUID, line.GUID)
 	mountGearForTest(t, srv, sess, rod.GUID, hook.GUID)
 	mountGearForTest(t, srv, sess, rod.GUID, bobber.GUID)
+	setTestLineLengthM(t, db, line.GUID, 50)
 
 	tree := rigRequestTree(t, proto.Guid(rod.GUID), proto.Guid(rod.GUID), proto.U32(1), proto.Null())
 	hctx := &Ctx{Sess: sess, Main: 17, Sub: 9, Tree: tree,
+		Body:     lineBreakBodyWithLineOut(12.5),
 		DecodeOK: true, ExpectResponse: true, Log: logging.Discard()}
 	body, ok := hDynamicRodBreak(hctx)
 	if !ok || len(body) == 0 {
@@ -761,7 +764,7 @@ func TestRodBreakDestroysRigGearKeepsBrokenRod(t *testing.T) {
 			removed[it.Hex] = true
 		}
 	}
-	for _, guid := range []string{line.GUID, hook.GUID, bobber.GUID} {
+	for _, guid := range []string{hook.GUID, bobber.GUID} {
 		if row, _ := db.GetItemByGUID(ctx, guid); row != nil {
 			t.Fatalf("断竿后 %s 应丢失销毁（官服口径），实得 %+v", guid, row)
 		}
@@ -769,21 +772,47 @@ func TestRodBreakDestroysRigGearKeepsBrokenRod(t *testing.T) {
 			t.Fatalf("断竿移除列表缺少 %s", guid)
 		}
 	}
-	if rows, _ := db.SQL.Query(`SELECT COUNT(*) FROM rig_component WHERE rig_guid=?`, rod.GUID); rows != nil {
-		var n int
-		_ = rows.Scan(&n)
-		_ = rows.Close()
-		if n != 0 {
-			t.Fatalf("断竿后 rig_component 残留 %d 行", n)
+	// 主线只扣放出去的 13 米（12.5+0.5 取整）：物品保留、不进移除列表。
+	if removed[line.GUID] {
+		t.Fatalf("断竿不应把扣剩的主线放进移除列表: %+v", removed)
+	}
+	freshLine := mustItem(t, db, line.GUID)
+	lineFields, err := FieldsFromJSON(freshLine.FieldsJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := itemLengthField(freshLine, lineFields); got != 37 {
+		t.Fatalf("断竿后主线应剩 37 米，实得 %d", got)
+	}
+	// 更新段要带线树，客户端才能看到扣剩的长度。
+	updatedHasLine := false
+	if f3 := dec.Fields[3].Val; f3 != nil {
+		for _, it := range f3.Items {
+			if containsGUID(deepGUIDs(it), line.GUID) {
+				updatedHasLine = true
+			}
 		}
+	}
+	if !updatedHasLine {
+		t.Fatal("断竿更新段应包含扣剩主线的物品树")
+	}
+	var projRows int
+	if err := db.SQL.QueryRow(`SELECT COUNT(*) FROM rig_component WHERE rig_guid=?`, rod.GUID).Scan(&projRows); err != nil {
+		t.Fatal(err)
+	}
+	if projRows != 1 {
+		t.Fatalf("断竿后 rig_component 应只剩主线投影 1 行，实得 %d 行", projRows)
+	}
+	if got := rigSlotGUIDs(t, srv, rod.GUID)[catLine]; got != line.GUID {
+		t.Fatalf("断竿后 catLine 投影应保留主线 %s，实得 %q", line.GUID, got)
 	}
 	freshRod := mustItem(t, db, rod.GUID)
 	if freshRod.Durability != 0 {
 		t.Fatalf("断竿耐久应归零: %v", freshRod.Durability)
 	}
 	rodFields, _ := FieldsFromJSON(freshRod.FieldsJSON)
-	if i := fieldIdxByCS(freshRod.WireClass, csLine); i >= 0 && i < len(rodFields) && rodFields[i].GuidHex() != "" {
-		t.Fatal("断竿后竿 f3 应清空主线引用")
+	if i := fieldIdxByCS(freshRod.WireClass, csLine); i >= 0 && i < len(rodFields) && rodFields[i].GuidHex() != line.GUID {
+		t.Fatal("断竿后竿 f3 应保留扣剩主线引用")
 	}
 	if _, hasHook := rigCompsOf(rigStoredF5(t, freshRod))[catHook]; hasHook {
 		t.Fatal("断竿后竿 f5 不应残留组件")
@@ -796,8 +825,11 @@ func TestRodBreakDestroysRigGearKeepsBrokenRod(t *testing.T) {
 	if seen[damageEventRodBreak] != 1 {
 		t.Fatalf("rod_break 记录=%d，期望 1", seen[damageEventRodBreak])
 	}
-	if seen[damageEventLostOnRodBreak] != 3 {
-		t.Fatalf("lost_on_rod_break 记录=%d，期望 3（线+钩+漂）", seen[damageEventLostOnRodBreak])
+	if seen[damageEventLostOnRodBreak] != 2 {
+		t.Fatalf("lost_on_rod_break 记录=%d，期望 2（钩+漂）", seen[damageEventLostOnRodBreak])
+	}
+	if seen[damageEventLineBreak] != 1 {
+		t.Fatalf("line_break 记录=%d，期望 1（扣 13 米）", seen[damageEventLineBreak])
 	}
 }
 
@@ -940,16 +972,17 @@ func TestRodBreakKeepsReelMounted(t *testing.T) {
 	mountGearForTest(t, srv, sess, rod.GUID, reel.GUID)
 	mountGearForTest(t, srv, sess, rod.GUID, line.GUID)
 
-	outcome, err := srv.breakRodTx(ctx, uid, rod.GUID, rod.GUID)
+	outcome, err := srv.breakRodTx(ctx, uid, rod.GUID, rod.GUID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 官服口径：断竿时轮子没坏，仍挂在竿上；只有主线丢失销毁。
+	// 官服口径：断竿时轮子没坏，仍挂在竿上；未上报放线米数时主线一米不扣，
+	// 整卷保留在竿上（可 17/3 拆下换竿）。
 	if slices.Contains(outcome.RemovedGUIDs, reel.GUID) {
 		t.Fatalf("断竿不应把渔轮移出钓组: %+v", outcome.RemovedGUIDs)
 	}
-	if !slices.Contains(outcome.RemovedGUIDs, line.GUID) {
-		t.Fatalf("断竿主线应丢失销毁: %+v", outcome.RemovedGUIDs)
+	if slices.Contains(outcome.RemovedGUIDs, line.GUID) {
+		t.Fatalf("断竿不应把主线移出钓组: %+v", outcome.RemovedGUIDs)
 	}
 	fresh, err := db.GetItemByGUID(ctx, rod.GUID)
 	if err != nil || fresh == nil {
@@ -961,6 +994,16 @@ func TestRodBreakKeepsReelMounted(t *testing.T) {
 	}
 	if idx := fieldIdxByCS(fresh.WireClass, csReel); idx < 0 || idx >= len(fields) || fields[idx].GuidHex() != reel.GUID {
 		t.Fatalf("断竿后竿实例应仍引用渔轮 %s", reel.GUID)
+	}
+	if idx := fieldIdxByCS(fresh.WireClass, csLine); idx < 0 || idx >= len(fields) || fields[idx].GuidHex() != line.GUID {
+		t.Fatalf("断竿后竿实例应仍引用主线 %s", line.GUID)
+	}
+	mountedLine, err := db.GetItemByGUID(ctx, line.GUID)
+	if err != nil || mountedLine == nil {
+		t.Fatalf("断竿后主线应保留: %v", err)
+	}
+	if mountedLine.Container != "rig" || mountedLine.RigGUID != rod.GUID {
+		t.Fatalf("主线应仍挂在断竿上: %+v", mountedLine)
 	}
 	mounted, err := db.GetItemByGUID(ctx, reel.GUID)
 	if err != nil || mounted == nil {

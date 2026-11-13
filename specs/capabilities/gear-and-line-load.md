@@ -15,6 +15,9 @@
 - ✅ 断主线、剪线都扣**实际放出米数**，扣线与终态清在同一次事务里
   （`breakLineOrRodWithLineOut`、`lineLossTx`、`cutLineTx`）。
   - ❌ 按线杯容量或配置上限扣 → 只放了 5m 却掉 100m（`specs/changes/line-break-loss-m`）。
+- ✅ 断竿也只扣 17/9 上报的放线米数，扣剩的线与渔轮一样留在断竿上
+  （`breakRodTx`，`specs/changes/rod-break-line-out-loss`）；未上报时主线一米不扣。
+  - ❌ 断竿把整卷主线一起销毁 → 断的是竿梢，杯上的线没断，惩罚与事实不符。
 
 ## 3. 14/8 负载仍只观测
 

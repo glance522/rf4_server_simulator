@@ -23,7 +23,8 @@ func testConditionParams() conditionParams {
 		Enabled:            true,
 		HungerDecayPerHour: 0.24,
 		EnergyRegenPerHour: 0.5,
-		EnergyMax:          0.85,
+		EnergyMax:          1.0,
+		EnergyRegenCap:     0.85,
 		HungerRegenFloor:   0.25,
 		CastEnergyCost:     0.01,
 		PullEnergyCost:     0.005,
@@ -78,8 +79,8 @@ func TestAdvancePlayerConditionClampsAndCaps(t *testing.T) {
 	if next.Secondary != 0 {
 		t.Fatalf("长离线饱食度应触底: %v", next.Secondary)
 	}
-	if math.Abs(next.Primary-p.EnergyMax) > 1e-9 {
-		t.Fatalf("长离线精力应封顶: %v", next.Primary)
+	if math.Abs(next.Primary-p.EnergyRegenCap) > 1e-9 {
+		t.Fatalf("长离线精力应封在自然恢复上限: %v (cap=%v)", next.Primary, p.EnergyRegenCap)
 	}
 	// 时钟倒退不推进状态值。
 	same := advancePlayerCondition(cur, cur.UpdatedTS-10, p, conditionEnv{})

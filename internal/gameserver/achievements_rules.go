@@ -166,6 +166,7 @@ var achievementRules = []achievementRule{
 
 	// ---- 250-275 饵料采集与制作 ----
 	{ID: 250, Event: evBaitDug, Check: baitKeyIs("worm_01")},                                                               // 软体虫
+	{ID: 251, Event: evBaitDug, Check: baitKeyIs("muckworm")},                                                              // 红蚯蚓
 	{ID: 252, Event: evCraftOK, Check: recipeIs("craft_bait_bread")},                                                       // 湿面包
 	{ID: 253, Event: evCraftOK, Check: recipeIs("craft_bait_perlovka")},                                                    // 珍珠大麦粥
 	{ID: 254, Event: evCraftOK, Check: recipeIs("craft_bait_dough_sweet")},                                                 // 甜面团
@@ -178,9 +179,17 @@ var achievementRules = []achievementRule{
 	{ID: 261, Event: evBaitDug, Check: baitKeyIs("naiad")},                                                                 // 蜉蝣幼虫
 	{ID: 262, Event: evCraftOK, Check: recipeIs("craft_bait_from_frog")},                                                   // 青蛙饵鱼
 	{ID: 264, Event: evCraftOK, Check: recipeIs("craft_bait_cut_fish")},                                                    // 鱼肉饵
-	{ID: 272, Event: evBaitDug, Check: baitKeyIs("unibeetle_larva")},                                                       // 犀角金龟幼虫
-	{ID: 273, Event: evCraftOK, Check: recipeIs("craft_bait_from_crawfish")},                                               // 河螯虾饵
-	{ID: 274, Event: evCraftOK, Check: recipePrefix("craft_bait_from_freshmussel", "craft_bait_from_dreissena")},           // 河贻贝肉饵
+	{ID: 265, Event: evBaitDug, Check: baitKeyIs("vypolzok_01")},                                                           // 地龙
+	{ID: 266, Event: evBaitDug, Check: baitKeyIs("black_leech")},                                                           // 水蛭
+	// 267 成就文本作「蛲螂」，静态库无该名；按同一注记（疑为甲虫类饵料）绑定蜣螂。
+	{ID: 267, Event: evBaitDug, Check: baitKeyIs("dorbeetle")},                                                   // 蛲螂→蜣螂
+	{ID: 269, Event: evBaitDug, Check: baitKeyIs("maybug_larva")},                                                // 土蚕
+	{ID: 270, Event: evBaitDug, Check: baitKeyIs("gryllotalpa")},                                                 // 蝼蛄
+	{ID: 271, Event: evBaitDug, Check: baitKeyIs("waterbug")},                                                    // 水生甲虫→龙虱甲虫
+	{ID: 272, Event: evBaitDug, Check: baitKeyIs("unibeetle_larva")},                                             // 犀角金龟幼虫
+	{ID: 273, Event: evCraftOK, Check: recipeIs("craft_bait_from_crawfish")},                                     // 河螯虾饵
+	{ID: 274, Event: evCraftOK, Check: recipePrefix("craft_bait_from_freshmussel", "craft_bait_from_dreissena")}, // 河贻贝肉饵
+	{ID: 275, Event: evBaitDug, Check: baitKeyIs("watergrass")},                                                  // 水藻→一束藻类
 
 	// ---- 320 PVA 棒 ----
 	{ID: 320, Event: evCraftOK, Check: recipePrefix("craft_feed_pva_")},
@@ -288,11 +297,10 @@ func (s *Server) evaluateAchievements(ctx *Ctx, ev achievementEvent) {
 }
 
 // ============================================================================
-// 留空成就（41 条）= achievement_def 的 130 个 id − 规则表的 89 条。
+// 留空成就（33 条）= achievement_def 的 130 个 id − 规则表的 97 条。
 // 完整清单与 achievements_registry_test.go 的 unimplementedAchievementIDs 一致：
 //
 //   102, 104, 106, 108, 156, 157, 204, 209, 210,
-//   251, 265, 266, 267, 269, 270, 271, 275,
 //   300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311,
 //   409, 411, 412, 413, 414, 415, 416,
 //   901, 902, 903, 904, 911
@@ -309,9 +317,11 @@ func (s *Server) evaluateAchievements(ctx *Ctx, ev achievementEvent) {
 // 210 抛掷 PVA 棒钓组：无抛投载荷事件（206 抛饵笼、211 测竿已用 rigType
 //   近似实装，不在此清单内）。
 //
-// 251/265/266/267/269/270/271/275 红蚯蚓、地龙、水蛭、蛲螂、土蚕、
-//   蝼蛄、水生甲虫、水藻：静态库有物品定义，但 tryBaitDig 的 loot 表不发这些，
-//   rollShovelBaitLoot 那条产路实际不可达。待服务端实现采集产出。
+// 251/265/266/267/269/270/271/275 红蚯蚓、地龙、水蛭、蛲螂、土蚕、蝼蛄、
+//   水生甲虫、水藻：原先阻挡它们的是「挖饵池不发这些饵」，现已由 baitdig.go 的
+//   baitDigPools 按解锁锚点接入对应饵种，规则按挖饵事件绑定。
+//   267 成就文本作「蛲螂」、静态库无该名，绑定甲虫类饵料 dorbeetle（蜣螂）；
+//   271 的「水生甲虫」绑定龙虱甲虫 waterbug。
 //
 // 300-311 供养人 1~12 级（共 12 条）：craft_feed_* 配方存在，但没有
 //   「成分等级」概念——recipe.materials_json 无等级列、
@@ -332,7 +342,7 @@ func (s *Server) evaluateAchievements(ctx *Ctx, ev achievementEvent) {
 //   可按「grade>=3 且 source='catch'」计数，911 具备实现条件（本批不实装）。
 //   912 单次放流已实装。
 //
-// ---- 以下已实装，不属于上面 41 条，仅记录近似判定的已知差距 ----
+// ---- 以下已实装，不属于上面 33 条，仅记录近似判定的已知差距 ----
 // 151/153/154/162 用拟饵 item_id 前缀判断（crank/plug/spoon/spinner/
 //   topwater/popper/jerkbait，以及自制米诺 hm_minnow_*/hm_j_minnow_*）。
 //   静态库无 minnow* 前缀，原规则的 "minnow" 是死分支，已换成真实前缀。

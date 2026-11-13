@@ -1393,6 +1393,7 @@ func (s *Server) digBaitWithShovel(ctx *Ctx, shovel *store.Item) ([]byte, bool) 
 	// 体力参数必须在开经济事务之前取好（tunableF 首次装载有 2 秒查询超时）。
 	condParams := s.conditionParamsForUID(cctx, ctx.Sess.Userid)
 	condCost := s.baitDigEnergyCost()
+	condEnv := s.conditionEnvForUID(ctx.Sess.Userid)
 
 	tx, err := beginEconomyTx(cctx, s.DB)
 	if err != nil {
@@ -1402,7 +1403,7 @@ func (s *Server) digBaitWithShovel(ctx *Ctx, shovel *store.Item) ([]byte, bool) 
 	defer func() { _ = tx.Rollback() }()
 
 	// 与饵入包同事务：体力不足直接回滚，不会出现"给了饵没扣体力"。
-	spent, err := spendEnergyTx(cctx, tx, ctx.Sess.Userid, condParams, condCost)
+	spent, err := spendEnergyTx(cctx, tx, ctx.Sess.Userid, condParams, condEnv, condCost)
 	if err != nil {
 		if errors.Is(err, errEnergyNotEnough) {
 			ctx.Log.Info("9/3 铲子挖饵被拒：精力不足", "shovel", shortGUID(shovel.GUID),

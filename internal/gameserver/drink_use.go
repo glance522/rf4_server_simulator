@@ -1,6 +1,7 @@
 package gameserver
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,19 @@ type drinkUseReceipt struct {
 	ExpectResponse bool
 	Body           []byte
 	CreatedAt      int64 `json:"created_at"`
+}
+
+// currentConditionForUseTx 读消耗品生效前的状态行（与经济事务同连接）。
+// 行不存在时 ok=false，表示按协议默认值处理：交给 applyConsumableRestoreTx 建行。
+func currentConditionForUseTx(ctx context.Context, tx *sql.Tx, uid int64) (store.PlayerCondition, bool, error) {
+	cur, err := store.EnsurePlayerConditionTx(ctx, tx, uid)
+	if err != nil {
+		return store.PlayerCondition{}, false, err
+	}
+	if cur == nil {
+		return store.PlayerCondition{}, false, nil
+	}
+	return *cur, true, nil
 }
 
 // useAlcoholDrink 将扣物、酒兴/消耗品恢复和业务回执一起提交；其它物品沿用原处理器。
@@ -136,19 +150,23 @@ func (s *Server) useAlcoholDrink(ctx *Ctx) ([]byte, bool) {
 	}
 
 	if isConsumable {
-		var satiety float64
-		switch qerr := tx.QueryRowContext(cctx,
-			`SELECT COALESCE(secondary_value,0) FROM player_condition WHERE uid=?`, uid).Scan(&satiety); {
-		case qerr == nil:
-			if satiety >= foodSatietyFullThreshold {
-				_ = tx.Rollback()
-				// 官服结果码 55（kOperationResult_PlayerFull）：客户端显示
-				// 正规「已吃饱」文案，弹窗即完整反馈，不再补聊天消息。
+		cur, ok, err := currentConditionForUseTx(cctx, tx, uid)
+		if err != nil {
+			return failed(err)
+		}
+		if ok && !consumableRestoreChanges(cur, restoreKind, cond) {
+			// 该消耗品推不动它负责的状态条：扣物只会白白损失一份物品。
+			// 主食类（食品、以及以饱食为主的可可）在饱食度已满时仍回官服结果码 55
+			// 显示「已吃饱」（satiety-full-reject 的既有语义）；其余
+			// （咖啡精力满/茶舒适满/药品满血）落回通用 4/8 handler，
+			// 物品原样保留、客户端不显示扣物。
+			_ = tx.Rollback()
+			if cur.Secondary >= foodSatietyFullThreshold &&
+				(restoreKind == "food" || restoreKind == "cocoa") {
 				ctx.ReplyOperationResult(operationResultPlayerFull)
 				return nil, true
 			}
-		case !errors.Is(qerr, sql.ErrNoRows):
-			return failed(qerr)
+			return nil, false
 		}
 	}
 

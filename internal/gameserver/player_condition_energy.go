@@ -44,7 +44,7 @@ func (s *Server) baitDigEnergyCost() float64 {
 // 返回实际消耗量；精力不足时返回 errEnergyNotEnough 且不写库，
 // 由调用方回滚整个事务，避免出现"给了产出没扣精力"或反之。
 // 总开关关闭、或 amount <= 0 时是纯 no-op（返回 0, nil）。
-func spendEnergyTx(ctx context.Context, tx *sql.Tx, uid int64, p conditionParams, amount float64) (float64, error) {
+func spendEnergyTx(ctx context.Context, tx *sql.Tx, uid int64, p conditionParams, env conditionEnv, amount float64) (float64, error) {
 	if tx == nil || amount <= 0 || !p.Enabled {
 		return 0, nil
 	}
@@ -53,9 +53,9 @@ func spendEnergyTx(ctx context.Context, tx *sql.Tx, uid int64, p conditionParams
 		return 0, err
 	}
 	now := float64(time.Now().Unix())
-	// 与 spendEnergy 同口径：先按在线钟推进（空环境，动作路径不享受环境加成），
-	// 再扣减，保证门槛判定用的是当前有效值而不是上一次落库的旧值。
-	next := advancePlayerCondition(*cur, now, p, conditionEnv{})
+	// 与 spendEnergy 同口径：先按在线钟推进，再扣减，保证门槛判定用的是当前
+	// 有效值而不是上一次落库的旧值。env 由调用方在开事务前取好（事务内不查库）。
+	next := advancePlayerCondition(*cur, now, p, env)
 	if next.Primary < amount {
 		return 0, errEnergyNotEnough
 	}

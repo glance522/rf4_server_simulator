@@ -183,7 +183,7 @@ func (s *Server) BuildProfile307W(ctx context.Context, uid int64, wNow int64) (*
 			membershipExp = uint64(proto.UnixToFiletime(membership.ExpiresAt))
 		}
 	}
-	totalPts := skillPointsTotal(p.Level)
+	availablePts := s.skillAvailablePointsForLevel(ctx, uid, p.Level)
 
 	// 322 里的等级经验拆分
 	base := baseXp(p.Level)
@@ -280,7 +280,7 @@ func (s *Server) BuildProfile307W(ctx context.Context, uid int64, wNow int64) (*
 		3:  proto.U64(uint64(p.XP)),
 		4:  proto.U64(inLevel),
 		5:  proto.U64(uint64(nextLevelReq(p.Level))),
-		6:  proto.U32(uint32(totalPts)),
+		6:  proto.U32(uint32(availablePts)),
 		7:  proto.U64(uint64(p.Silver)),
 		8:  proto.U64(uint64(p.Gold)),
 		9:  proto.StrVal(""),
@@ -352,12 +352,7 @@ func (s *Server) BuildSkillTree311(ctx context.Context, uid int64, availablePoin
 	if err != nil {
 		return nil, err
 	}
-	total := skillPointsTotal(p.Level) + s.skillBonusPoints(ctx, uid)
-	used := s.skillSpentPoints(ctx, uid)
-	avail := uint64(0)
-	if total > used {
-		avail = uint64(total - used)
-	}
+	avail := uint64(s.skillAvailablePointsForLevel(ctx, uid, p.Level))
 	if availablePointsOverride != ^uint64(0) {
 		avail = availablePointsOverride
 	}

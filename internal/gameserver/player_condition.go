@@ -23,30 +23,32 @@ import (
 
 // tunables 键名。改值走 tunables 表，30 秒缓存生效，无需重启。
 const (
-	tunableConditionEnabled     = "player_condition_enabled"
-	tunableHungerDecayPerHour   = "condition_hunger_decay_per_hour"
-	tunableEnergyRegenPerHour   = "condition_energy_regen_per_hour"
-	tunableEnergyMax            = "condition_energy_max"
-	tunableHungerRegenFloor     = "condition_hunger_regen_floor"
-	tunableCastEnergyCost       = "condition_cast_energy_cost"
-	tunablePullEnergyCost       = "condition_pull_energy_cost"
-	tunableLowEnergyThreshold   = "condition_low_energy_threshold"
-	tunableMaxBackfillHours     = "condition_max_backfill_hours"
-	tunableFoodHungerRestore    = "condition_food_hunger_restore"
-	tunableCoffeeEnergyRestore  = "condition_coffee_energy_restore"
-	tunableCocoaHungerRestore   = "condition_cocoa_hunger_restore"
-	tunableCocoaEnergyRestore   = "condition_cocoa_energy_restore"
-	tunableTeaComfortRestore    = "condition_tea_comfort_restore"
-	tunableComfortRainPenalty   = "condition_comfort_rain_penalty"
-	tunableComfortColdPenalty   = "condition_comfort_cold_penalty"
-	tunableComfortColdTempC     = "condition_comfort_cold_temp_c"
-	tunableComfortCampfireBoost = "condition_comfort_campfire_boost"
-	tunableComfortSunBoost      = "condition_comfort_sun_boost"
-	tunableComfortDriftPerHour  = "condition_comfort_drift_per_hour"
-	tunableSunEnergyRegenMult   = "condition_sun_energy_regen_mult"
-	tunableGearEnergyRegenCap   = "condition_gear_energy_regen_cap"
-	tunableGearEnergyMaxCap     = "condition_gear_energy_max_cap"
-	tunableEnergyRegenFoodCost  = "condition_energy_regen_food_cost"
+	tunableConditionEnabled       = "player_condition_enabled"
+	tunableHungerDecayPerHour     = "condition_hunger_decay_per_hour"
+	tunableEnergyRegenPerHour     = "condition_energy_regen_per_hour"
+	tunableEnergyMax              = "condition_energy_max"
+	tunableEnergyRegenCap         = "condition_energy_regen_cap"
+	tunableEnergyRegenFishingMult = "condition_energy_regen_fishing_mult"
+	tunableHungerRegenFloor       = "condition_hunger_regen_floor"
+	tunableCastEnergyCost         = "condition_cast_energy_cost"
+	tunablePullEnergyCost         = "condition_pull_energy_cost"
+	tunableLowEnergyThreshold     = "condition_low_energy_threshold"
+	tunableMaxBackfillHours       = "condition_max_backfill_hours"
+	tunableFoodHungerRestore      = "condition_food_hunger_restore"
+	tunableCoffeeEnergyRestore    = "condition_coffee_energy_restore"
+	tunableCocoaHungerRestore     = "condition_cocoa_hunger_restore"
+	tunableCocoaEnergyRestore     = "condition_cocoa_energy_restore"
+	tunableTeaComfortRestore      = "condition_tea_comfort_restore"
+	tunableComfortRainPenalty     = "condition_comfort_rain_penalty"
+	tunableComfortColdPenalty     = "condition_comfort_cold_penalty"
+	tunableComfortColdTempC       = "condition_comfort_cold_temp_c"
+	tunableComfortCampfireBoost   = "condition_comfort_campfire_boost"
+	tunableComfortSunBoost        = "condition_comfort_sun_boost"
+	tunableComfortDriftPerHour    = "condition_comfort_drift_per_hour"
+	tunableSunEnergyRegenMult     = "condition_sun_energy_regen_mult"
+	tunableGearEnergyRegenCap     = "condition_gear_energy_regen_cap"
+	tunableGearEnergyMaxCap       = "condition_gear_energy_max_cap"
+	tunableEnergyRegenFoodCost    = "condition_energy_regen_food_cost"
 
 	// 健康（f4）动态：饥寒压力掉血、压力消失后自愈。
 	tunableHealthDecayPerHour     = "condition_health_decay_per_hour"
@@ -57,14 +59,25 @@ const (
 )
 
 // 缺省标定值：
-// 饱食衰减 0.24/h 来自抓包（~0.0019/30s）；精力静止上限 0.85 来自抓包；
-// 精力恢复 2.0/h 是抓包"15 秒恢复 0.0086"的量级下界；其余为占位标定。
+// 饱食衰减 0.24/h 来自抓包（~0.0019/30s）；精力自然恢复封顶 0.85 来自抓包；
+// 其余为占位标定，各值就近写明来源与取舍。
 const (
 	defHungerDecayPerHour = 0.24
 	// 满饱食度时约 30 秒回满一管（0.85 / 100 * 3600 ≈ 30.6s）：
 	// 挖掘/搏鱼的消耗靠“吃饱→快速回精力→再消耗”的循环，不再等几十分钟。
 	defEnergyRegenPerHour = 100.0
-	defEnergyMax          = store.DefaultPlayerConditionPrimary
+	// 垂钓中自然恢复乘数：0 表示竿在水中时恢复完全停摆。
+	// 官服一小时会话的精力是净下降的（0.85 → 0.83）；而本仓单次抛投/拉拽
+	// 只扣 0.01/0.005，若垂钓时仍按 100/h 恢复，0.36 秒就把一次抛投的消耗
+	// 抹平，精力条永远画满、机制形同不存在。停竿后照常快速回精力，
+	// 保留"打完吃顿饭半分钟再战"的节奏（见 specs/changes/energy-regen-fast）。
+	defEnergyRegenFishingMult = 0.0
+	// 精力硬上限 1.0：客户端状态条按 1.0 归一化画满（0.85 只画到 85%）。
+	// 官服抓包 f0 静止恒 0.85 是"自然恢复封顶"，不是上限——动作掉下去后
+	// 15 秒内只回升到 0.85 就停住。最后那 15% 要靠咖啡/可可这类消耗品补满，
+	// 把硬上限设成 0.85 会让所有回精力消耗品恒为零效果。
+	defEnergyMax          = 1.0
+	defEnergyRegenCap     = 0.85
 	defHungerRegenFloor   = 0.25
 	defCastEnergyCost     = 0.01
 	defPullEnergyCost     = 0.005
@@ -112,30 +125,32 @@ const conditionWriteBackDelta = 0.0005
 const operationResultLowEnergyLevel = 84
 
 type conditionParams struct {
-	Enabled              bool
-	HungerDecayPerHour   float64
-	EnergyRegenPerHour   float64
-	EnergyMax            float64
-	HungerRegenFloor     float64
-	CastEnergyCost       float64
-	PullEnergyCost       float64
-	LowEnergyThreshold   float64
-	MaxBackfillHours     float64
-	FoodHungerRestore    float64
-	CoffeeEnergyRestore  float64
-	CocoaHungerRestore   float64
-	CocoaEnergyRestore   float64
-	TeaComfortRestore    float64
-	ComfortRainPenalty   float64
-	ComfortColdPenalty   float64
-	ComfortColdTempC     float64
-	ComfortCampfireBoost float64
-	ComfortSunBoost      float64
-	ComfortDriftPerHour  float64
-	SunEnergyRegenMult   float64
-	GearEnergyRegenCap   float64
-	GearEnergyMaxCap     float64
-	EnergyRegenFoodCost  float64
+	Enabled                bool
+	HungerDecayPerHour     float64
+	EnergyRegenPerHour     float64
+	EnergyMax              float64
+	EnergyRegenCap         float64
+	EnergyRegenFishingMult float64
+	HungerRegenFloor       float64
+	CastEnergyCost         float64
+	PullEnergyCost         float64
+	LowEnergyThreshold     float64
+	MaxBackfillHours       float64
+	FoodHungerRestore      float64
+	CoffeeEnergyRestore    float64
+	CocoaHungerRestore     float64
+	CocoaEnergyRestore     float64
+	TeaComfortRestore      float64
+	ComfortRainPenalty     float64
+	ComfortColdPenalty     float64
+	ComfortColdTempC       float64
+	ComfortCampfireBoost   float64
+	ComfortSunBoost        float64
+	ComfortDriftPerHour    float64
+	SunEnergyRegenMult     float64
+	GearEnergyRegenCap     float64
+	GearEnergyMaxCap       float64
+	EnergyRegenFoodCost    float64
 
 	// 健康（f4）动态。
 	HealthDecayPerHour     float64
@@ -147,30 +162,32 @@ type conditionParams struct {
 
 func (s *Server) conditionParams() conditionParams {
 	return conditionParams{
-		Enabled:              s.tunableF(tunableConditionEnabled, 1) >= 0.5,
-		HungerDecayPerHour:   s.tunableF(tunableHungerDecayPerHour, defHungerDecayPerHour),
-		EnergyRegenPerHour:   s.tunableF(tunableEnergyRegenPerHour, defEnergyRegenPerHour),
-		EnergyMax:            s.tunableF(tunableEnergyMax, defEnergyMax),
-		HungerRegenFloor:     s.tunableF(tunableHungerRegenFloor, defHungerRegenFloor),
-		CastEnergyCost:       s.tunableF(tunableCastEnergyCost, defCastEnergyCost),
-		PullEnergyCost:       s.tunableF(tunablePullEnergyCost, defPullEnergyCost),
-		LowEnergyThreshold:   s.tunableF(tunableLowEnergyThreshold, defLowEnergyThreshold),
-		MaxBackfillHours:     s.tunableF(tunableMaxBackfillHours, defMaxBackfillHours),
-		FoodHungerRestore:    s.tunableF(tunableFoodHungerRestore, defFoodHungerRestore),
-		CoffeeEnergyRestore:  s.tunableF(tunableCoffeeEnergyRestore, defCoffeeEnergyRestore),
-		CocoaHungerRestore:   s.tunableF(tunableCocoaHungerRestore, defCocoaHungerRestore),
-		CocoaEnergyRestore:   s.tunableF(tunableCocoaEnergyRestore, defCocoaEnergyRestore),
-		TeaComfortRestore:    s.tunableF(tunableTeaComfortRestore, defTeaComfortRestore),
-		ComfortRainPenalty:   s.tunableF(tunableComfortRainPenalty, defComfortRainPenalty),
-		ComfortColdPenalty:   s.tunableF(tunableComfortColdPenalty, defComfortColdPenalty),
-		ComfortColdTempC:     s.tunableF(tunableComfortColdTempC, defComfortColdTempC),
-		ComfortCampfireBoost: s.tunableF(tunableComfortCampfireBoost, defComfortCampfireBoost),
-		ComfortSunBoost:      s.tunableF(tunableComfortSunBoost, defComfortSunBoost),
-		ComfortDriftPerHour:  s.tunableF(tunableComfortDriftPerHour, defComfortDriftPerHour),
-		SunEnergyRegenMult:   s.tunableF(tunableSunEnergyRegenMult, defSunEnergyRegenMult),
-		GearEnergyRegenCap:   s.tunableF(tunableGearEnergyRegenCap, defGearEnergyRegenCap),
-		GearEnergyMaxCap:     s.tunableF(tunableGearEnergyMaxCap, defGearEnergyMaxCap),
-		EnergyRegenFoodCost:  s.tunableF(tunableEnergyRegenFoodCost, defEnergyRegenFoodCost),
+		Enabled:                s.tunableF(tunableConditionEnabled, 1) >= 0.5,
+		HungerDecayPerHour:     s.tunableF(tunableHungerDecayPerHour, defHungerDecayPerHour),
+		EnergyRegenPerHour:     s.tunableF(tunableEnergyRegenPerHour, defEnergyRegenPerHour),
+		EnergyMax:              s.tunableF(tunableEnergyMax, defEnergyMax),
+		EnergyRegenCap:         s.tunableF(tunableEnergyRegenCap, defEnergyRegenCap),
+		EnergyRegenFishingMult: s.tunableF(tunableEnergyRegenFishingMult, defEnergyRegenFishingMult),
+		HungerRegenFloor:       s.tunableF(tunableHungerRegenFloor, defHungerRegenFloor),
+		CastEnergyCost:         s.tunableF(tunableCastEnergyCost, defCastEnergyCost),
+		PullEnergyCost:         s.tunableF(tunablePullEnergyCost, defPullEnergyCost),
+		LowEnergyThreshold:     s.tunableF(tunableLowEnergyThreshold, defLowEnergyThreshold),
+		MaxBackfillHours:       s.tunableF(tunableMaxBackfillHours, defMaxBackfillHours),
+		FoodHungerRestore:      s.tunableF(tunableFoodHungerRestore, defFoodHungerRestore),
+		CoffeeEnergyRestore:    s.tunableF(tunableCoffeeEnergyRestore, defCoffeeEnergyRestore),
+		CocoaHungerRestore:     s.tunableF(tunableCocoaHungerRestore, defCocoaHungerRestore),
+		CocoaEnergyRestore:     s.tunableF(tunableCocoaEnergyRestore, defCocoaEnergyRestore),
+		TeaComfortRestore:      s.tunableF(tunableTeaComfortRestore, defTeaComfortRestore),
+		ComfortRainPenalty:     s.tunableF(tunableComfortRainPenalty, defComfortRainPenalty),
+		ComfortColdPenalty:     s.tunableF(tunableComfortColdPenalty, defComfortColdPenalty),
+		ComfortColdTempC:       s.tunableF(tunableComfortColdTempC, defComfortColdTempC),
+		ComfortCampfireBoost:   s.tunableF(tunableComfortCampfireBoost, defComfortCampfireBoost),
+		ComfortSunBoost:        s.tunableF(tunableComfortSunBoost, defComfortSunBoost),
+		ComfortDriftPerHour:    s.tunableF(tunableComfortDriftPerHour, defComfortDriftPerHour),
+		SunEnergyRegenMult:     s.tunableF(tunableSunEnergyRegenMult, defSunEnergyRegenMult),
+		GearEnergyRegenCap:     s.tunableF(tunableGearEnergyRegenCap, defGearEnergyRegenCap),
+		GearEnergyMaxCap:       s.tunableF(tunableGearEnergyMaxCap, defGearEnergyMaxCap),
+		EnergyRegenFoodCost:    s.tunableF(tunableEnergyRegenFoodCost, defEnergyRegenFoodCost),
 
 		HealthDecayPerHour:     s.tunableF(tunableHealthDecayPerHour, defHealthDecayPerHour),
 		HealthRegenPerHour:     s.tunableF(tunableHealthRegenPerHour, defHealthRegenPerHour),
@@ -209,6 +226,7 @@ type conditionEnv struct {
 	Cold     bool // 气温低于阈值
 	Sun      bool // 白昼且无雨（晒太阳）
 	Campfire bool // 有未熄灭的篝火
+	Fishing  bool // 有竿已抛投、入水且未结算（垂钓中）
 }
 
 // advancePlayerCondition 按时间差推进精力、饱食度与舒适度；纯函数，单测用手算样例覆盖。
@@ -237,9 +255,22 @@ func advancePlayerCondition(cur store.PlayerCondition, now float64, p conditionP
 	if env.Sun {
 		regen *= p.SunEnergyRegenMult
 	}
+	// 垂钓中停摆：动作消耗只发生在竿在水里的时候，恢复若同时进行就把消耗
+	// 抹平（0.01 的消耗在 100/h 下 0.36 秒补回）。乘数默认 0，停竿即恢复。
+	if env.Fishing {
+		regen *= p.EnergyRegenFishingMult
+	}
 	factor := p.HungerRegenFloor + (1-p.HungerRegenFloor)*out.Secondary
 	prevEnergy := out.Primary
-	out.Primary = clampFloat(cur.Primary+regen*factor*elapsedH, 0, p.EnergyMax)
+	// 自然恢复只能把精力推到 regenCap，推不到硬上限：官服抓包显示精力静止时
+	// 稳定停在 0.85、动作掉下去约 15 秒回升到 0.85 就不再涨。硬上限 1.0 留给
+	// 咖啡/可可这类消耗品，否则"喝咖啡回精力"在没有消耗的空闲期永远无效。
+	//
+	// 封的是"自然恢复能到多高"这个天花板，不是"当前值不得超过多少"：
+	// 已经在封顶之上的值（消耗品补上去的）原样保留，不会被保活拍按回来。
+	naturalCap := math.Min(p.EnergyMax, p.EnergyRegenCap)
+	regenTo := clampFloat(cur.Primary+regen*factor*elapsedH, 0, naturalCap)
+	out.Primary = clampFloat(math.Max(cur.Primary, regenTo), 0, p.EnergyMax)
 	// 恢复精力要吃掉饱食度：按实际回复量折算，系数为 tunable（0 关闭）。
 	// 放在饱食度衰减之后、健康判定之前，保证同一拍里 f1 与健康压力源自洽。
 	if gained := out.Primary - prevEnergy; gained > 0 && p.EnergyRegenFoodCost > 0 {
@@ -306,7 +337,7 @@ func (s *Server) resumePlayerConditionClock(ctx context.Context, uid int64) {
 // currentPlayerCondition 懒计算读取口：Ensure → 推进 → 变化超阈值才写回。
 // 总开关关闭时回退协议默认常量，与改动前行为逐字段一致（不写库）。
 func (s *Server) currentPlayerCondition(ctx context.Context, uid int64) store.PlayerCondition {
-	return s.currentPlayerConditionP(ctx, uid, s.conditionParamsForUID(ctx, uid), conditionEnv{})
+	return s.currentPlayerConditionP(ctx, uid, s.conditionParamsForUID(ctx, uid), s.conditionEnvForUID(uid))
 }
 
 // currentPlayerConditionEnv 带环境快照的读取口（2/2 保活专用）：
@@ -398,7 +429,7 @@ func (s *Server) spendEnergy(ctx context.Context, uid int64, amount float64) {
 	if !p.Enabled {
 		return
 	}
-	c := s.currentPlayerConditionP(ctx, uid, p, conditionEnv{})
+	c := s.currentPlayerConditionP(ctx, uid, p, s.conditionEnvForUID(uid))
 	c.Primary = clampFloat(c.Primary-amount, 0, p.EnergyMax)
 	c.UpdatedTS = float64(time.Now().Unix())
 	if err := s.DB.UpsertPlayerCondition(ctx, c); err != nil {
@@ -437,7 +468,44 @@ func (s *Session) conditionEnvForSession(now time.Time, p conditionParams) condi
 		// 篝火加成只对同一地点/钓点生效；玩家离开后不能继续享受。
 		env.Campfire = loc != "" && state.Loc == loc && state.Spot == spot
 	}
+	env.Fishing = s.Srv.playerFishingActive(s.Userid)
 	return env
+}
+
+// playerFishingActive 报告是否有竿处于"已抛投、入水、未结算"状态。
+// 判据与在线垂钓识别同源（CastActive && InWater && !Resolved）；只读快照，
+// 不推进鱼状态。逐竿加锁，锁内不调用任何会再加同一把锁的函数。
+func (s *Server) playerFishingActive(uid int64) bool {
+	if s == nil {
+		return false
+	}
+	// 只读内存里的既有状态：不走 fishingStatesFor —— 那条路径会为从未钓过鱼的
+	// 玩家懒建鱼状态并可能触发 LoadFishingStates 查库，读精力不该有这种副作用。
+	s.fishMu.Lock()
+	list := make([]*FishState, 0, len(s.fishStates[uid]))
+	for _, st := range s.fishStates[uid] {
+		list = append(list, st)
+	}
+	s.fishMu.Unlock()
+	for _, st := range list {
+		if st == nil {
+			continue
+		}
+		st.mu.Lock()
+		active := st.CastActive && st.InWater && !st.Resolved
+		st.mu.Unlock()
+		if active {
+			return true
+		}
+	}
+	return false
+}
+
+// conditionEnvForUID 动作路径用的环境快照：只带"是否垂钓中"。
+// 天气/昼夜/篝火仅在 2/2 保活拍解析（见 conditionEnvForSession），
+// 动作路径沿用改动前的空环境口径，避免扣精力/喝咖啡的行为随天气抖动。
+func (s *Server) conditionEnvForUID(uid int64) conditionEnv {
+	return conditionEnv{Fishing: s.playerFishingActive(uid)}
 }
 
 // rigEnergyBonuses 汇总已装配竿/轮的精力被动加成。数据源为 item_def.attrs_json
@@ -505,16 +573,15 @@ func (s *Server) heldRodGUID(uid int64) string {
 	return guid
 }
 
-// applyConsumableRestoreTx 在经济事务内应用食品/热饮的即时状态恢复。
+// consumableRestoreTarget 计算某个消耗品分类作用在 cur 上的新状态。
 // 分类映射见 consumableRestoreForItem：咖啡→精力、茶→舒适度、
 // 可可→饱食+少量精力、药品→健康（f4 下降）、其余食品→饱食度。
 // 恢复量全部为 tunables 标定值。
-func applyConsumableRestoreTx(ctx context.Context, tx *sql.Tx, uid int64, kind string, p conditionParams, now time.Time) error {
-	cur, err := store.EnsurePlayerConditionTx(ctx, tx, uid)
-	if err != nil {
-		return err
-	}
-	next := *cur
+//
+// 判定与写入共用这一个函数：只有它真的让某条状态变化，这次使用才算有效，
+// 避免扣掉物品而状态条没有任何可见变化。
+func consumableRestoreTarget(cur store.PlayerCondition, kind string, p conditionParams) store.PlayerCondition {
+	next := cur
 	switch kind {
 	case "coffee":
 		next.Primary = clampFloat(next.Primary+p.CoffeeEnergyRestore, 0, p.EnergyMax)
@@ -529,6 +596,27 @@ func applyConsumableRestoreTx(ctx context.Context, tx *sql.Tx, uid int64, kind s
 	default: // "food"
 		next.Secondary = clampFloat(next.Secondary+p.FoodHungerRestore, 0, 1)
 	}
+	return next
+}
+
+// consumableRestoreChanges 判断该分类在当前状态下是否真的能推动状态条。
+// 阈值复用写回判定阈值，低于它的变化玩家看不出来，按"没生效"处理。
+func consumableRestoreChanges(cur store.PlayerCondition, kind string, p conditionParams) bool {
+	next := consumableRestoreTarget(cur, kind, p)
+	return math.Abs(next.Primary-cur.Primary) > conditionWriteBackDelta ||
+		math.Abs(next.Secondary-cur.Secondary) > conditionWriteBackDelta ||
+		math.Abs(next.Comfort-cur.Comfort) > conditionWriteBackDelta ||
+		math.Abs(next.LuckPenalty-cur.LuckPenalty) > conditionWriteBackDelta
+}
+
+// applyConsumableRestoreTx 在经济事务内应用食品/热饮的即时状态恢复。
+// 计算口径与 consumableRestoreChanges 共用 consumableRestoreTarget。
+func applyConsumableRestoreTx(ctx context.Context, tx *sql.Tx, uid int64, kind string, p conditionParams, now time.Time) error {
+	cur, err := store.EnsurePlayerConditionTx(ctx, tx, uid)
+	if err != nil {
+		return err
+	}
+	next := consumableRestoreTarget(*cur, kind, p)
 	next.UpdatedTS = float64(now.Unix())
 	return store.UpsertPlayerConditionTx(ctx, tx, next)
 }

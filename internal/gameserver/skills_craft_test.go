@@ -824,7 +824,8 @@ func TestBaitDigFlow(t *testing.T) {
 		var n int64
 		for _, it := range rows {
 			switch it.ItemID {
-			case "worm_01", "maggot", "naiad", "caddisfly", "unibeetle_larva", "stonefly_nymph", "scolytinae":
+			case "worm_01", "muckworm", "vypolzok_01", "dorbeetle",
+				"unibeetle_larva", "maybug_larva", "gryllotalpa":
 				n += srv.stackCountOf(ctx, it)
 			}
 		}

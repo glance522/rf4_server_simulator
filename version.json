@@ -9,11 +9,11 @@
     "download_mirror_url": "https://gh-proxy.com/https://github.com/glance522/rf4_server_simulator/releases/download/v0.1.9/rf4_server_simulator-v0.1.9-windows-amd64.zip"
   },
   "preview": {
-    "version": "preview-20261111T164534Z-836f2df",
-    "build_ts": "20261111164534",
-    "released_at": "2026-11-11T16:46:18Z",
-    "notes_url": "https://github.com/glance522/rf4_server_simulator/releases/tag/preview-20261111T164534Z-836f2df",
+    "version": "preview-20261113T130901Z-399c38a",
+    "build_ts": "20261113130901",
+    "released_at": "2026-11-13T13:09:43Z",
+    "notes_url": "https://github.com/glance522/rf4_server_simulator/releases/tag/preview-20261113T130901Z-399c38a",
     "download_url": "https://github.com/glance522/rf4_server_simulator/releases",
-    "download_mirror_url": "https://gh-proxy.com/https://github.com/glance522/rf4_server_simulator/releases/download/preview-20261111T164534Z-836f2df/rf4_server_simulator-preview-20261111T164534Z-836f2df-windows-amd64.zip"
+    "download_mirror_url": "https://gh-proxy.com/https://github.com/glance522/rf4_server_simulator/releases/download/preview-20261113T130901Z-399c38a/rf4_server_simulator-preview-20261113T130901Z-399c38a-windows-amd64.zip"
   }
 }

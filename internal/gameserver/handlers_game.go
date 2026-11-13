@@ -1166,10 +1166,11 @@ func hFishingStep(ctx *Ctx) ([]byte, bool) {
 				}
 				st.updateLureActionLocked(now, previousMask, anim)
 			}
-			// 0x200/0x400/0x800/0x1000 是不同水层与姿态的“在水中”位族；岸上不会出现。
+			// 入水证据见 rigAnimInWater：基础位族之外，浮钓接受顺流 0x40 与
+			// 下沉 0x80000；岸上抛竿不会出现这些位。
 			enterWater := false
 			needBite := false
-			if st.CastActive && !st.InWater && anim&rigAnimInWaterMask != 0 {
+			if st.CastActive && !st.InWater && rigAnimInWater(anim, st.RigType) {
 				st.InWater = true
 				enterWater = true
 				if st.NeedBite {
@@ -1214,6 +1215,19 @@ func hFishingFall(ctx *Ctx) ([]byte, bool) {
 	st.FallSeen = true
 	st.FallTs = time.Now()
 	rigType, gear := st.RigType, st.GearGuid
+	// 14/3 是客户端“钩体已在水中”的一次性上报（FishingSet.gpnmjgkigmg 以
+	// BodyEnvironment 在水判定发送，岸上落点不发），与 14/7 的入水位互为补充：
+	// 覆盖路亚线杯开自由下沉（f5=0x0 无姿态位）与各钓法的下沉相位。
+	// 打窝竿不锁存——它不钓鱼，历史上靠“永不入水”挡住发鱼定时器。
+	enterWater, needBite := false, false
+	if st.CastActive && !st.InWater && !spodRigTypes[rigType] {
+		st.InWater = true
+		enterWater = true
+		if st.NeedBite {
+			st.NeedBite = false
+			needBite = true
+		}
+	}
 	st.mu.Unlock()
 	// 打窝器入水就把料倒进落点：它不发 14/7，14/3 就是它的入水信号。
 	// 幂等键沿用本次抛竿，客户端重复上报不会重复扣份。
@@ -1221,6 +1235,14 @@ func hFishingFall(ctx *Ctx) ([]byte, bool) {
 		if err := srv.consumeCastBait(ctx.Sess, st); err != nil {
 			ctx.Log.Warn("打窝器入窝料扣减失败", "rod", shortGUID(gear), "err", err)
 		}
+	} else if enterWater {
+		if err := srv.consumeCastBait(ctx.Sess, st); err != nil {
+			ctx.Log.Warn("入水窝料扣减失败", "rod", shortGUID(gear), "err", err)
+		}
+	}
+	if needBite {
+		ctx.Log.Info("钓组在水中（14/3），补排咬钩", "rod", shortGUID(gear))
+		ctx.Sess.Srv.scheduleBiteForHooked(ctx.Sess, st)
 	}
 	return nil, true
 }
@@ -1419,7 +1441,6 @@ func finishNibbleHook(ctx *Ctx, st *FishState, pending *RolledFish, gear string,
 		st.Hooked = false
 		st.Resolved = false
 		st.PendingRepush = 0
-		st.LuckRepush = 0
 	}
 	st.mu.Unlock()
 	if castActive && !resolved {
@@ -1516,8 +1537,8 @@ func hFishingLeft(ctx *Ctx) ([]byte, bool) {
 	if escapeFrame && noEscape && st.Hooked && st.Pending != nil && st.CastActive &&
 		st.noEscapeRepush < maxNoEscapeRepush {
 		// 【永不脱钩】：客户端判定跑鱼，服务端把同一尾鱼重新挂上。
-		// 与蓝冠天命保护走同一条路径（2 秒后重推 14/14 鱼实体），
-		// 区别是不限次数（有 maxNoEscapeRepush 兜底）、不记跑鱼、不消耗鱼。
+		// 复用 14/12 f0=3/5/6 的重推路径（2 秒后重推 14/14 鱼实体），
+		// 区别是不记跑鱼、不消耗鱼，并用 maxNoEscapeRepush 兜底。
 		st.noEscapeRepush++
 		retry := st.noEscapeRepush
 		fish := st.Pending.FishGUID
@@ -1528,18 +1549,6 @@ func hFishingLeft(ctx *Ctx) ([]byte, bool) {
 		st.mu.Unlock()
 		ctx.Log.Info("【永不脱钩】客户端判定跑鱼，原地重推同一尾", "f0", f0,
 			"fish", shortGUID(fish), "retry", retry)
-		return nil, true
-	}
-	if (f0 == 1 || f0 == 2 || f0 == 8) && st.Hooked &&
-		st.Pending != nil && st.Pending.LuckProtected && st.LuckRepush < 2 {
-		st.LuckRepush++
-		st.Hooked = false
-		st.PushSent = false
-		st.PendingRepush = 0
-		srv.armPendingTimerLocked(ctx.Sess.Userid, st, 2*time.Second)
-		ctx.Log.Info("蓝冠天命保护：忽略钩型脱钩并重推", "f0", f0,
-			"fish", shortGUID(st.Pending.FishGUID), "retry", st.LuckRepush)
-		st.mu.Unlock()
 		return nil, true
 	}
 	if f0 == 1 || f0 == 2 || f0 == 8 {

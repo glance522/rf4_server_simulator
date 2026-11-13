@@ -311,14 +311,18 @@ func TestHookBiteStatePersistsWithPendingFish(t *testing.T) {
 	}
 }
 
-func TestLuckProtectedBlueRejectsEscapeFrame(t *testing.T) {
+// TestLuckProtectedBlueEscapesLikeNormalFish：蓝冠天命鱼中钩后的钩型脱钩帧
+// 按真脱钩处理（与普通鱼同路径），不再救援重推；脱钩补偿照常记账。
+func TestLuckProtectedBlueEscapesLikeNormalFish(t *testing.T) {
 	s, _ := newRigTestServer(t)
 	sess, _ := newTunnelProbe(t, s)
+	setWeatherTestTunable(t, s, "fish_hunt_enabled", "1")
 	st := s.stateFor(sess.Userid)
-	fish := &RolledFish{Species: "crucian", Grade: 4, WeightG: 3200,
+	fish := &RolledFish{FishGUID: "luck-escape", Species: "crucian", Grade: 4, WeightG: 3200,
 		BiteQuality: "solid", HookHoldP: 1, LuckProtected: true}
 	st.mu.Lock()
 	st.CastActive, st.InWater, st.Hooked, st.Pending = true, true, true, fish
+	st.Loc, st.Spot = "luck-escape-14-12", 3
 	st.mu.Unlock()
 
 	tree := proto.Args524(proto.Obj("lhicjpmglbo", 0,
@@ -327,16 +331,20 @@ func TestLuckProtectedBlueRejectsEscapeFrame(t *testing.T) {
 		t.Fatal("14/12 未处理")
 	}
 	st.mu.Lock()
-	kept := st.Pending == fish && st.LuckRepush == 1 && st.pendingTimer != nil && !st.Hooked
-	st.cancelPendingTimerLocked()
+	escapes := st.Pending == nil && !st.Hooked && !st.Resolved && st.biteTimer != nil
+	st.cancelBiteTimerLocked()
 	st.mu.Unlock()
-	if !kept {
-		t.Fatalf("天命蓝冠不应被钩型脱钩清掉: pending=%v retry=%d timer=%v hooked=%v",
-			st.Pending != nil, st.LuckRepush, st.pendingTimer != nil, st.Hooked)
+	if !escapes {
+		t.Fatalf("天命蓝冠脱钩应按真脱钩处理并重排下一口: pending=%v hooked=%v resolved=%v timer=%v",
+			st.Pending != nil, st.Hooked, st.Resolved, st.biteTimer != nil)
+	}
+	h := s.loadFishHuntState(t.Context(), sess.Userid, "luck-escape-14-12", 3)
+	if h.BigMiss != 1 || h.CompFish != 4 || h.CompGrade != 4 {
+		t.Fatalf("蓝冠脱钩应获得回访补偿: %+v", h)
 	}
 }
 
-func TestLuckProtectedBlueDoesNotRetryTerminalFrame(t *testing.T) {
+func TestLuckProtectedBlueTerminalFrameStillFinal(t *testing.T) {
 	s, _ := newRigTestServer(t)
 	sess, _ := newTunnelProbe(t, s)
 	st := s.stateFor(sess.Userid)
@@ -356,7 +364,7 @@ func TestLuckProtectedBlueDoesNotRetryTerminalFrame(t *testing.T) {
 	st.cancelBiteTimerLocked()
 	st.mu.Unlock()
 	if !terminal {
-		t.Fatalf("f0=7 是终态，不得因蓝冠保护重推: pending=%v hooked=%v resolved=%v timer=%v",
+		t.Fatalf("f0=7 是终态，蓝冠鱼同样不得复活: pending=%v hooked=%v resolved=%v timer=%v",
 			st.Pending != nil, st.Hooked, st.Resolved, st.pendingTimer != nil)
 	}
 }

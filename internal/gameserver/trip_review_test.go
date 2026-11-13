@@ -65,7 +65,8 @@ func TestTravelLockedVoucherMapRejected(t *testing.T) {
 }
 
 // TestPlaceTripPriceStrict 审查 P1 回归：票价必须整段按固定票价表校验。
-// 未收录地点、未收录币种（金币价缺失）、价格不符一律拒绝，不扣款。
+// 未收录地点、价格不符（银币/金币均含）一律拒绝，不扣款。
+// 未实抓币种（票价 0 值）分支由 TestPlaceTripGoldPriceMissingRejected 单独覆盖。
 func TestPlaceTripPriceStrict(t *testing.T) {
 	srv, db := newEconomyTxTestServer(t)
 	ctx := context.Background()
@@ -89,9 +90,10 @@ func TestPlaceTripPriceStrict(t *testing.T) {
 	if buy("level_002_kirzah_river", false, 1) {
 		t.Fatal("未收录地点应拒绝购买")
 	}
-	// 北海金币价未收录：gold=true price=1 此前被按 1 金币成交。
+	// 北海金币价已收录（2026-11-11 实抓 95）后，错报金币价仍必须拒绝：
+	// gold=true price=1 此前被按 1 金币成交（审查 P1）。
 	if buy("level_012_north_sea", true, 1) {
-		t.Fatal("未收录币种应拒绝购买")
+		t.Fatal("金币价不符应拒绝购买")
 	}
 	// 价格不符。
 	if buy("level_018_moskitnoe", false, 29900) {
@@ -112,6 +114,41 @@ func TestPlaceTripPriceStrict(t *testing.T) {
 	remaining, _, _ := tripStateRow(t, srv, uid, "level_018_moskitnoe")
 	if remaining <= 0 {
 		t.Fatalf("购票未写计时状态: %.0f", remaining)
+	}
+}
+
+// TestPlaceTripGoldPriceMissingRejected 审查 P2 回归（PR #436）：北海金币价
+// 收录后票价表两个地点 Silver/Gold 均非零，"未实抓币种拒绝"（want<=0）分支
+// 失去覆盖。临时清零铜湖金币价还原该分支：gold=true 必须拒绝且不扣款。
+func TestPlaceTripGoldPriceMissingRejected(t *testing.T) {
+	srv, db := newEconomyTxTestServer(t)
+	ctx := context.Background()
+	const uid int64 = 3915
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SQL.Exec(`UPDATE profile SET silver=999999, gold=999 WHERE uid=?`, uid); err != nil {
+		t.Fatal(err)
+	}
+	// 临时把铜湖金币价清零，模拟"金币价未实抓"的地点；测试结束恢复原表。
+	// （本测试不标 t.Parallel：串行阶段改包级票价表不会与 Parallel 测试竞争。）
+	orig := placeTripPrices["level_018_moskitnoe"]
+	zeroed := orig
+	zeroed.Gold = 0
+	placeTripPrices["level_018_moskitnoe"] = zeroed
+	t.Cleanup(func() { placeTripPrices["level_018_moskitnoe"] = orig })
+
+	buyCtx := &Ctx{Sess: tripReviewCtx(srv, uid, nil).Sess, Main: 3, Sub: 38,
+		Tree: tripArgs("level_018_moskitnoe", true, 45), DecodeOK: true, Log: logging.Discard()}
+	if body, handled := hPlaceTripTx(buyCtx); !handled || body != nil {
+		t.Fatalf("未实抓币种应业务拒绝（nil body）: handled=%v body=%v", handled, body != nil)
+	}
+	var silver, gold int64
+	if err := db.SQL.QueryRow(`SELECT silver, gold FROM profile WHERE uid=?`, uid).Scan(&silver, &gold); err != nil {
+		t.Fatal(err)
+	}
+	if silver != 999999 || gold != 999 {
+		t.Fatalf("未实抓币种拒绝路径不应扣款: silver=%d gold=%d", silver, gold)
 	}
 }
 

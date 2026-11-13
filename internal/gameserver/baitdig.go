@@ -1,7 +1,7 @@
 package gameserver
 
-// 4/8 与 9/3 的挖饵逻辑。数据全部走作者现有 SQLite：
-// - 工具：铲子 tool_shovel、红虫长柄勺 tool_scoop
+// 9/3 的挖饵逻辑（4/8 的物品使用不参与挖饵）。数据全部走作者现有 SQLite：
+// - 工具：铲子 tool_shovel / 新年铲 shovel_ny25、红虫长柄勺 tool_scoop
 // - 熟练度：技能大类 4（捕获鱼饵）
 // - 产物：普通 item 行，复用现有可堆叠物品机制
 import (
@@ -24,22 +24,31 @@ const (
 	baitMasteryCap     = 100.0
 )
 
-// 一次挖饵能翻出几种不同的饵：第 2 种按固定概率出，第 3 种要熟练度达标。
-// 想调"多饵"手感改这三个数即可。
-const (
-	baitSecondKindChance = 55   // 追加第 2 种饵的概率（%）
-	baitThirdKindChance  = 25   // 追加第 3 种饵的概率（%）
-	baitThirdKindMastery = 40.0 // 解锁第 3 种饵所需熟练度
-)
+// baitDigKindBand 定义“熟练度达到 MinMastery 起，一次挖饵能翻出几种不同的饵”。
+// 种类数随熟练度提升而增长，最高 baitMaxKinds 种（想调手感改 baitDigKindBands）；
+// 实际取值还会被当前档位表的饵种数收敛（表里只有 N 种时不可能翻出 N+1 种）。
+type baitDigKindBand struct {
+	MinMastery int
+	MinKind    int
+	MaxKind    int
+}
+
+// baitMaxKinds 单次挖饵上限：7 种。
+const baitMaxKinds = 7
+
+// baitDigKindBands 种类数推进表（与掉落档位同一套熟练度阈值）：
+// 0 档 1 种 → 20 档 1~2 种 → 40 档 2~3 种 → 60 档 3~5 种 → 80 档 4~7 种。
+var baitDigKindBands = []baitDigKindBand{
+	{0, 1, 1},
+	{20, 1, 2},
+	{40, 2, 3},
+	{60, 3, 5},
+	{80, 4, 7},
+}
 
 type baitLootEntry struct {
 	Key    string
 	Weight int
-}
-
-type baitLootBand struct {
-	Min   int
-	Table []baitLootEntry
 }
 
 type baitDigDrop struct {
@@ -47,47 +56,74 @@ type baitDigDrop struct {
 	Qty int64
 }
 
-var baitDigBands = map[string][]baitLootBand{
+// baitPoolEntry 是饵池里的一种饵：解锁锚点 + 基准权重。
+// 锚点表示“捕获熟练度达到该值后才会出现”，未达锚点一律不进入掉落表；
+// 权重只在本次已解锁的集合内归一，所以越晚解锁的饵不影响早期档位的相对概率。
+type baitPoolEntry struct {
+	Key    string
+	Unlock int
+	Weight int
+}
+
+// 饵料池按“土生 / 水生”硬性互斥：每种饵只属于一个工具，换工具就换饵种。
+// 每池内的解锁锚点由策划给定（熟练度未达锚点不得提前挖出）：
+//
+//	铲子 tool_shovel / 新年铲 shovel_ny25：
+//	  蚯蚓 worm_01(0)、红蚯蚓 muckworm(0)、地龙 vypolzok_01(75)、蜣螂 dorbeetle(80)、
+//	  土蚕 maybug_larva(90)、蝼蛄 gryllotalpa(95)、金龟幼虫 unibeetle_larva(100)
+//	红虫长柄勺 tool_scoop：
+//	  红虫 bloodworm(45)、一束藻类 watergrass(45)、浮游幼虫 naiad(55)、
+//	  毛翅目 caddisfly(70)、水蛭 black_leech(80)、龙虱甲虫 waterbug(100)、
+//	  淡水钩虾 gammarus_fresh(100)
+//
+// ⚠️ 勺子的锚点从 45 起，因此熟练度 <45 时长柄勺的可用饵表为空、挖饵直接失败。
+// ⚠️ 权重与锚点都是本地标定值，不是官服数据；替换本表即调整，逻辑不用动。
+var baitDigPools = map[string][]baitPoolEntry{
 	baitShovelItemID: {
-		{0, []baitLootEntry{{"worm_01", 90}, {"maggot", 10}}},
-		{20, []baitLootEntry{{"worm_01", 65}, {"maggot", 25}, {"naiad", 10}}},
-		{40, []baitLootEntry{{"worm_01", 45}, {"maggot", 25}, {"naiad", 20}, {"caddisfly", 10}}},
-		{60, []baitLootEntry{{"worm_01", 35}, {"maggot", 20}, {"naiad", 20}, {"caddisfly", 15}, {"unibeetle_larva", 10}}},
-		{80, []baitLootEntry{{"worm_01", 25}, {"maggot", 15}, {"naiad", 15}, {"caddisfly", 15}, {"unibeetle_larva", 15}, {"stonefly_nymph", 10}, {"scolytinae", 5}}},
+		{Key: "worm_01", Unlock: 0, Weight: 30},
+		{Key: "muckworm", Unlock: 0, Weight: 20},
+		{Key: "vypolzok_01", Unlock: 75, Weight: 15},
+		{Key: "dorbeetle", Unlock: 80, Weight: 10},
+		{Key: "maybug_larva", Unlock: 90, Weight: 10},
+		{Key: "gryllotalpa", Unlock: 95, Weight: 8},
+		{Key: "unibeetle_larva", Unlock: 100, Weight: 7},
 	},
 	baitScoopItemID: {
-		{0, []baitLootEntry{{"bloodworm", 70}, {"worm_01", 30}}},
-		{20, []baitLootEntry{{"bloodworm", 80}, {"naiad", 10}, {"worm_01", 10}}},
-		{40, []baitLootEntry{{"bloodworm", 70}, {"naiad", 15}, {"caddisfly", 10}, {"stonefly_nymph", 5}}},
-		{60, []baitLootEntry{{"bloodworm", 60}, {"naiad", 15}, {"caddisfly", 10}, {"stonefly_nymph", 10}, {"scolytinae", 5}}},
-		{80, []baitLootEntry{{"bloodworm", 50}, {"naiad", 15}, {"caddisfly", 10}, {"stonefly_nymph", 10}, {"scolytinae", 10}, {"unibeetle_larva", 5}}},
+		{Key: "bloodworm", Unlock: 45, Weight: 30},
+		{Key: "watergrass", Unlock: 45, Weight: 20},
+		{Key: "naiad", Unlock: 55, Weight: 15},
+		{Key: "caddisfly", Unlock: 70, Weight: 12},
+		{Key: "black_leech", Unlock: 80, Weight: 10},
+		{Key: "waterbug", Unlock: 100, Weight: 8},
+		{Key: "gammarus_fresh", Unlock: 100, Weight: 5},
 	},
 }
 
-func isBaitDigTool(itemID string) bool {
-	itemID = strings.ToLower(strings.TrimSpace(itemID))
-	return itemID == baitShovelItemID || itemID == "shovel_ny25" || itemID == baitScoopItemID
-}
-
-// baitLootTableFor 取当前熟练度档位的权重表；熟练度高于所有档位时用最高档。
+// baitLootTableFor 返回该工具在给定熟练度下已解锁的饵与权重。
+// 未达锚点的饵不会出现在结果里；全部未解锁时返回空表（调用方按挖饵失败处理）。
 func baitLootTableFor(tool string, mastery float64) []baitLootEntry {
 	tool = strings.ToLower(strings.TrimSpace(tool))
 	if tool == "shovel_ny25" {
 		tool = baitShovelItemID
 	}
-	bands := baitDigBands[tool]
-	if len(bands) == 0 {
+	pool := baitDigPools[tool]
+	if len(pool) == 0 {
 		return nil
 	}
-	table := bands[0].Table
-	for _, b := range bands {
-		if mastery >= float64(b.Min) {
-			table = b.Table
-		} else {
-			break
+	out := make([]baitLootEntry, 0, len(pool))
+	for _, entry := range pool {
+		// 锚点是整数熟练度；留 1e-9 容差避免 44.999999 这类浮点误差挡住 45 档。
+		if mastery+1e-9 < float64(entry.Unlock) {
+			continue
 		}
+		out = append(out, baitLootEntry{Key: entry.Key, Weight: entry.Weight})
 	}
-	return table
+	return out
+}
+
+func isBaitDigTool(itemID string) bool {
+	itemID = strings.ToLower(strings.TrimSpace(itemID))
+	return itemID == baitShovelItemID || itemID == "shovel_ny25" || itemID == baitScoopItemID
 }
 
 // pickWeightedBait 按权重抽一种饵，返回下标；抽空表返回 -1。
@@ -125,14 +161,26 @@ func baitQuantityForMastery(mastery float64, rng func(int) int) int64 {
 	return qty
 }
 
-// baitDigKindCount 掷一次挖饵得到几种不同的饵（1-3）。
+// baitDigKindCount 掷一次挖饵得到几种不同的饵：按熟练度取档，档内区间均匀取值。
 func baitDigKindCount(mastery float64, rng func(int) int) int {
-	kinds := 1
-	if rng(100) < baitSecondKindChance {
-		kinds++
+	band := baitDigKindBands[0]
+	for _, b := range baitDigKindBands {
+		if mastery >= float64(b.MinMastery) {
+			band = b
+		} else {
+			break
+		}
 	}
-	if mastery >= baitThirdKindMastery && rng(100) < baitThirdKindChance {
-		kinds++
+	span := band.MaxKind - band.MinKind + 1
+	if span <= 0 {
+		return band.MinKind
+	}
+	kinds := band.MinKind + rng(span)
+	if kinds > baitMaxKinds {
+		kinds = baitMaxKinds
+	}
+	if kinds < 1 {
+		kinds = 1
 	}
 	return kinds
 }
@@ -199,7 +247,7 @@ func (s *Server) tryBaitDig(ctx *Ctx) ([]byte, bool) {
 	}
 	loot := rollBaitDigLoot(tool.ItemID, mastery, rand.Intn)
 	if len(loot) == 0 {
-		return s.replyBaitDigFailed(ctx, "熟练度阶段没有可用饵表"), true
+		return s.replyBaitDigFailed(ctx, "熟练度未解锁任何可挖饵料"), true
 	}
 
 	prepared := make([]*store.Item, 0, len(loot))
@@ -217,6 +265,7 @@ func (s *Server) tryBaitDig(ctx *Ctx) ([]byte, bool) {
 	// 体力参数必须在开经济事务之后不再查库，故这里先取（tunableF 有 2 秒装载超时）。
 	condParams := s.conditionParamsForUID(cctx, ctx.Sess.Userid)
 	condCost := s.baitDigEnergyCost()
+	condEnv := s.conditionEnvForUID(ctx.Sess.Userid)
 
 	tx, err := beginEconomyTx(cctx, s.DB)
 	if err != nil {
@@ -225,7 +274,7 @@ func (s *Server) tryBaitDig(ctx *Ctx) ([]byte, bool) {
 	defer func() { _ = tx.Rollback() }()
 	// 体力扣减与饵入包同事务：任一侧失败整体回滚，不会出现"白挖"或"白扣"。
 	// conditionParams/消耗量必须在 beginEconomyTx 之前取好（见 player_condition_energy.go）。
-	spent, err := spendEnergyTx(cctx, tx, ctx.Sess.Userid, condParams, condCost)
+	spent, err := spendEnergyTx(cctx, tx, ctx.Sess.Userid, condParams, condEnv, condCost)
 	if err != nil {
 		if errors.Is(err, errEnergyNotEnough) {
 			ctx.Log.Info("9/3 挖饵被拒：精力不足", "tool", tool.ItemID,

@@ -58,10 +58,11 @@ func TestFightReelStressBilledWithoutSlip(t *testing.T) {
 	}
 }
 
-func TestLongHugeFishSlipWearUsesDragSettingCurve(t *testing.T) {
+func TestLongHugeFishSlipWearNoOverloadScaling(t *testing.T) {
 	srv := &Server{}
 	// 2026-11-09 实机：28.373kg 鲨鱼换算 46.53kgf，泄力档实际 19.04kg，
 	// 一条长搏斗累计 38 条 14/8。旧实现把超出比例再乘一次，摩擦片直接掉 34.2%。
+	// 拍平后（2026-11-12）速率不再读档位，断言钉住"速率不随超载复乘"这一点。
 	w := newFightWearForTest(20.9, 19.04, 46.53, 0.9)
 	w.setting = 21
 	var total float64
@@ -72,7 +73,7 @@ func TestLongHugeFishSlipWearUsesDragSettingCurve(t *testing.T) {
 		}
 		total += slip
 	}
-	want := 38 * reelSlipWearLow * 0.9
+	want := 38 * reelSlipWear * 0.9
 	if math.Abs(total-want) > 1e-12 {
 		t.Fatalf("38 次打滑应累计 %.4f，实得 %.4f", want, total)
 	}
@@ -81,31 +82,23 @@ func TestLongHugeFishSlipWearUsesDragSettingCurve(t *testing.T) {
 	}
 }
 
-func TestFightReelSlipWearCurveByDragSetting(t *testing.T) {
+func TestFightReelSlipWearFlatAcrossSettings(t *testing.T) {
 	srv := &Server{}
-	for _, tc := range []struct {
-		setting int64
-		want    float64
-	}{
-		{24, reelSlipWearLow},
-		{25, 0.000025},
-		{26, 0.00005},
-		{27, 0.000075},
-		{28, 0.000095},
-		{29, 0.0001},
-	} {
+	// 2026-11-12 拍平：逐档阶梯摘除，所有档位同一基准率（官服仅 W5 一个速率点）。
+	for _, setting := range []int64{0, 21, 24, 25, 26, 27, 28, 29} {
 		w := newFightWearForTest(7.7, 5, 7.5, 1)
-		w.setting = tc.setting
+		w.setting = setting
 		_, slip, _, _ := srv.fightReelTickWear(w, reelSlipCalibrationSeconds)
-		if math.Abs(slip-tc.want) > 1e-12 {
-			t.Fatalf("%d 档单次磨损=%v，期望 %v", tc.setting, slip, tc.want)
+		if math.Abs(slip-reelSlipWear) > 1e-12 {
+			t.Fatalf("%d 档打滑磨损=%v，期望统一基准 %v", setting, slip, reelSlipWear)
 		}
 	}
 }
 
-// TestFightReelSlipWear29MatchesOfficial 钉住官服校准点：29 档连续出线的磨损率
+// TestFightReelSlipWearMatchesOfficial 钉住官服校准点：连续出线的磨损率
 // ≈0.00024%/s——W5 实测 112s 重度打滑磨 0.027%。期望值取抓包字面量，不用实现复算。
-func TestFightReelSlipWear29MatchesOfficial(t *testing.T) {
+// 拍平后（2026-11-12）速率不分档位，这里仍以 29 档（锁轮）走过同一通道作代表。
+func TestFightReelSlipWearMatchesOfficial(t *testing.T) {
 	srv := &Server{}
 	w := newFightWearForTest(7.7, 5, 50, 1)
 	w.setting = 29
@@ -119,10 +112,10 @@ func TestFightReelSlipWear29MatchesOfficial(t *testing.T) {
 	if math.Abs(total-want) > want*0.25 {
 		t.Fatalf("112s 重度打滑应磨 %.5f（官服 W5 实测 0.027%%），实得 %.5f", want, total)
 	}
-	// 换算口径：29 档连续打滑烧完一套摩擦片约 115 小时，不再是旧的 5 小时。
+	// 换算口径：连续打滑烧完一套摩擦片约 115 小时，不再是旧的 5 小时。
 	hours := 1 / (total / 112) / 3600
 	if hours < 60 || hours > 180 {
-		t.Fatalf("29 档摩擦片按打滑小时数寿命应落在 60~180h（官服口径），实得 %.0fh", hours)
+		t.Fatalf("摩擦片按打滑小时数寿命应落在 60~180h（官服口径），实得 %.0fh", hours)
 	}
 }
 
@@ -139,14 +132,15 @@ func TestFightReelOilLowersSlipWear(t *testing.T) {
 	if !(best < normal && normal < worst) {
 		t.Fatalf("轮油应改变打滑磨损：最佳 %.6f 常规 %.6f 最差 %.6f", best, normal, worst)
 	}
-	baseWear := reelSlipWearForSettingDefault(25)
+	baseWear := reelSlipWear
 	if math.Abs(best-baseWear*0.8) > 1e-12 || math.Abs(worst-baseWear*1.2) > 1e-12 {
 		t.Fatalf("轮油系数应被收进 0.8~1.2，实得 best=%.6f worst=%.6f", best, worst)
 	}
 }
 
 // TestFightReelLockedUsesSameSlipChannel 锁轮不再是独立烧穿曲线（官服无锁轮样本，
-// 2026-11-11 裁定删除）：29 档 dragKg 已是锁轮承力，出线打滑走同一条口径。
+// 2026-11-11 裁定删除）：29 档 dragKg 已是锁轮承力，出线打滑走同一条口径；
+// 2026-11-12 拍平后锁轮与未锁轮连速率也相同（逐档阶梯摘除）。
 func TestFightReelLockedUsesSameSlipChannel(t *testing.T) {
 	srv := &Server{}
 	// 锁轮（dragKg = 锁轮承力 7.7）且拉力 11.55（1.5×）：与未锁轮同速率打滑。
@@ -155,14 +149,14 @@ func TestFightReelLockedUsesSameSlipChannel(t *testing.T) {
 	_, lockedSlip, lockedStress, _ := srv.fightReelTickWear(locked, reelSlipCalibrationSeconds)
 	unlocked := newFightWearForTest(7.7, 5, 7.5, 1)
 	_, unlockedSlip, unlockedStress, _ := srv.fightReelTickWear(unlocked, reelSlipCalibrationSeconds)
-	if math.Abs(lockedSlip-reelSlipWearMax) > 1e-12 {
-		t.Fatalf("锁轮打滑应按 29 档曲线磨损 %.6f，实得 %.6f", reelSlipWearMax, lockedSlip)
+	if math.Abs(lockedSlip-reelSlipWear) > 1e-12 {
+		t.Fatalf("锁轮打滑应按统一基准磨损 %.6f，实得 %.6f", reelSlipWear, lockedSlip)
 	}
 	if lockedStress != unlockedStress || lockedStress != reelSlipCalibrationSeconds {
 		t.Fatalf("锁轮受力秒照记，实得 %v", lockedStress)
 	}
-	if lockedSlip <= unlockedSlip {
-		t.Fatalf("29 档曲线应快于 25 档：locked=%.6f unlocked=%.6f", lockedSlip, unlockedSlip)
+	if math.Abs(lockedSlip-unlockedSlip) > 1e-12 {
+		t.Fatalf("拍平后锁轮/未锁轮应同速率：locked=%.6f unlocked=%.6f", lockedSlip, unlockedSlip)
 	}
 }
 

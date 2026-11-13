@@ -17,7 +17,7 @@ Status: in-progress
 
 1. 作为玩家，我希望挂机时看到饱食度条缓慢下降，以便状态条是活的。
 2. 作为玩家，我希望进食后饱食度回满，并在几秒内看到条平滑回升。
-3. 作为玩家，我希望抛投和搏鱼消耗精力、闲置时精力恢复，吃得越饱恢复越快。
+3. 作为玩家，我希望抛投和搏鱼消耗精力、停竿后精力恢复，吃得越饱恢复越快；竿在水里时精力只降不升，打鱼过程里精力条是看得见往下走的。
 4. 作为玩家，我希望精力耗尽时抛投被拒绝并看到"精力不足"的官服文案，而不是静默成功。
 5. 边界：离线期间饱食度停扣、精力停恢复；上线从离线前的值继续（维护者决策，非官服验证口径）。
 6. 边界：同一账号多会话/断线重连不产生双倍衰减或双倍消耗。
@@ -38,7 +38,7 @@ Status: in-progress
 - 篝火到期分钟时间线：802.f0 必须与 307.f13.f0 同时间线（worldTotalGameMin，世界总游戏分钟）——客户端以 307.f13.f0 校时，点燃门槛按这条线比较。会话相对线（sessionGameMinuteAt）与世界总分钟相差两千多万，永远过不了门槛（实机验证确认）。
 - 推送：复用 5 秒保活节奏与 `push:profile` 契约，不新增推送频率；进食/消耗品使用成功后立即补推一次 2/2。
 - 兼容：客户端基线 4.0.25034。总开关 tunable 缺省开启（与 groundbait 缺省关闭不同：本改动不触碰判鱼/经济主链路，回滚即翻开关，下发与拒绝全部旁路回现状）；表结构与旧代码可共存（多余列无写入者也无害）。
-- tunables（tunables 表，30 秒缓存，改值免重启）：`player_condition_enabled`=1、`condition_hunger_decay_per_hour`=0.24、`condition_energy_regen_per_hour`=2.0、`condition_energy_max`=0.85、`condition_hunger_regen_floor`=0.25、`condition_cast_energy_cost`=0.01、`condition_pull_energy_cost`=0.005、`condition_low_energy_threshold`=0.05、`condition_max_backfill_hours`=12、`condition_food_hunger_restore`=0.25、`condition_coffee_energy_restore`=0.15、`condition_cocoa_hunger_restore`=0.35、`condition_cocoa_energy_restore`=0.05、`condition_tea_comfort_restore`=0.30、`condition_comfort_rain_penalty`=0.35、`condition_comfort_cold_penalty`=0.35、`condition_comfort_cold_temp_c`=5、`condition_comfort_campfire_boost`=0.5、`condition_comfort_sun_boost`=0.1、`condition_comfort_drift_per_hour`=0.5、`condition_sun_energy_regen_mult`=1.25、`condition_gear_energy_regen_cap`=0.5、`condition_gear_energy_max_cap`=0.15。除饱食衰减与精力上限有官服抓包锚定外均为标定值，可随时调参重标。
+- tunables（tunables 表，30 秒缓存，改值免重启）：`player_condition_enabled`=1、`condition_hunger_decay_per_hour`=0.24、`condition_energy_regen_per_hour`=100.0、`condition_energy_max`=1.0、`condition_energy_regen_cap`=0.85、`condition_energy_regen_fishing_mult`=0、`condition_hunger_regen_floor`=0.25、`condition_cast_energy_cost`=0.01、`condition_pull_energy_cost`=0.005、`condition_low_energy_threshold`=0.05、`condition_max_backfill_hours`=12、`condition_food_hunger_restore`=0.25、`condition_coffee_energy_restore`=0.15、`condition_cocoa_hunger_restore`=0.35、`condition_cocoa_energy_restore`=0.05、`condition_tea_comfort_restore`=0.30、`condition_comfort_rain_penalty`=0.35、`condition_comfort_cold_penalty`=0.35、`condition_comfort_cold_temp_c`=5、`condition_comfort_campfire_boost`=0.5、`condition_comfort_sun_boost`=0.1、`condition_comfort_drift_per_hour`=0.5、`condition_sun_energy_regen_mult`=1.25、`condition_gear_energy_regen_cap`=0.5、`condition_gear_energy_max_cap`=0.15。除饱食衰减与精力自然恢复封顶有官服抓包锚定外均为标定值，可随时调参重标。
 
 ## Testing Decisions
 
@@ -64,7 +64,8 @@ Status: in-progress
 - [事实] 客户端四条状态条为纯显示组件，只做约 10 秒平滑；luck 条显示 clamp(1-f4,0,1)；客户端对 308 值无任何玩法计算，道具精力/舒适/幸运加成只出现在物品描述文案（协议基线 4.0.25034 实测）。
 - [事实] 官服操作结果码 84 = 精力不足文案、16 = 免费餐每天一次文案（结果码 → 文案映射表实测）。
 - [抓包] f1 约 30 秒降 0.0018~0.0020（≈0.24/现实小时），值域 [0.874,1]（n=268）；kitchen_eat 后下一条 2/2 f1=1.0；f0 静止恒 0.85，一次移动事件降 0.0086 后 15 秒内恢复。
-- [推断] 0.85 为当前精力上限（装备上限加成假说）；恢复速率、动作消耗、低精力阈值、跨度封顶、消耗品恢复量、环境联动数值与漂移速率均为标定值，全部进 tunables，不作官服常量。
+- [决策] 精力三条口径分离（`specs/changes/energy-cap-vs-regen-cap` + 本轮）：`condition_energy_max`=1.0 是硬上限（客户端状态条按 1.0 归一化画满），`condition_energy_regen_cap`=0.85 是自然恢复的天花板（封的是"能恢复到多高"，不是"当前值不得超过"），`condition_energy_regen_fishing_mult`=0 让竿在水中时自然恢复停摆。官服一小时会话的精力是净下降的（0.85→0.83），而本仓单次抛投/拉拽只扣 0.01/0.005，垂钓时若仍按 100/h 恢复，0.36 秒就抹平一次消耗，精力条永远画满；停竿后照常快速回精力，"打完吃顿饭半分钟再战"的节奏不变。
+- [推断] 0.85 为自然恢复封顶（当年按"精力上限"记，后经像素实测与官服窄带缓降修正为封顶语义）；恢复速率、动作消耗、低精力阈值、跨度封顶、消耗品恢复量、环境联动数值与漂移速率均为标定值，全部进 tunables，不作官服常量。
 - [决策] 离线停扣：离线期间饱食度不衰减、精力不恢复（实现为登录/重连冻结状态钟 + 会话期推进）。维护者拍板的产品决策，非官服验证口径；若后续抓包证明官服离线衰减，再翻口径。
 - [决策] 消耗品恢复映射：咖啡→精力（快）、热可可→饱食为主+少量精力、茶→舒适度（HUD 第四条"温度条"即舒适度）、其余食品→饱食度（如胡萝卜可直食）。依据为维护者实测经验 + 官方游戏提示（热茶提高舒适度），非官服数值复刻。酒类仅经验加成，与官服实机行为一致。
 - [决策] 免费餐每游戏日一次：官服口径来自维护者实机确认（提示"已经用过了，一天只能用一次"，一天=游戏时间）。

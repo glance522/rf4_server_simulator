@@ -3,7 +3,8 @@
  "source": {
   "kind": "user-pasted",
   "table": "各个地图的价格倍率",
-  "column_used": "鱼市"
+  "column_used": "鱼市",
+  "url": "https://www.gamekee.com/rf4/599560.html"
  },
  "unit": "ratio（相对基准水域，1.0 = 100%）",
  "note": "鱼市价格 = 基准价（鱼种、档位、重量）× 水域倍率。",
@@ -30,7 +31,7 @@
    "market_pct": 0.916
   },
   "level_003_viiveri_lake": {
-   "map": "阔里湖",
+   "map": "廓里湖",
    "market_pct": 0.916
   },
   "level_007_grass_lake": {
@@ -50,15 +51,15 @@
    "market_pct": 0.976
   },
   "level_006_ladoga": {
-   "map": "拉加多湖",
-   "market_pct": 1.1
+   "map": "拉多加湖",
+   "market_pct": 1.0
   },
   "level_014_carp_lake": {
    "map": "琥珀湖",
    "market_pct": 1.0
   },
   "level_011_ladoga_02": {
-   "map": "拉加多湖群岛",
+   "map": "拉多加湖群岛",
    "market_pct": 1.0
   },
   "level_009_ahtuba": {
@@ -81,5 +82,17 @@
    "map": "挪威海",
    "market_pct": 1.0
   }
- }
+ },
+ "revisions": [
+  {
+   "date": "2026-11-12",
+   "reason": "核对 GameKee 599560 原表第四列「鱼市场价格(换图注意门票费)」，修正 1 处取值与 3 处显示名错字。",
+   "changes": [
+    "level_006_ladoga.market_pct 1.1 -> 1.0（原表为「基础价」；旧值 1.1 与同行的钓鱼站/工业品 +10% 相同，属串列）",
+    "level_003_viiveri_lake.map 「阔里湖」-> 「廓里湖」（错字，仅显示用）",
+    "level_006_ladoga.map 「拉加多湖」-> 「拉多加湖」（错字，仅显示用）",
+    "level_011_ladoga_02.map 「拉加多湖群岛」-> 「拉多加湖群岛」（错字，仅显示用）"
+   ]
+  }
+ ]
 }

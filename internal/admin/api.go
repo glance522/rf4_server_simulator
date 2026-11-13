@@ -325,13 +325,8 @@ type tunableRange struct {
 // 反算出手理论最小档位率约 8.39e-17，这里取 1e-12（约 1.2 万倍余量）作为硬下限，
 // 既挡住无意义的小值，又给调参留足空间。
 var reelWearTunableRanges = map[string]tunableRange{
-	// 六个档位的单次磨损率：低于 1e-12 会被 float64 精度吃掉。
-	"reel_slip_wear_low": {min: 1e-12, max: 1},
-	"reel_slip_wear_s25": {min: 1e-12, max: 1},
-	"reel_slip_wear_s26": {min: 1e-12, max: 1},
-	"reel_slip_wear_s27": {min: 1e-12, max: 1},
-	"reel_slip_wear_s28": {min: 1e-12, max: 1},
-	"reel_slip_wear_max": {min: 1e-12, max: 1},
+	// 统一打滑基准磨损率（不分档位）：低于 1e-12 会被 float64 精度吃掉。
+	"reel_slip_wear": {min: 1e-12, max: 1},
 	// 校准秒数是除数：太小时每小时磨损率被放大到失真。缺省 41.7s 对齐官服实测。
 	"reel_slip_calibration_seconds": {min: 0.01, max: 3600},
 	// 打滑门槛倍率：1=只要超泄力就磨（旧口径），>1 给死区（官服 1.04× 零磨损）。

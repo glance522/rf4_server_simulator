@@ -189,12 +189,48 @@ func TestPlaceTripGoldPurchase(t *testing.T) {
 	if body, handled := hPlaceTripTx(ctx); !handled || body == nil {
 		t.Fatalf("金币购票未返回档案: handled=%v body=%v", handled, body != nil)
 	}
-	var gold int64
-	if err := srv.DB.SQL.QueryRow(`SELECT gold FROM profile WHERE uid=?`, uid).Scan(&gold); err != nil {
+	var silver, gold int64
+	if err := srv.DB.SQL.QueryRow(`SELECT silver, gold FROM profile WHERE uid=?`, uid).Scan(&silver, &gold); err != nil {
 		t.Fatal(err)
 	}
 	if gold != 100-45 {
 		t.Fatalf("金币扣款错误: %d", gold)
+	}
+	if silver != 100 {
+		t.Fatalf("金币购票不应动银币: silver=%d", silver)
+	}
+}
+
+// TestPlaceTripGoldPurchaseNorthSea 挪威海金币购票：2026-11-11 23:52 实抓
+// gold=true price=95 曾因票价表缺金币价被拒（"该支付方式暂未开放"）。
+// 回归钉死：收录价 95 必须购票成功并按 95 金币百分位扣款。
+func TestPlaceTripGoldPurchaseNorthSea(t *testing.T) {
+	srv, _ := newEconomyTxTestServer(t)
+	ctx0 := context.Background()
+	uid := int64(3914)
+	if _, err := srv.DB.EnsureProfile(ctx0, uid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.DB.SQL.Exec(`UPDATE profile SET silver=100, gold=100 WHERE uid=?`, uid); err != nil {
+		t.Fatal(err)
+	}
+	ctx := tripTestCtx(srv, uid, tripArgs("level_012_north_sea", true, 95), false)
+	if body, handled := hPlaceTripTx(ctx); !handled || body == nil {
+		t.Fatalf("挪威海金币购票未返回档案: handled=%v body=%v", handled, body != nil)
+	}
+	var silver, gold int64
+	if err := srv.DB.SQL.QueryRow(`SELECT silver, gold FROM profile WHERE uid=?`, uid).Scan(&silver, &gold); err != nil {
+		t.Fatal(err)
+	}
+	if gold != 100-95 {
+		t.Fatalf("挪威海金币扣款错误: %d", gold)
+	}
+	if silver != 100 {
+		t.Fatalf("金币购票不应动银币: silver=%d", silver)
+	}
+	remaining, _, purchases := tripStateRow(t, srv, uid, "level_012_north_sea")
+	if remaining != 18000 || purchases != 1 {
+		t.Fatalf("挪威海购票状态错误: remaining=%.0f purchases=%d", remaining, purchases)
 	}
 }
 

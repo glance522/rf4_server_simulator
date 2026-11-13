@@ -657,13 +657,17 @@ func (s *Server) skillAvailablePoints(ctx context.Context, uid int64) int64 {
 	if err != nil {
 		return 0
 	}
-	total := skillPointsTotal(p.Level) + s.skillBonusPoints(ctx, uid)
+	return s.skillAvailablePointsForLevel(ctx, uid, p.Level)
+}
+
+// skillAvailablePointsForLevel 复用已读取的等级，统一档案与技能树的余额口径。
+func (s *Server) skillAvailablePointsForLevel(ctx context.Context, uid, level int64) int64 {
+	total := skillPointsTotal(level) + s.skillBonusPoints(ctx, uid)
 	spent := s.skillSpentPoints(ctx, uid)
-	avail := total - spent
-	if avail < 0 {
+	if total <= spent {
 		return 0
 	}
-	return avail
+	return total - spent
 }
 
 // skillSpentPoints 返回按逻辑技能去重后的已投入点数。

@@ -625,3 +625,160 @@ func TestFishingLeftStatus2KeepsInWaterCastAndSchedulesNextFish(t *testing.T) {
 	st.biteTimer.Stop()
 	st.biteTimer = nil
 }
+
+// makeStepTree 构造 14/7 假帧（f5=动画位，f6=地点），与官方客户端帧同构。
+func makeStepTree(anim uint64, loc string) *proto.Value {
+	fields := make([]proto.Field, 7)
+	for i := range fields {
+		fields[i] = proto.Field{Op: "U32", Num: ptrU64(0)}
+	}
+	fields[5] = proto.Field{Op: "U32", Num: ptrU64(anim)}
+	fields[6] = proto.Field{Op: "STR", Str: strPtr(loc)}
+	return proto.Args524(proto.Obj("lobemkloehp", 0, fields...))
+}
+
+// TestFishingStepInWaterEvidenceByRigFamily 覆盖按钓组族的入水证据（官方抓包
+// 2026-11-13，docs/analysis-inwater-evidence-packet-verification-2026-11-13.md）：
+// 浮钓接受顺流 0x40 与下沉 0x80000（含组合 0x2040），其余钓法维持基础位族，
+// 0x0 永远不是入水证据（挡岸上抛竿）。
+func TestFishingStepInWaterEvidenceByRigFamily(t *testing.T) {
+	srv, _ := newDetachTestServer(t)
+	sess := newProbeSess(srv)
+
+	// cast 把竿摆到“已抛竿、NeedBite 挂起”的状态，模拟定时器到点时未入水。
+	cast := func(rigType int64) {
+		t.Helper()
+		st := srv.stateFor(sess.Userid)
+		st.mu.Lock()
+		st.RigType = rigType
+		st.CastActive = true
+		st.InWater = false
+		st.NeedBite = true
+		st.mu.Unlock()
+	}
+	step := func(anim uint64) {
+		t.Helper()
+		if _, ok := hFishingStep(&Ctx{Sess: sess, Main: 14, Sub: 7,
+			Tree: makeStepTree(anim, "loc1_02"), DecodeOK: true, Log: logging.Discard()}); !ok {
+			t.Fatalf("14/7 未处理 anim=0x%X", anim)
+		}
+	}
+	state := func() (inWater, needBite, armed bool) {
+		st := srv.stateFor(sess.Userid)
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		inWater, needBite, armed = st.InWater, st.NeedBite, st.biteTimer != nil
+		if st.biteTimer != nil {
+			st.biteTimer.Stop()
+			st.biteTimer = nil
+		}
+		return
+	}
+
+	cast(1) // rig_FloatSimple
+	step(0x40)
+	if inWater, needBite, armed := state(); !inWater || needBite || !armed {
+		t.Fatalf("浮钓 0x40 顺流应入水并补排: in_water=%v need_bite=%v armed=%v", inWater, needBite, armed)
+	}
+
+	cast(2) // rig_FloatBolognese
+	step(0x2040)
+	if inWater, needBite, armed := state(); !inWater || needBite || !armed {
+		t.Fatalf("浮钓 0x2040（MotionOnBottom|StreamMoving）应入水: in_water=%v need_bite=%v armed=%v", inWater, needBite, armed)
+	}
+
+	cast(3) // rig_FloatSlider
+	step(0x80000)
+	if inWater, needBite, armed := state(); !inWater || needBite || !armed {
+		t.Fatalf("浮钓 0x80000 下沉应入水: in_water=%v need_bite=%v armed=%v", inWater, needBite, armed)
+	}
+
+	cast(1)
+	step(0)
+	if inWater, needBite, _ := state(); inWater || !needBite {
+		t.Fatalf("浮钓 0x0（岸上/无动作）不得入水: in_water=%v need_bite=%v", inWater, needBite)
+	}
+
+	cast(12) // rig_BottomSimple
+	step(0x40)
+	if inWater, needBite, _ := state(); inWater || !needBite {
+		t.Fatalf("底钓单独 0x40 不是入水证据: in_water=%v need_bite=%v", inWater, needBite)
+	}
+
+	cast(50) // rig_MarinePilker
+	step(0x880000)
+	if inWater, needBite, armed := state(); !inWater || needBite || !armed {
+		t.Fatalf("海钓 0x880000 下沉应入水（26 秒下沉期 14/3 触底才来）: in_water=%v need_bite=%v armed=%v", inWater, needBite, armed)
+	}
+
+	cast(50)
+	step(0x800000)
+	if inWater, _, _ := state(); !inWater {
+		t.Fatalf("海钓 0x800000 底上移动应入水")
+	}
+
+	cast(50)
+	step(0x400000)
+	if inWater, _, _ := state(); !inWater {
+		t.Fatalf("海钓 0x400000 底层内移动应入水")
+	}
+
+	cast(5) // rig_Lure
+	step(0)
+	if inWater, needBite, _ := state(); inWater || !needBite {
+		t.Fatalf("路亚 0x0（线杯开静置）不得凭 f5 入水，由 14/3 兜底: in_water=%v need_bite=%v", inWater, needBite)
+	}
+
+	cast(5) // rig_Lure
+	step(0x400)
+	if inWater, needBite, armed := state(); !inWater || needBite || !armed {
+		t.Fatalf("路亚 0x400 收线应照旧入水: in_water=%v need_bite=%v armed=%v", inWater, needBite, armed)
+	}
+}
+
+// TestFishingFallLatchesInWaterAndReschedules：14/3 是客户端“钩体已在水中”
+// 的一次性上报（岸上落点不发）。路亚线杯开自由下沉只有 f5=0x0，入水证据由
+// 14/3 兜底并补排咬钩；打窝竿不锁存——它不钓鱼，历史上靠“永不入水”挡住
+// 发鱼定时器，不能因 14/3 开始出鱼。
+func TestFishingFallLatchesInWaterAndReschedules(t *testing.T) {
+	srv, _ := newDetachTestServer(t)
+	sess := newProbeSess(srv)
+
+	st := srv.stateFor(sess.Userid)
+	st.mu.Lock()
+	st.RigType = 5 // 路亚：线杯开自由下沉，f5 保持 0x0
+	st.CastActive = true
+	st.InWater = false
+	st.NeedBite = true
+	st.mu.Unlock()
+
+	if _, ok := hFishingFall(&Ctx{Sess: sess, Main: 14, Sub: 3, Log: logging.Discard()}); !ok {
+		t.Fatal("14/3 未处理")
+	}
+	st.mu.Lock()
+	inWater, needBite, armed := st.InWater, st.NeedBite, st.biteTimer != nil
+	if st.biteTimer != nil {
+		st.biteTimer.Stop()
+		st.biteTimer = nil
+	}
+	st.mu.Unlock()
+	if !inWater || needBite || !armed {
+		t.Fatalf("14/3 应锁存入水并补排: in_water=%v need_bite=%v armed=%v", inWater, needBite, armed)
+	}
+
+	// 打窝竿：14/3 只扣窝料，不锁存入水（保持既有“永不入水”护法）。
+	st.mu.Lock()
+	st.RigType = rigTypeSpod
+	st.CastActive = true
+	st.InWater = false
+	st.NeedBite = true
+	st.mu.Unlock()
+	if _, ok := hFishingFall(&Ctx{Sess: sess, Main: 14, Sub: 3, Log: logging.Discard()}); !ok {
+		t.Fatal("14/3（打窝竿）未处理")
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.InWater || !st.NeedBite {
+		t.Fatalf("打窝竿 14/3 不得锁存入水: in_water=%v need_bite=%v", st.InWater, st.NeedBite)
+	}
+}

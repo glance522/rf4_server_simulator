@@ -74,7 +74,6 @@ type FishState struct {
 	biteTicket      uint64
 	pendingTicket   uint64
 	PendingRepush   int           // 14/12 f0=3/5/6 连续拒收鱼实体时的重推次数
-	LuckRepush      int           // 蓝冠天命鱼的有限重推次数
 	BiteAt          time.Time     // 原定咬钩绝对时刻；硬重启后据此恢复 timer
 	Keepnet         []*RolledFish // 回退缓存（DB 权威）
 	Bait            string
@@ -307,10 +306,42 @@ func (s *Server) stateFor(uid int64) *FishState {
 // 0x200 水层静止（浮标）、0x800 底部静止（沉底/Feeder）、0x1000 水面静止。
 const rigAnimSettledMask = 0x200 | 0x800 | 0x1000
 
-// rigAnimInWaterMask 是“钓组在水中”的位族。协议字段表确认
-// 0x200=MotionlessInWaterColumn；0x400/0x800/0x1000 分别是不同水层/姿态的
-// 静止状态。朝岸上抛竿不会出现这些位，因此仍能挡住“饵落在陆地”。
+// rigAnimInWaterMask 是“钓组在水中”的基础位族：0x200=MotionlessInWaterColumn、
+// 0x400=UniformMotion（收线运动，动态标签）、0x800=MotionlessOnBottom、
+// 0x1000=MotionlessOnWaterSurface。朝岸上抛竿不会出现这些位，因此仍能挡住
+// “饵落在陆地”。
 const rigAnimInWaterMask = 0x200 | 0x400 | 0x800 | 0x1000
+
+// rigAnimDiveBit 是饵/拟饵下沉相位的动画位（0x80000 VerticalDive）。官方抓包
+// 2026-11-13：浮钓下沉期上报该位；底钓下沉期实测只有 0x0，它的下沉入水由
+// 14/3 证据兜底（见 hFishingFall）。
+const rigAnimDiveBit uint32 = 0x80000
+
+// rigAnimLureSinkMask 是路亚族（含海钓铁板 50-54）下沉/底层运动的动画位：
+// 0x80000 VerticalDive、0x800000 底上移动（枚举表 DEV 标签实为铁板下沉期的
+// 真实动画位）、0x400000 MotionInBottomLayer。官方抓包海钓流（loc12）下沉相位
+// 0x800000/0x880000/0x80000 持续 14~26 秒且不含基础位；2026-11-13 实机实测
+// 海钓的 14/3 迟至铁板触底才上报（深水下沉 26 秒无口），因此路亚族的下沉期
+// 必须由 f5 位本身构成入水证据。
+const rigAnimLureSinkMask uint32 = 0x80000 | 0x800000 | 0x400000
+
+// rigAnimInWater 判断 14/7 动画位是否构成“钓组在水中”的证据。
+// 基础位族之外：浮钓接受顺流 0x40 与下沉 0x80000（官方抓包浮子流中顺流杆
+// 连续上报 0x40/0x2040 达 28~64 秒且不含基础位，官方服照常派鱼；同序列在旧
+// 掩码下会卡死 NeedBite）；路亚族接受下沉/底层位（海钓铁板 26 秒下沉期无
+// 基础位、14/3 触底才来，淡水路亚下沉同样依赖）。0x0 仍不是证据，挡岸上抛竿。
+func rigAnimInWater(anim uint32, rigType int64) bool {
+	if anim&rigAnimInWaterMask != 0 {
+		return true
+	}
+	if floatRigTypes[rigType] {
+		return anim&(lureMotionDriftBit|rigAnimDiveBit) != 0
+	}
+	if rigTypeLureFamily[rigType] {
+		return anim&rigAnimLureSinkMask != 0
+	}
+	return false
+}
 
 // ---- 咬钩延迟 ----
 
@@ -2178,7 +2209,6 @@ func (s *Server) scheduleBiteState(sess *Session, st *FishState, preserveHooked,
 	st.Pending = nil
 	st.hookedChatFishGUID = ""
 	st.PendingRepush = 0
-	st.LuckRepush = 0
 	st.noEscapeRepush = 0
 	if !preserveHooked {
 		st.Hooked = false

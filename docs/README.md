@@ -66,6 +66,9 @@
   抓取与许可声明见该文「抓取与许可声明」一节。
 - [鱼口配置叠加/覆盖关系调查（2026-11-10）](后台配置对发鱼流程影响的调查.md)。
 - [升级礼物卡片机制（完整还原）](LEVEL_UP_GIFT_CARDS.md)。
+- [入水证据官方报文核验与浮钓顺流修复方案（2026-11-13）](analysis-inwater-evidence-packet-verification-2026-11-13.md)：
+  六份官方 pcap 全量解码 14/7 f5 位序；浮钓顺流/下沉与 14/3 入水证据修复
+  （P1/P2/P3）的依据与方案存档。
 
 ## 工程约定
 
@@ -73,6 +76,7 @@
 - [术语表](../CONTEXT.md)：跨模块共享术语，每条带反例。
 - [工程工作流](agents/workflow.md)：快速路径与约束路径的分级、门禁级别。
 - [变更记录约定](agents/issue-tracker.md)：`specs/changes` 目录与状态流转。
+- [档案与技能树统一显示可用技能点](../specs/changes/issue-401-skill-points/spec.md)：Issue #401 的修复范围与验证状态。
 - [领域文档约定](agents/domain.md)：文档地图、证据等级、对账表。
 - [ADR 0001](adr/0001-engineering-constraints.md)：为什么采用按风险分级的约束体系。
 

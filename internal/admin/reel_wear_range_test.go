@@ -1,7 +1,8 @@
 package admin
 
 // 摩擦片磨损参数的区间校验：下限低于 float64 精度门槛的值必须被拒绝，
-// 否则参数会静默失效（看着生效、实际一分不磨）。见 specs/changes/reel-wear-tunables。
+// 否则参数会静默失效（看着生效、实际一分不磨）。见 specs/changes/reel-wear-tunables
+// 与 specs/changes/reel-slip-rate-flat。
 
 import (
 	"context"
@@ -42,9 +43,9 @@ func TestReelWearTunableRangeValidation(t *testing.T) {
 	}
 
 	// 小于精度门槛的值必须被拒。1e-21 是第一轮实测能写进去、但实际不磨的值；
-	// 1e-13 仍低于 1e-12 下限，一并挡掉。
+	// 1e-13 仍低于 1e-12 下限，一并挡掉。拍平后统一键 reel_slip_wear 作代表。
 	for _, value := range []string{"0", "-1", "0.000000000000000000001", "1e-21", "1e-13", "2", "NaN", ""} {
-		got := call("POST", "/api/tunables", login.Token, `{"key":"reel_slip_wear_low","value":"`+value+`"}`).Code
+		got := call("POST", "/api/tunables", login.Token, `{"key":"reel_slip_wear","value":"`+value+`"}`).Code
 		if got != 400 {
 			t.Fatalf("磨损率 %q 应被拒绝，实得 %d", value, got)
 		}
@@ -52,11 +53,11 @@ func TestReelWearTunableRangeValidation(t *testing.T) {
 
 	// 区间内的值（含默认值和下限本身）必须接受。
 	for _, value := range []string{"0.000001", "1e-12", "1"} {
-		w = call("POST", "/api/tunables", login.Token, `{"key":"reel_slip_wear_low","value":"`+value+`"}`)
+		w = call("POST", "/api/tunables", login.Token, `{"key":"reel_slip_wear","value":"`+value+`"}`)
 		if w.Code != 200 {
 			t.Fatalf("磨损率 %q 应被接受，实得 %d %s", value, w.Code, w.Body)
 		}
-		if got, ok, err := db.TunableGet(ctx, "reel_slip_wear_low"); err != nil || !ok || got != value {
+		if got, ok, err := db.TunableGet(ctx, "reel_slip_wear"); err != nil || !ok || got != value {
 			t.Fatalf("保存 %q 读到 %q err=%v", value, got, err)
 		}
 	}

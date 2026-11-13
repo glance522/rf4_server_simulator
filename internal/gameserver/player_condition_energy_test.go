@@ -131,7 +131,7 @@ func TestSpendEnergyTxDisabledIsNoop(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	spent, err := spendEnergyTx(t.Context(), tx, uid, conditionParams{Enabled: false}, 0.15)
+	spent, err := spendEnergyTx(t.Context(), tx, uid, conditionParams{Enabled: false}, conditionEnv{}, 0.15)
 	if err != nil || spent != 0 {
 		t.Fatalf("关闭时应 no-op: spent=%v err=%v", spent, err)
 	}
@@ -150,7 +150,7 @@ func TestSpendEnergyTxRollsBackWithCaller(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spent, err := spendEnergyTx(t.Context(), tx, uid, params, 0.15)
+	spent, err := spendEnergyTx(t.Context(), tx, uid, params, conditionEnv{}, 0.15)
 	if err != nil || spent != 0.15 {
 		t.Fatalf("事务内扣减失败: spent=%v err=%v", spent, err)
 	}
@@ -176,7 +176,7 @@ func TestSpendEnergyTxBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spent, err := spendEnergyTx(t.Context(), tx, uid, params, 0.15)
+	spent, err := spendEnergyTx(t.Context(), tx, uid, params, conditionEnv{}, 0.15)
 	if err != nil || spent != 0.15 {
 		t.Fatalf("刚好够时应放行: spent=%v err=%v", spent, err)
 	}
@@ -193,7 +193,7 @@ func TestSpendEnergyTxBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = tx2.Rollback() }()
-	if _, err := spendEnergyTx(t.Context(), tx2, uid, params, 0.15); !errors.Is(err, errEnergyNotEnough) {
+	if _, err := spendEnergyTx(t.Context(), tx2, uid, params, conditionEnv{}, 0.15); !errors.Is(err, errEnergyNotEnough) {
 		t.Fatalf("差一点点应返回 errEnergyNotEnough，实得 %v", err)
 	}
 }

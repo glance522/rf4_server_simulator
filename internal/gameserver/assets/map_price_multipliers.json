@@ -79,7 +79,7 @@
    "repair_beluga": null,
    "repair_zeiman": null,
    "price_industrial": 1.0,
-   "price_food": 1.0,
+   "price_food": 1.05,
    "price_fishing": 1.0
   },
   "level_009_ahtuba": {
@@ -107,14 +107,14 @@
    "repair_zeiman": null,
    "price_industrial": null,
    "price_food": 1.5,
-   "price_fishing": 1.15
+   "price_fishing": 1.13
   },
   "level_012_north_sea": {
    "map": "挪威海",
    "repair": 1.25,
    "repair_beluga": null,
    "repair_zeiman": null,
-   "price_industrial": 1.15,
+   "price_industrial": 1.16,
    "price_food": 2.0,
    "price_fishing": 1.0
   },
@@ -124,7 +124,7 @@
    "repair_beluga": null,
    "repair_zeiman": null,
    "price_industrial": 1.0,
-   "price_food": 1.0,
+   "price_food": 1.05,
    "price_fishing": 1.0
   },
   "level_014_carp_lake": {
@@ -133,7 +133,7 @@
    "repair_beluga": null,
    "repair_zeiman": 0.85,
    "price_industrial": 1.05,
-   "price_food": 1.03,
+   "price_food": 1.2,
    "price_fishing": 1.03
   },
   "level_015_tunguska": {
@@ -173,5 +173,18 @@
    "price_fishing": 1.0
   }
  },
- "unmapped_maps": {}
+ "unmapped_maps": {},
+ "revisions": [
+  {
+   "date": "2026-11-12",
+   "reason": "核对 GameKee 599560 原表四列（钓鱼站 / 食品店 / 工业品商店 / 鱼市场），修正 5 处转录错误。原表用「基础价 / ±N%」表示，换算为 1.0 + N/100。",
+   "changes": [
+    "level_008_sura_river.price_food 1.0 -> 1.05（原表 +5%；旧值把该行唯一的非基础值丢了）",
+    "level_013_sev_don.price_food 1.0 -> 1.05（同上，原表 +5%）",
+    "level_014_carp_lake.price_food 1.03 -> 1.2（原表 +20%；旧值 1.03 与同行 price_fishing 相同，属串列）",
+    "level_011_ladoga_02.price_fishing 1.15 -> 1.13（原表 +13%；旧值 1.15 与廓里湖相同，属串行）",
+    "level_012_north_sea.price_industrial 1.15 -> 1.16（原表 +16%，旧值漏了尾数）"
+   ]
+  }
+ ]
 }

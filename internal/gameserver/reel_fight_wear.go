@@ -4,11 +4,11 @@ package gameserver
 //
 // 官服抓包口径（specs/changes/wear-fight-time/spec.md）：磨损只按"受力时间"扣——
 // 14/8 负载遥测之间的真实秒数就是受力账，空竿/等待/收线零磨损；拉力明显超过泄力
-// （>1.05×）才打滑磨摩擦片，速率对齐官服实测 0.00024%/s（112s 重度打滑磨 0.027%）。
-// 锁轮烧穿曲线、每竿基准、泡水、断件冲击等无官服数据支撑的通道已全部删除
-// （2026-11-11 用户裁定）；锁轮（29 档）的承力上限由断件判定链路承担，不在磨损层。
-// 14/8 只作为采样边界：不能把客户端上报密度直接当成磨损次数。实测节拍 1.8~2.0 秒
-// 只用于首条兜底和校准。
+// （>1.05×）才打滑磨摩擦片。打滑速率不分档位、统一 0.0001/41.7 ≈ 0.00024%/s：
+// 官服只有 W5 一个速率点（112s 重度打滑磨 0.027%），逐档阶梯无对照数据，2026-11-12
+// 拍平（specs/changes/reel-slip-rate-flat）；锁轮（29 档）的承力上限由断件判定链路
+// 承担，不在磨损层。14/8 只作为采样边界：不能把客户端上报密度直接当成磨损次数。
+// 实测节拍 1.8~2.0 秒只用于首条兜底和校准。
 // 受力账按官服帧节奏（~2s）中途落库并下发裸零件树，客户端搏鱼中就能看到耐久下降；
 // 损伤日志每竿仍只写最终一笔。
 
@@ -25,7 +25,7 @@ const (
 	// defaultReelLoadTickSeconds 是本竿第一条 14/8 的兜底时长（tunable reel_load_tick_seconds）：
 	// 还没收到过上一条上报时服务端不知道前面已经过了多久，按实测节拍 1.9 秒起算。
 	defaultReelLoadTickSeconds = 1.9
-	// reelSlipCalibrationSeconds 把 29 档单次基准换算成每秒磨损率：
+	// reelSlipCalibrationSeconds 把统一基准换算成每秒磨损率：
 	// 0.01% / 41.7s ≈ 0.00024%/s，对齐官服 W5 实测（112s 重度打滑磨 0.027%）。
 	// 旧值 1.8 会把摩擦片烧快约 23 倍。tunable（reel_slip_calibration_seconds）可覆盖，
 	// 此处保留为缺省回落。
@@ -281,7 +281,7 @@ func (s *Server) fightReelTickWear(w fightReelWear, tick float64) (ticks int, sl
 	if match <= 0 {
 		match = 1
 	}
-	slipRate := s.reelSlipWearForSetting(w.setting) / s.reelSlipCalibrationSeconds()
+	slipRate := s.reelSlipWearBase() / s.reelSlipCalibrationSeconds()
 	return 1, slipRate * tick * reelSlipOilFactor(w.oilWear) * match, stressSecs, tick
 }
 

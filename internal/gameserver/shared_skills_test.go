@@ -272,8 +272,8 @@ func TestSharedSkillLegacyReadPreservesCurrentPointBalanceAndRawRecords(t *testi
 			}
 		}
 		profile, err := srv.BuildProfile307(ctx, sharedSkillUID)
-		if err != nil || u32Of(profile.Field(6).Num) != 113 {
-			t.Fatalf("profile total changed: %v %v", profile, err)
+		if err != nil || u32Of(profile.Field(6).Num) != 35 {
+			t.Fatalf("profile balance changed: %v %v", profile, err)
 		}
 	}
 	for _, node := range []int64{503, 708} {

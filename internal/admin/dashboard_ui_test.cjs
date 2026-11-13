@@ -27,7 +27,7 @@ test('params tabs preserve edits and upstream embedded API routing',async()=>{
    assert.ok((await page.locator('label[for="tun_fish_weight_cap"]').locator('..').innerText()).includes('默认 0'));
    assert.equal(await page.locator('#tun_electric_locked_multiplier').count(),1);
    assert.equal(await page.locator('#tun_electric_motor_kg_per_power').count(),1);
-   assert.equal(await page.locator('#tun_reel_slip_wear_low').isVisible(),true);
+   assert.equal(await page.locator('#tun_reel_slip_wear').isVisible(),true);
    assert.equal(await page.locator('#tun_reel_slip_deadband_ratio').isVisible(),true);
    assert.equal(await page.locator('#tun_wear_stress_oil_per_s').isVisible(),true);
    await page.locator('button[data-page="reward"]').click();

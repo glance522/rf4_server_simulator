@@ -5,16 +5,15 @@ import (
 )
 
 // unimplementedAchievementIDs 是 achievement_def 的 130 个 id 减去规则表的
-// 89 条，与 achievements_rules.go 末尾的留空清单逐项一致。
+// 97 条，与 achievements_rules.go 末尾的留空清单逐项一致。
 var unimplementedAchievementIDs = []int64{
 	102, 104, 106, 108, 156, 157, 204, 209, 210,
-	251, 265, 266, 267, 269, 270, 271, 275,
 	300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311,
 	409, 411, 412, 413, 414, 415, 416,
 	901, 902, 903, 904, 911,
 }
 
-// 规则表：89 条实装、ID 不重复、Check 非空、41 条留空成就不进表，
+// 规则表：97 条实装、ID 不重复、Check 非空、33 条留空成就不进表，
 // 两者合起来正好是 achievement_def 的 130 条。
 func TestAchievementRegistryShape(t *testing.T) {
 	seen := map[int64]bool{}
@@ -27,11 +26,11 @@ func TestAchievementRegistryShape(t *testing.T) {
 			t.Errorf("rule %d has nil Check", r.ID)
 		}
 	}
-	if len(achievementRules) != 89 {
-		t.Errorf("implemented rules = %d, want 89", len(achievementRules))
+	if len(achievementRules) != 97 {
+		t.Errorf("implemented rules = %d, want 97", len(achievementRules))
 	}
-	if len(unimplementedAchievementIDs) != 41 {
-		t.Errorf("unimplemented ids = %d, want 41", len(unimplementedAchievementIDs))
+	if len(unimplementedAchievementIDs) != 33 {
+		t.Errorf("unimplemented ids = %d, want 33", len(unimplementedAchievementIDs))
 	}
 	if len(achievementRules)+len(unimplementedAchievementIDs) != 130 {
 		t.Errorf("rules + unimplemented = %d, want 130", len(achievementRules)+len(unimplementedAchievementIDs))
@@ -175,5 +174,37 @@ func TestAchievementReleaseOnlyBlueCrown(t *testing.T) {
 	got = achievementsByID(t, env.invoke(t, 3, 3, nil))
 	if !got[912].unlocked || !got[912].claimed {
 		t.Errorf("blue crown release should unlock 912: %+v", got[912])
+	}
+}
+
+// 新接入挖饵池的 8 种饵：挖到即点亮对应成就，且不联动其它饵的成就。
+func TestAchievementNewBaitDigRules(t *testing.T) {
+	const uid = int64(1000008)
+	env := newDLineTestEnv(t, uid)
+	registerAchievementHandlers(env.srv.dispatch)
+
+	want := map[string]int64{
+		"muckworm":     251,
+		"vypolzok_01":  265,
+		"black_leech":  266,
+		"dorbeetle":    267,
+		"maybug_larva": 269,
+		"gryllotalpa":  270,
+		"waterbug":     271,
+		"watergrass":   275,
+	}
+	for key := range want {
+		env.srv.evaluateAchievements(env.ctx(9, 3, nil), achievementEvent{Kind: evBaitDug, BaitKey: key})
+	}
+	got := achievementsByID(t, env.invoke(t, 3, 3, nil))
+	for key, id := range want {
+		if !got[id].unlocked || !got[id].claimed {
+			t.Errorf("挖到 %s 后成就 %d 未解锁: %+v", key, id, got[id])
+		}
+	}
+	for _, id := range []int64{250, 258, 259, 261, 272} {
+		if got[id].unlocked {
+			t.Errorf("未产出对应饵，成就 %d 不应解锁", id)
+		}
 	}
 }

@@ -10,83 +10,21 @@ import (
 
 const reelDurabilityStep = 0.20
 
-// reelSlipWear 是旧直接磨损入口的基准值，等价于 29 档；生产搏鱼链路按
-// 当前 17/14 摩擦档位调用 reelSlipWearForSetting。正常低档位几乎不磨，
-// 只有玩家把泄力推到 25~29 才明显消耗摩擦片。
-//
-// 生产链路的逐档磨损率改为 tunable（后台可配，specs/changes/reel-wear-tunables），
-// 这些常量只作为缺省回落值，同时保留给旧直接入口使用。
-const (
-	reelSlipWear    = 0.0001   // 29 档，0.01%/次
-	reelSlipWearLow = 0.000001 // 24 档及以下，0.0001%/次
-	reelSlipWearMax = 0.0001   // 29 档，0.01%/次
-)
+// reelSlipWear 是泄力打滑的统一基准磨损率：除以打滑校准秒数 reelSlipCalibrationSeconds
+// 得每秒率 ≈ 0.00024%/s，对齐官服 W5 实测（112s 重度打滑磨 0.027%）。2026-11-12 拍平：
+// 官服只有这一个速率点（W5 当时不在锁轮档、档位号未记录），逐档阶梯没有任何对照数据，
+// 全部摘除（specs/changes/reel-slip-rate-flat）。旧直接磨损入口（damageReelSlip /
+// degradeFrictionWasher，仅测试引用）仍按"次"用同一基准。
+const reelSlipWear = 0.0001
 
-// 逐档磨损率的缺省值（与上面的常量同值，分开命名以便 tunable 回落时语义清晰）。
-const (
-	defaultReelSlipWearLow = reelSlipWearLow
-	defaultReelSlipWear25  = 0.000025
-	defaultReelSlipWear26  = 0.00005
-	defaultReelSlipWear27  = 0.000075
-	defaultReelSlipWear28  = 0.000095
-	defaultReelSlipWearMax = reelSlipWearMax
-)
-
-// reelSlipTunable 读取单个磨损率 tunable：缺失、非数值、≤0 或非有限值都回落到
-// 代码默认值，保证未配置时的行为与硬编码逐字节一致。
-func (s *Server) reelSlipTunable(key string, def float64) float64 {
-	v := s.tunableF(key, def)
+// reelSlipWearBase 返回所有档位统一的打滑基准磨损率（tunable reel_slip_wear）：
+// 缺失、非数值、≤0 或非有限值一律回落到代码默认，保证未配置时行为不变。
+func (s *Server) reelSlipWearBase() float64 {
+	v := s.tunableF("reel_slip_wear", reelSlipWear)
 	if v <= 0 || math.IsNaN(v) || math.IsInf(v, 0) {
-		return def
+		return reelSlipWear
 	}
 	return v
-}
-
-// reelSlipWearForSetting 把线上摩擦档位换算成单次打滑的摩擦片寿命损耗。
-// 线上 0~28 是 UI 1~29，29 是锁轮；锁轮另走发热曲线，这里的 29 值只作为
-// 曲线边界和诊断口径保留。逐档倍率走 tunable，后台可调。
-//
-// 这是生产入口：读取 tunable，缺失时回落到代码默认。
-func (s *Server) reelSlipWearForSetting(setting int64) float64 {
-	switch setting {
-	case 25:
-		return s.reelSlipTunable("reel_slip_wear_s25", defaultReelSlipWear25)
-	case 26:
-		return s.reelSlipTunable("reel_slip_wear_s26", defaultReelSlipWear26)
-	case 27:
-		return s.reelSlipTunable("reel_slip_wear_s27", defaultReelSlipWear27)
-	case 28:
-		return s.reelSlipTunable("reel_slip_wear_s28", defaultReelSlipWear28)
-	case 29:
-		return s.reelSlipTunable("reel_slip_wear_max", defaultReelSlipWearMax)
-	default:
-		if setting < 25 {
-			return s.reelSlipTunable("reel_slip_wear_low", defaultReelSlipWearLow)
-		}
-		return s.reelSlipTunable("reel_slip_wear_max", defaultReelSlipWearMax)
-	}
-}
-
-// reelSlipWearForSettingDefault 是包级默认口径：不读 tunable，直接给代码默认值。
-// 测试与需要「标称曲线」的场合用它，避免被后台配置影响断言。
-func reelSlipWearForSettingDefault(setting int64) float64 {
-	switch setting {
-	case 25:
-		return defaultReelSlipWear25
-	case 26:
-		return defaultReelSlipWear26
-	case 27:
-		return defaultReelSlipWear27
-	case 28:
-		return defaultReelSlipWear28
-	case 29:
-		return defaultReelSlipWearMax
-	default:
-		if setting < 25 {
-			return defaultReelSlipWearLow
-		}
-		return defaultReelSlipWearMax
-	}
 }
 
 const reelPartQualityAttr = "obifdihmcfn"

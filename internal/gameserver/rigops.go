@@ -2898,6 +2898,14 @@ func hRodRemoveComp(ctx *Ctx) ([]byte, bool) {
 		return nil, false
 	}
 	srv.queueSourceStackRefresh(ctx, res)
+	// 800 f1 只更新物品数据，客户端的竿 3D 建模不在 f1 原位更新时重建——
+	// 装轮可见是随后 17/7 取竿的 158 重建在起作用，拆轮没有后续取竿，模型
+	// 就把轮留在竿上（线上 2026-11-12 实锤：17/3 已回 f4=空的竿树，建模仍挂轮）。
+	// 拆卸真实改动了装配，回包后按工坊口径补推 4/22 竿树，客户端按版本戳
+	// 更大的新快照重建模型（02ed55c 同因同修法）。
+	if res != nil {
+		srv.pushRodModelRefresh(ctx, parentGUID)
+	}
 	return body, true
 }
 
@@ -2921,7 +2929,30 @@ func hRigRemoveAll(ctx *Ctx) ([]byte, bool) {
 		return nil, false
 	}
 	srv.queueSourceStackRefresh(ctx, results...)
+	// 与 17/3 同因：全拆后竿模型不随 800 f1 重建，回包后补推 4/22 竿树。
+	if len(results) > 0 {
+		srv.pushRodModelRefresh(ctx, parentGUID)
+	}
 	return body, true
+}
+
+// pushRodModelRefresh 回包后抬版本戳并补推 4/22 竿树，驱动客户端重建竿建模。
+// 800 f1 的竿树已把拆卸落库时的版本戳发给客户端，而客户端只接受版本戳严格
+// 变大的 4/22 更新（bumpCreatedTicks 口径），且 f1 应用与推送处理存在竞态：
+// 推送树与 f1 同版本会被按「版本未变」丢弃（线上 2026-11-12 实锤：多次拆轮
+// 仅一次消失，成功那次是推送赶在 f1 应用前被处理）。推送前再抬一次版本戳
+// 并落库，保证 4/22 的树严格新于 f1，重建不再依赖竞态。
+func (s *Server) pushRodModelRefresh(ctx *Ctx, rodGUID string) {
+	ctx.AfterResponse(func() {
+		pctx := ctx.Sess.pushCtx()
+		if row, err := s.DB.GetItemByGUID(pctx, rodGUID); err == nil && row != nil &&
+			row.UID == ctx.Sess.Userid {
+			if fields, ferr := FieldsFromJSON(row.FieldsJSON); ferr == nil {
+				s.saveItemFields(pctx, row, fields)
+			}
+		}
+		ctx.Sess.Push4_22ItemGUIDs([]string{rodGUID})
+	})
 }
 
 // hRigSetType 处理 17/1：[容器, 竿 GUID, 钓组类型]。

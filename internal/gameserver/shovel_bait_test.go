@@ -76,6 +76,11 @@ func TestBaitScoopDigIsHandled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建红虫长柄勺失败: %v", err)
 	}
+	// 长柄勺的饵从熟练度 45 起解锁，这里直接给满熟练度。
+	if _, err := db.SQL.ExecContext(ctx, `INSERT OR REPLACE INTO skill(uid, skill_id, points) VALUES(?,?,?)`,
+		uid, captureBaitSkillID, baitMasteryCap); err != nil {
+		t.Fatal(err)
+	}
 	body, ok := hCraftMine2(&Ctx{
 		Sess: newProbeSess(srv), Main: 9, Sub: 3,
 		Tree: proto.Args524(proto.Guid(scoop.GUID)), DecodeOK: true,
@@ -123,8 +128,8 @@ func TestShovelDigReturnsBaitsAndKeepsShovel(t *testing.T) {
 		t.Fatalf("803.f0=%d, want 1", got)
 	}
 	produced := v.Field(1).Val
-	if produced == nil || produced.ArgCount() < 1 || produced.ArgCount() > 3 {
-		t.Fatalf("803.f1 种类=%v, want 1..3", produced)
+	if produced == nil || produced.ArgCount() < 1 || produced.ArgCount() > baitMaxKinds {
+		t.Fatalf("803.f1 种类=%v, want 1..%d", produced, baitMaxKinds)
 	}
 	upsert := v.Field(6).Val
 	if upsert == nil || upsert.ArgCount() != produced.ArgCount() {
@@ -165,16 +170,14 @@ func TestShovelDigReturnsBaitsAndKeepsShovel(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) < 1 || len(got) > 3 {
-		t.Fatalf("背包新增诱饵种类=%d, want 1..3", len(got))
+	if len(got) < 1 || len(got) > baitMaxKinds {
+		t.Fatalf("背包新增诱饵种类=%d, want 1..%d", len(got), baitMaxKinds)
 	}
 	if len(got) != produced.ArgCount() {
 		t.Fatalf("803.f1 种类=%d, DB 种类=%d", produced.ArgCount(), len(got))
 	}
-	allowed := map[string]bool{}
-	for _, drop := range shovelBaitDrops {
-		allowed[drop.ItemID] = true
-	}
+	// 熟练度 0 的铲子池只有蚯蚓与红蚯蚓。
+	allowed := map[string]bool{"worm_01": true, "muckworm": true}
 	for itemID, qty := range got {
 		if !allowed[itemID] {
 			t.Fatalf("挖出未授权诱饵 %s", itemID)
