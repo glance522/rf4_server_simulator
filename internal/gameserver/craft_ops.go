@@ -90,6 +90,61 @@ func vendRecipeReports(recipeID string) bool {
 	return strings.HasSuffix(recipeID, "_vend")
 }
 
+// slotConsumableForRecipe 返回零材料配方里「真正该消耗」的材料槽需求 id 与
+// 每套数量。craft_bait_cut_fish（切鱼块）与 craft_crushed_boils（碎沸粒）的
+// 配方表没有 materials 定义，材料由客户端材料槽直接给出（实抓 2026-11-13：
+// 槽 = {需求id, 选中实例 guid, 鱼种/物品 id}——切鱼槽 guid 指鱼护 echo guid，
+// 碎沸粒槽 guid 指背包沸粒实例）。碎沸粒需求 id 是 craft_mat_boil（长度前缀
+// 0x0e=14，hex 里紧跟的 6d 是 guid 首字节，不是 id 的尾字符——早期解码误拼成
+// craft_mat_boilm，导致 803「材料槽缺少选中材料」）。碎沸粒官服语义是 25 粒
+// 沸粒磨出 1 份碎沸粒（2026-11-13 实机制作界面显示 25 粒/份，玩家口述），
+// 每套扣 25。同请求里的工具槽（切鱼刀 bait_fishknife / 研磨机
+// craft_tool_crusher）可复用，不消耗。其余零材料配方（标本板族）由标本挂鱼
+// 路径消耗渔获，不走这里。
+func slotConsumableForRecipe(recipeID string) (string, int64) {
+	switch recipeID {
+	case "craft_bait_cut_fish":
+		return "bait_fishForCut", 1
+	case "craft_crushed_boils":
+		return "craft_mat_boil", 25
+	}
+	return "", 0
+}
+
+// cutFishPiecesForWeightG 官服切鱼产量按鱼重阶梯：约整公斤每公斤 1 块，
+// 不足 1 公斤也出 1 块。社区实测锚点（2026-11-13 检索）：512g→1 块、
+// 2kg 以上→2 块、3.4kg→3 块、3.8~3.9kg→3 块（见 spec 证据节）。精确门槛
+// 在客户端二进制配方资源里提不出来，按整公斤阶梯实现。
+func cutFishPiecesForWeightG(weightG int64) int64 {
+	if weightG < 1000 {
+		return 1
+	}
+	return weightG / 1000
+}
+
+// rewriteCraftOutputQty 覆盖已构造产物行的数量（数量槽与 row.Qty 同步改）。
+// 仅用于产量不按定义单位量折算的配方：切鱼块按鱼重计件，而 prepareNewItem
+// 会把 fish_pieces 按单位量 30 折算（一刀 30 块，官服 512g 鱼只出 1 块）。
+func rewriteCraftOutputQty(row *store.Item, pieces int64) error {
+	if row == nil || pieces < 1 || pieces == row.Qty {
+		return nil
+	}
+	fields, err := FieldsFromJSON(row.FieldsJSON)
+	if err != nil {
+		return err
+	}
+	if !setItemQty(row.WireClass, fields, uint64(pieces)) {
+		return fmt.Errorf("数量槽写入失败: %s", row.ItemID)
+	}
+	fj, err := FieldsToJSON(fields)
+	if err != nil {
+		return err
+	}
+	row.FieldsJSON = fj
+	row.Qty = pieces
+	return nil
+}
+
 // vendCharge 是贩卖机配方每套材料要按份购买的一种配料（Qty 未乘制作套数）。
 type vendCharge struct {
 	ItemID string
@@ -896,6 +951,87 @@ func hCraft(ctx *Ctx) ([]byte, bool) {
 		}
 		if len(touched) == 0 {
 			return fail("配方要求材料但未扣到任何材料")
+		}
+	} else if demandID, matPerCraft := slotConsumableForRecipe(recipe.RecipeID); demandID != "" {
+		// 零材料配方但客户端会送材料槽（切鱼块/碎沸粒）：不接线时会零成本无限
+		// 产出（2026-11-13 实机白嫖鱼块/碎沸粒实测）。材料槽 guid 直接定位
+		// 选中实例；失败整体回滚，不留"产物已入库、材料还在"的空子。
+		var mat *craftSlot
+		for i := range req.Materials {
+			if req.Materials[i].ItemID == demandID {
+				mat = &req.Materials[i]
+				break
+			}
+		}
+		if mat == nil || mat.GUID == "" {
+			return fail("材料槽缺少选中材料", "recipe", recipe.RecipeID, "demand", demandID)
+		}
+		if recipe.RecipeID == "craft_bait_cut_fish" {
+			// 切鱼块：槽 guid 是鱼护 echo guid；槽里带的鱼种与条目不符时拒绝，
+			// 防止陈旧槽位删错鱼。
+			entries, kerr := srv.DB.KeepnetListTx(cctx, tx, uid)
+			if kerr != nil {
+				return fail("读取鱼护失败", "err", kerr)
+			}
+			var entry *store.KeepnetEntry
+			for _, e := range entries {
+				if e.EchoGUID == mat.GUID {
+					entry = e
+					break
+				}
+			}
+			if entry == nil {
+				return fail("选中的渔获不存在", "guid", shortGUID(mat.GUID))
+			}
+			if mat.Species != "" && entry.Species != mat.Species {
+				return fail("材料槽与渔获鱼种不符", "slot", mat.Species, "keepnet", entry.Species)
+			}
+			ok, derr := srv.consumeKeepnetEntryTx(cctx, tx, uid, entry.EchoGUID)
+			if derr != nil {
+				return fail("扣渔获失败", "err", derr)
+			}
+			if !ok {
+				return fail("选中的渔获已被消耗", "guid", shortGUID(mat.GUID))
+			}
+			usedMats = appendMaterialUses(usedMats, entry.Species, 1)
+			keepnetTaken = append(keepnetTaken, entry.EchoGUID)
+			if !containsGUID(touched, entry.EchoGUID) {
+				touched = append(touched, entry.EchoGUID)
+			}
+			// 产量按鱼重计件（官服语义 512g→1 块、3.4kg→3 块），不按定义
+			// 单位量折算——fish_pieces 单位量 30，按单位折会一刀 30 块。
+			if qerr := rewriteCraftOutputQty(producedRow, cutFishPiecesForWeightG(entry.WeightG)); qerr != nil {
+				return fail("鱼块产量改写失败", "err", qerr)
+			}
+		} else {
+			// 碎沸粒：槽 guid 是背包沸粒实例，每套扣 25 粒（不足整体失败回滚；
+			// 扣后有余改堆数量，扣光删行）。
+			need := matPerCraft * times
+			rows, lerr := listItemsTx(cctx, tx, uid, []string{"backpack", "rig"})
+			if lerr != nil {
+				return fail("读取材料失败", "err", lerr)
+			}
+			var row *store.Item
+			for _, it := range rows {
+				if it.GUID == mat.GUID {
+					row = it
+					break
+				}
+			}
+			if row == nil || row.Qty <= 0 {
+				return fail("选中的材料不存在", "guid", shortGUID(mat.GUID))
+			}
+			got, cerr := consumeItemQtyTx(cctx, tx, row, need)
+			if cerr != nil {
+				return fail("扣材料失败", "item", row.ItemID, "err", cerr)
+			}
+			if got < need {
+				return fail("材料数量不足", "item", row.ItemID, "need", need, "got", got)
+			}
+			usedMats = appendMaterialUses(usedMats, row.ItemID, got)
+			if !containsGUID(touched, row.GUID) {
+				touched = append(touched, row.GUID)
+			}
 		}
 	}
 

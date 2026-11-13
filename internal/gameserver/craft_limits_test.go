@@ -432,11 +432,21 @@ func TestCraftBatchCapsAndSlotScaling(t *testing.T) {
 	t.Run("零材料配方限制1份", func(t *testing.T) {
 		uid := int64(2200048)
 		box := setup(uid)
+		// 两配方的材料由客户端槽位直接给出（槽 guid 定位选中实例），材料
+		// 缺失时 803(false)，见 slotConsumableForRecipe；qty=1000 仍必须
+		// 收敛到 1 套（hCraft 零材料钳制）。
+		boil := seed(uid, "boils_hvz_van12", 30)
+		const fishGUID = "c1a00000000000000000000000000048"
+		seedKeepnetFish(t, db, uid, fishGUID, "s.orfe", 1.0)
+		slotsByRecipe := map[string][]craftSlot{
+			"craft_crushed_boils": {{ItemID: "craft_mat_boil", GUID: boil.GUID, Species: "boils_hvz_van12"}},
+			"craft_bait_cut_fish": {{ItemID: "bait_fishForCut", GUID: fishGUID, Species: "s.orfe"}},
+		}
 		for _, c := range []struct{ recipe, output string }{
 			{"craft_crushed_boils", "crushed_boils"},
 			{"craft_bait_cut_fish", "fish_pieces"},
 		} {
-			if !craft(box, c.recipe, nil, 1000) {
+			if !craft(box, c.recipe, slotsByRecipe[c.recipe], 1000) {
 				t.Fatalf("%s 零材料制作应成功", c.recipe)
 			}
 			// 物品定义自带单位量（fish_pieces 每批 30），按事务记录的套数断言批次。
@@ -452,6 +462,13 @@ func TestCraftBatchCapsAndSlotScaling(t *testing.T) {
 			if got := countOf(uid, c.output); got <= 0 || got >= 1000 {
 				t.Fatalf("%s 零材料配方发生批量产出，实得 %d", c.output, got)
 			}
+		}
+		// 材料被真实消耗：碎沸粒官服 25 粒/份（30→5），鱼护里选中的鱼消失。
+		if got := countOf(uid, "boils_hvz_van12"); got != 5 {
+			t.Fatalf("碎沸粒应扣 25 粒沸粒，实得剩余 %d", got)
+		}
+		if keepnetGUIDs(t, db, uid)[fishGUID] {
+			t.Fatal("切鱼应吃掉鱼护里选中的鱼")
 		}
 	})
 
