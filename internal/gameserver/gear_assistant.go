@@ -15,6 +15,29 @@ func overloadProtectionKey(uid int64) string {
 	return fmt.Sprintf("gear-assistant:overload-protection:%d", uid)
 }
 
+func noEscapeKey(uid int64) string {
+	return fmt.Sprintf("gear-assistant:no-escape:%d", uid)
+}
+
+func instantBiteKey(uid int64) string {
+	return fmt.Sprintf("gear-assistant:instant-bite:%d", uid)
+}
+
+// gearFeatureKey 把功能名映射到 kv 键。四个功能的开关各自独立，
+// 菜单、二级操作与游戏逻辑读的都是这一份映射。
+func gearFeatureKey(uid int64, feature string) string {
+	switch feature {
+	case "overload":
+		return overloadProtectionKey(uid)
+	case "noescape":
+		return noEscapeKey(uid)
+	case "instantbite":
+		return instantBiteKey(uid)
+	default:
+		return staminaReportKey(uid)
+	}
+}
+
 type overloadProtectionReader interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
@@ -25,7 +48,7 @@ func readOverloadProtection(ctx context.Context, db overloadProtectionReader, ui
 
 // 钓具助手采用两级菜单交互：
 //
-//	一级：1 【满红不爆】 / 2 【耐力播报】
+//	一级：1 【满红不爆】 / 2 【耐力播报】 / 3 【永不脱钩】 / 4 【简易手杆】
 //	二级（发功能序号后进入）：只响应 开(y) 关(n) 说明(h) 返回(b)；
 //	                        未知输入重复二级菜单；b 退回一级。
 type gearFeature struct {
@@ -39,8 +62,10 @@ type gearFeature struct {
 const gearSep = "─────────────────────"
 
 var gearFeatures = map[string]gearFeature{
-	"overload": {"【满红不爆】", "已开启，对你的所有鱼竿生效。", "已关闭，恢复正常装备损坏规则。", "【满红不爆】：防止断件与锁轮过载烧毁；普通磨损、自然脱钩及主动剪线不变，不修复已有损伤。"},
-	"stamina":  {"【耐力播报】", "已开启：搏鱼期间每 5 秒在聊天框显示当前鱼的耐力与超载。", "已关闭。", "【耐力播报】：搏鱼期间每 5 秒在聊天框显示当前鱼的耐力与超载。耐力是这尾鱼还剩多少体力，会一路掉到 0；超载是这尾鱼此刻的拉力超出整根钓组最大拉力的百分比，0% 表示拉得动（小鱼恒为 0%），数字越大越拉不动，鱼乏了它会自己降下来。仅在当前手持竿进入搏鱼时播报。"},
+	"overload":    {"【满红不爆】", "已开启，对你的所有鱼竿生效。", "已关闭，恢复正常装备损坏规则。", "【满红不爆】：防止断件与锁轮过载烧毁；普通磨损、自然脱钩及主动剪线不变，不修复已有损伤。"},
+	"stamina":     {"【耐力播报】", "已开启：搏鱼期间每 5 秒在聊天框显示当前鱼的耐力与超载。", "已关闭。", "【耐力播报】：搏鱼期间每 5 秒在聊天框显示当前鱼的耐力与超载。耐力是这尾鱼还剩多少体力，会一路掉到 0；超载是这尾鱼此刻的拉力超出整根钓组最大拉力的百分比，0% 表示拉得动（小鱼恒为 0%），数字越大越拉不动，鱼乏了它会自己降下来。仅在当前手持竿进入搏鱼时播报。"},
+	"noescape":    {"【永不脱钩】", "已开启，对你的所有鱼竿生效：抬竿必中，搏鱼途中不再脱钩。", "已关闭，恢复正常脱钩与嘬饵判定。", "【永不脱钩】：抬竿必中鱼，不再出现嘬饵空竿与钩型保持失败；搏鱼途中客户端若判定跑鱼，服务端会把同一尾鱼重新挂上，不消耗鱼、不计跑鱼。断竿、断线、断轮与主动剪线仍会结束这一竿，也不修复已有装备损伤。"},
+	"instantbite": {"【简易手杆】", "已开启：中鱼指示器提示上鱼后提杆 100% 上鱼。", "已关闭，恢复正常咬钩与中钩判定。", "【简易手杆】：中鱼指示器提示上鱼后提杆 100% 上鱼；手竿/沉底抛竿的咬钩参数固定 f19=1，提杆不再出现嘬饵空竿与钩型保持失败。路亚族不受影响，仍需钓组真正入水。"},
 }
 
 // gearCommand 是一级解析结果：mode 为 help/unknown/cmd。
@@ -70,6 +95,10 @@ func parseGearCommand(text string) gearCommand {
 			return gearCommand{mode: "unknown"}
 		}
 		return gearCommand{mode: "cmd", feature: "overload", action: legacyGearAction(head)}
+	case "3", "脱钩", "永不脱钩", "noescape", "NoEscape", "NOESCAPE":
+		head = "noescape"
+	case "4", "手杆", "简易手杆", "简易杆", "simplerod", "SimpleRod", "SIMPLEROD", "咬钩", "秒咬钩", "instantbite", "InstantBite", "INSTANTBITE":
+		head = "instantbite"
 	default:
 		return gearCommand{mode: "unknown"}
 	}
@@ -137,7 +166,7 @@ func gearReply(f gearFeature, action string, enabled bool) (next bool, reply str
 }
 
 func gearAssistantHelp() string {
-	items := []string{"1  【满红不爆】", "2  【耐力播报】"}
+	items := []string{"1  【满红不爆】", "2  【耐力播报】", "3  【永不脱钩】", "4  【简易手杆】"}
 	// 每行下面都跟一条分隔线（含最后一行），形成下划线效果。
 	return strings.Join(items, "\n"+gearSep+"\n") + "\n" + gearSep
 }
@@ -248,16 +277,28 @@ func (s *Server) gearSubMenu(ctx *Ctx, uid int64, feature, text string) ([]byte,
 
 // gearReadFlag 在独立短事务中读取开关，事务在返回前结束，避免与后续回信事务重叠。
 func (s *Server) gearReadFlag(c context.Context, uid int64, feature string) (bool, error) {
-	key := overloadProtectionKey(uid)
-	if feature == "stamina" {
-		key = staminaReportKey(uid)
-	}
 	tx, err := beginEconomyTx(c, s.DB)
 	if err != nil {
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	return readKVFlag(c, tx, key)
+	return readKVFlag(c, tx, gearFeatureKey(uid, feature))
+}
+
+// gearFeatureEnabled 供游戏逻辑读取开关：一次短查询，不在事务里嵌套。
+// 读失败按「关闭」处理，宁可走原规则也不让玩家卡在半个状态里。
+func (s *Server) gearFeatureEnabled(c context.Context, uid int64, feature string) bool {
+	if s == nil || s.DB == nil || uid <= 0 {
+		return false
+	}
+	enabled, err := s.gearReadFlag(c, uid, feature)
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("钓具助手开关读取失败，按关闭处理", "feature", feature, "err", err)
+		}
+		return false
+	}
+	return enabled
 }
 
 // gearSubShow 显示二级菜单（可选先显示说明），不改设置。
@@ -291,10 +332,7 @@ func (s *Server) gearSubAction(ctx *Ctx, uid int64, feature, action string) ([]b
 		return nil, true
 	}
 	defer func() { _ = tx.Rollback() }()
-	key := overloadProtectionKey(uid)
-	if feature == "stamina" {
-		key = staminaReportKey(uid)
-	}
+	key := gearFeatureKey(uid, feature)
 	enabled, err := readKVFlag(c, tx, key)
 	if err != nil {
 		ctx.ReplyFailure("System.IO.IOException", "钓具设置读取失败，设置未改变")

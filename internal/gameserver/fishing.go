@@ -91,6 +91,9 @@ type FishState struct {
 	// 不缓存就等于每个搏鱼玩家每 2 秒一次单行查询；菜单改设置时清掉重读。
 	staminaFlagCached bool
 	staminaFlagOn     bool
+	// noEscapeRepush 是【永不脱钩】本次抛竿内已经重推同一尾鱼的次数。
+	// 仅进程内，用于防止客户端状态不兼容时的无限重推。
+	noEscapeRepush int
 }
 
 // effectiveBaitDepthCMLocked 返回当前有效饵深。手杆从落水开始按固定
@@ -427,6 +430,11 @@ func (s *Server) biteDelayInWeather(st *FishState, weather fishingWeather, now t
 	d := officialPushDelay() * weatherDelay
 	return standardBiteDelay(d, bonus.BiteSpeed, cfg.maxDelay, cfg.scale)
 }
+
+// maxNoEscapeRepush 是【永不脱钩】单次抛竿内重推同一尾鱼的上限。
+// 玩家正常搏鱼几次跑鱼远到不了这个数；它只用来兜住客户端与鱼实体
+// 状态不兼容时的无限重推循环（那种情况下再推也不会中，只会刷屏）。
+const maxNoEscapeRepush = 60
 
 // biteFloorDelay 返回落水保护时长。
 //
@@ -1826,7 +1834,26 @@ func (s *Server) fishInitialStaminaRatio() float64 {
 // 钓法 +0.3~1.1s），故浮钓族保留按鱼种/重量校准的曲线值，其余钓法固定 1。
 // tunable float_f19_force_one 非 0 时浮钓族也强制 1.0（回滚到全钓法 1 的口径，
 // 用于浮钓静置不上钩的应急恢复）。
-func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string, rigType int64) *proto.Value {
+// forceF19 为 true 时同样把浮钓族压到 1.0；【简易手杆】走的就是这条路径：
+// 中鱼指示器提示后提杆要 100% 中钩，f19 不能停留在官方浮钓小值（客户端行为 105
+// 的自动上钩会晚 4~11 秒，表现成"鱼在钩边舔半天不咬"）。
+// fish27OfficialToggles 返回当前生效的官方参数开关（日志/实验对照用）。
+func (s *Server) fish27OfficialToggles() string {
+	var on []string
+	for idx := 2; idx <= 20; idx++ {
+		key := fish27FieldKey(idx)
+		if s.tunableS(key, "") == "" {
+			continue
+		}
+		on = append(on, fmt.Sprintf("f%d=%g", idx, s.tunableF(key, 0)))
+	}
+	if len(on) == 0 {
+		return "none"
+	}
+	return strings.Join(on, ",")
+}
+
+func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string, rigType int64, forceF19 bool) *proto.Value {
 	w := float64(f.WeightG)
 	st := officialSpeciesStatics[f.Species]
 	var f9, f10, f11, f12v, f13v, f14v, f15v, f16v, f17v, f18v, f19v, f20v float64
@@ -1850,7 +1877,7 @@ func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string, rigType i
 		f16v, f17v, f18v = fb[16], fb[17], fb[18]
 		f19v, f20v = fb[19], fb[20]
 	}
-	if !floatRigTypes[rigType] || s.tunableF("float_f19_force_one", 0) != 0 {
+	if !floatRigTypes[rigType] || forceF19 || s.tunableF("float_f19_force_one", 0) != 0 {
 		f19v = 1
 	}
 	profile := s.fishFightProfileFor(f)
@@ -1886,7 +1913,7 @@ func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string, rigType i
 		f22 = named
 	}
 
-	return wiregen.MustMakeObj("fgogccpglhb", map[int]*proto.Value{
+	fields := map[int]*proto.Value{
 		0:  proto.Guid(f.FishGUID),
 		1:  proto.StrVal(f.Species),
 		2:  proto.U32(uint32(f.Grade)),
@@ -1911,7 +1938,49 @@ func (s *Server) buildFish27(f *RolledFish, hookGUID, gearGuid string, rigType i
 		22: proto.Str(f22),
 		23: proto.Guid(hook),
 		24: proto.Null(),
-	})
+	}
+	// 调试覆盖：数据库存在 fish27_fN（N=2..20）时，用该值绝对覆盖对应字段。
+	// f2 档位 / f4 重量用 U32，f7 bool，其余按 F32。
+	for idx := 2; idx <= 20; idx++ {
+		key := fish27FieldKey(idx)
+		if s.tunableS(key, "") == "" {
+			continue
+		}
+		v := s.tunableF(key, 0)
+		switch idx {
+		case 2, 4:
+			fields[idx] = proto.U32(uint32(v))
+		case 7:
+			fields[idx] = proto.Bool(v != 0)
+		default:
+			fields[idx] = proto.F32(float32(v))
+		}
+	}
+	// 调试：fish27_debug_log=1 时把实际进包的 27 字段值打出来（与线上编码字节一一对应）。
+	if s.tunableF("fish27_debug_log", 0) != 0 {
+		parts := make([]string, 0, 20)
+		for idx := 2; idx <= 20; idx++ {
+			v := fields[idx]
+			if v == nil {
+				continue
+			}
+			switch idx {
+			case 2, 4:
+				parts = append(parts, fmt.Sprintf("f%d=%d", idx, uint32(v.Num)))
+			case 7:
+				parts = append(parts, fmt.Sprintf("f7=%t", v.Bool))
+			default:
+				parts = append(parts, fmt.Sprintf("f%d=%g", idx, float64(proto.F32FromBits(uint32(v.Num)))))
+			}
+		}
+		s.log.Info("14/14 27字段", "fish", shortGUID(f.FishGUID), "fields", strings.Join(parts, ","))
+	}
+	return wiregen.MustMakeObj("fgogccpglhb", fields)
+}
+
+// fish27FieldKey 返回 14/14 鱼对象单个字段的调试覆盖键（如 fish27_f20）。
+func fish27FieldKey(idx int) string {
+	return fmt.Sprintf("fish27_f%d", idx)
 }
 
 // ---- 搏鱼曲线（fight_curves_sets.json）----
@@ -1992,12 +2061,19 @@ func (s *Session) Push14_14(f *RolledFish, hookGUID, gearGuid string, rigType in
 	force := s.Srv.fishFightPullFor(f)
 	s.log.Info("14/14 发鱼",
 		"rod", shortGUID(gearGuid), "fish", shortGUID(f.FishGUID), "hook", shortGUID(hookGUID),
+		"官方参数", s.Srv.fish27OfficialToggles(),
 		"鱼种", f.Species, "重量_g", f.WeightG, "体力池", stamina,
 		"初始体力", initialStamina, "拉力", force, "体型比例", profile.SizeRatio,
 		"拉力K0", s.Srv.fishPullK0For(f.Species), "耐力倍率", profile.StaminaScale)
+	// 【简易手杆】把 27.f19 固定为 1.0：咬钩与试饵行为不再按官方小值等待，
+	// 中鱼指示器提示上鱼后提杆由服务端跳过嘬饵/钩型保持否决，100% 确认中钩。
+	forceF19 := s.Srv.gearFeatureEnabled(s.pushCtx(), s.Userid, "instantbite")
+	if forceF19 {
+		s.log.Info("14/14 f19 固定为 1（简易手杆）", "rod", shortGUID(gearGuid), "fish", shortGUID(f.FishGUID))
+	}
 	return s.Push(14, 14, proto.Args524(
 		proto.Guid(gearGuid),
-		s.Srv.buildFish27(f, hookGUID, gearGuid, rigType),
+		s.Srv.buildFish27(f, hookGUID, gearGuid, rigType, forceF19),
 	)) != 0
 }
 
@@ -2103,6 +2179,7 @@ func (s *Server) scheduleBiteState(sess *Session, st *FishState, preserveHooked,
 	st.hookedChatFishGUID = ""
 	st.PendingRepush = 0
 	st.LuckRepush = 0
+	st.noEscapeRepush = 0
 	if !preserveHooked {
 		st.Hooked = false
 	}
