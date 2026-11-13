@@ -200,7 +200,10 @@ func TestWorkshopOrderRollsBackWalletWhenItemWriteFails(t *testing.T) {
 	}
 }
 
-func TestWorkshopReelRepairRejectsGoldPayment(t *testing.T) {
+// 金币（即时）通道对同型号修理合法：工坊界面本身提供「2 小时(银) / 即时(金)」
+// 两档，客户端点「即时」即 useGold=true。旧实现硬拒，客户端收到空包后强转
+// onobdmohahp（物品实例）失败，弹「发生内部错误」。
+func TestWorkshopReelRepairAcceptsGoldPayment(t *testing.T) {
 	srv, db := newStaticRigTestServer(t)
 	reel, gearID := seedWornWorkshopReel(t, srv, db, 1, .2, .5, .5)
 	ctx := t.Context()
@@ -217,20 +220,23 @@ func TestWorkshopReelRepairRejectsGoldPayment(t *testing.T) {
 		Tree: snapshotWorkshopRequestPartPayment(reel.GUID, uint32(reelPartCatGear), gearID, 0, true),
 		Log:  logging.Discard(),
 	}
-	if _, ok := hWorkshopOrder(c); ok {
-		t.Fatal("同型号修理不应接受金币支付")
+	body, ok := hWorkshopOrder(c)
+	if !ok || len(body) == 0 {
+		t.Fatal("同型号修理应接受金币（即时）支付并回物品树")
 	}
 	profile, err := db.GetProfile(ctx, uid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if profile.Silver != 1000 || profile.Gold != 1000 {
-		t.Fatalf("金币修理被拒绝后余额应保持 1000/1000，实得 %d/%d",
-			profile.Silver, profile.Gold)
+	if profile.Silver != 1000 {
+		t.Fatalf("金币通道不得扣银币，实得银币 %d", profile.Silver)
+	}
+	if profile.Gold >= 1000 {
+		t.Fatalf("金币通道必须扣金币，实得金币 %d", profile.Gold)
 	}
 	fresh := mustItem(t, db, reel.GUID)
-	if fresh.Durability != .5 {
-		t.Fatalf("金币修理被拒绝后本体耐久应保持 0.5，实得 %v", fresh.Durability)
+	if fresh.Durability <= .5 {
+		t.Fatalf("金币修理后本体耐久应回升，实得 %v", fresh.Durability)
 	}
 }
 
@@ -272,7 +278,9 @@ func TestWorkshopReelRepairFullPartDoesNotFreeWholeService(t *testing.T) {
 	}
 }
 
-func TestWorkshopReelRepairRejectsZeroCost(t *testing.T) {
+// 客户端对同一次操作会连发两次 21/3，第二次到达时已无磨损。旧实现把零价当
+// 非法交易回空包 → 客户端强转失败报错。新口径：幂等成功，回当前物品树。
+func TestWorkshopReelRepairZeroCostIsIdempotent(t *testing.T) {
 	srv, db := newStaticRigTestServer(t)
 	reel, gearID := seedWornWorkshopReel(t, srv, db, 1, 1, 1, 1)
 	ctx := t.Context()
@@ -289,8 +297,16 @@ func TestWorkshopReelRepairRejectsZeroCost(t *testing.T) {
 		Tree: snapshotWorkshopRequestPart(reel.GUID, uint32(reelPartCatGear), gearID, 0),
 		Log:  logging.Discard(),
 	}
-	if _, ok := hWorkshopOrder(c); ok {
-		t.Fatal("没有实际磨损时不应提交零金额修理")
+	body, ok := hWorkshopOrder(c)
+	if !ok || len(body) == 0 {
+		t.Fatal("无磨损的重复修理应幂等回物品树（空包会让客户端报内部错误）")
+	}
+	profile, err := db.GetProfile(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Silver != 1000 {
+		t.Fatalf("零金额幂等分支不得扣费，实得银币 %d", profile.Silver)
 	}
 	var txnCount int
 	if err := db.SQL.QueryRowContext(ctx,

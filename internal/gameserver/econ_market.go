@@ -1461,7 +1461,12 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		if derr != nil || def == nil {
 			continue
 		}
-		child, cerr := srv.buildPartInstance(cctx, row, o.SysID, fmt.Sprintf("part-%d", idx))
+		child, cerr := srv.buildPartInstance(cctx, row, o.SysID,
+			// 子件 guid 必须绑定「型号」：客户端按子件 guid 缓存零件显示，
+			// 旧 key 只有槽位序号（part-N），换型号后 guid 不变 → 客户端不重渲染，
+			// 面板仍显示旧件的参数（例如摩擦片 34 kg 换成 36.7 kg 后仍显示 34）。
+			// 同型号重复选择时 key 不变，guid 也不变，幂等性不受影响。
+			fmt.Sprintf("part-%d-%s", idx, o.SysID))
 		if cerr != nil || child == nil {
 			continue
 		}
@@ -1477,10 +1482,10 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	if !changed {
 		return nil, false
 	}
-	if useGold && hasRepair {
-		ctx.Log.Warn("工坊修理：同型号修理仅支持银币支付", "guid", shortGUID(row.GUID))
-		return nil, false
-	}
+	// 金币（即时）通道对「同型号修理」是合法操作：界面本身提供「2 小时 / 即时」
+	// 两个支付选项，客户端把即时那档用 useGold=true 发过来。旧代码在这里硬拒，
+	// 客户端收到空包后强转 onobdmohahp（物品实例）失败，弹「发生内部错误」。
+	// 现在只要求「金币价算得出来」，不再按 hasRepair 拒绝。
 	wholeItemRepair := bodyRepair || (hasPartOrder && allRepairs)
 	if hasPartOrder && allRepairs {
 		if isReel {
@@ -1501,13 +1506,29 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		gold = 0
 	}
 	costSilver, costGold := silver, gold
+	// 修理（同型号）分支只累加银币，没有金币价；而界面的「即时」档是同一笔
+	// 工单按金价结算。金价与银价的换算从客户端界面反推：316.68↔2.88、
+	// 300.56↔2.73、350.19↔3.18、10.44↔0.09 四组样本都等于 round(银/110)，
+	// 五次实测全部吻合。仅当金价为 0 时用它兜底，不影响换件已有的金价。
+	if useGold && costGold <= 0 && costSilver > 0 {
+		costGold = int64(math.Round(float64(costSilver) / 110))
+	}
 	if useGold {
 		if costGold <= 0 {
-			ctx.Log.Warn("工坊换件：金币价格为 0，拒绝零金额交易", "item", shortGUID(itemGUID))
-			return nil, false
+			// 算不出金价（极少数无任何标价的数据缺口）：不再拒单，按幂等返回
+			// 当前物品树，避免客户端收到空包后强转失败弹内部错误。
+			ctx.Log.Warn("工坊换件：金币价格为 0，按幂等返回", "item", shortGUID(itemGUID))
+			return workshopItemTreeBody(ctx, srv, cctx, row)
 		}
 	} else if costSilver <= 0 {
-		ctx.Log.Warn("工坊换件：银币价格为 0，拒绝零金额交易", "item", shortGUID(itemGUID))
+		// 纯修理且零件已满耐久（客户端对同一次操作会连发两次 21/3，第二次
+		// 到达时已无磨损）→ 幂等成功：不扣费、不写库、回当前物品树。
+		if allRepairs {
+			ctx.Log.Info("工坊换件：无需处理，按幂等返回物品树", "item", shortGUID(itemGUID))
+			return workshopItemTreeBody(ctx, srv, cctx, row)
+		}
+		ctx.Log.Warn("工坊换件：银币价格为 0，且本单含换件（价目表缺口），拒绝",
+			"item", shortGUID(itemGUID), "hasRepair", hasRepair, "allRepairs", allRepairs)
 		return nil, false
 	}
 	if clientCost > 0 {
@@ -1631,6 +1652,21 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	ctx.Log.Info("21/3 工坊换件完成", "item", row.ItemID, "guid", shortGUID(row.GUID),
 		"parts", len(orders), "silver", costSilver, "gold", costGold)
 	return bodyOut, true
+}
+
+// workshopItemTreeBody 用「当前物品状态」构造 21/3 的回包体。
+// 用于零价/无变化等幂等分支：客户端对 21/3 的回包按物品实例（onobdmohahp）
+// 强转，收空包会 InvalidCastException 并弹「发生内部错误」。
+func workshopItemTreeBody(ctx *Ctx, srv *Server, cctx context.Context, row *store.Item) ([]byte, bool) {
+	tree, terr := srv.ItemToTree(cctx, row)
+	if terr != nil {
+		return nil, false
+	}
+	body, berr := proto.EncodeValue(tree, ctx.Sess.Table())
+	if berr != nil {
+		return nil, false
+	}
+	return body, true
 }
 
 // hWorkshopRepair 构造 21/3 银币修理或 21/4 金币修理处理器。
