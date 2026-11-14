@@ -349,10 +349,20 @@ func (s *Session) pushSystemChat(text string) {
 // 试探；无效组合客户端直接忽略。kv 非空时作为 401.f4 模板参数（kind=3
 // 的钓获播报模板：键1=鱼种key 键2=重量 键6=榜单类型）。
 func (s *Session) pushChatProbe(channel, kind int, text string, kv *proto.Value) {
+	s.pushChatProbeAs(channel, kind, 0, text, kv)
+}
+
+// pushChatProbeAs 与 pushChatProbe 相同，但可指定这条消息在客户端显示的
+// 发送者 uid（0 表示会话本人）。跨会话播报必须显式指定发送者，否则别人的
+// 客户端会把播报显示成“自己发的”。
+func (s *Session) pushChatProbeAs(channel, kind int, fromUID uint32, text string, kv *proto.Value) {
 	if s == nil || s.closed.Load() {
 		return
 	}
-	f2 := uint32(s.Userid)
+	f2 := fromUID
+	if f2 == 0 {
+		f2 = uint32(s.Userid)
+	}
 	// 探测专用外层覆盖：str 槽默认频道名、u32 槽默认人数。
 	outerStr := ""
 	outerU32 := uint32(0)
