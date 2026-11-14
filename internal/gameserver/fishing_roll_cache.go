@@ -39,6 +39,7 @@ type fishingRollCache struct {
 	lengthKP             map[string][2]float64
 	baitTiers            map[string]map[string]int64
 	baitTierLoaded       map[string]bool
+	fishBaitPrefs        map[string][]string
 	companionEvidence    map[string]int64
 	companionEvidenceSet bool
 	baitDefs             map[string]cachedBaitDef
@@ -61,6 +62,7 @@ func newFishingRollCache() *fishingRollCache {
 		lengthKP:          map[string][2]float64{},
 		baitTiers:         map[string]map[string]int64{},
 		baitTierLoaded:    map[string]bool{},
+		fishBaitPrefs:     map[string][]string{},
 		baitDefs:          map[string]cachedBaitDef{},
 		localEvidence:     map[localBaitEvidenceKey]map[string]bool{},
 		fishEcology:       map[string]fishEcologyProfile{},
@@ -184,6 +186,29 @@ func (s *Server) cachedBaitTiers(ctx context.Context, c fishRollContext, bait st
 	cache.baitTierLoaded[bait] = true
 	cache.mu.Unlock()
 	return tiers
+}
+
+// cachedFishBaitPrefs 缓存「这一鱼种 → wiki 偏好饵列表」，只在严格档位收窄
+// 「各类饵」时读取；nil 与空列表都表示该鱼没有偏好数据，调用方保留原规则。
+func (s *Server) cachedFishBaitPrefs(ctx context.Context, c fishRollContext, fishKey string) []string {
+	if s.DB == nil {
+		return nil
+	}
+	cache := rollCache(c)
+	if cache == nil {
+		return s.DB.FishBaitPrefs(ctx, fishKey)
+	}
+	cache.mu.Lock()
+	if prefs, ok := cache.fishBaitPrefs[fishKey]; ok {
+		cache.mu.Unlock()
+		return prefs
+	}
+	cache.mu.Unlock()
+	prefs := s.DB.FishBaitPrefs(ctx, fishKey)
+	cache.mu.Lock()
+	cache.fishBaitPrefs[fishKey] = prefs
+	cache.mu.Unlock()
+	return prefs
 }
 
 func (s *Server) cachedCompanionEvidence(ctx context.Context, c fishRollContext) map[string]int64 {
