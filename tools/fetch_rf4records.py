@@ -21,6 +21,7 @@ import json
 import sqlite3
 import sys
 import time
+import re
 import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -42,8 +43,76 @@ def norm_bait(s):
     return " ".join(s.split()).lower()
 
 
+# 英文口味/形态词 -> item_catalog.name_zh 的中文机翻词。
+# 组合饵（"Blackcurrant 15 Pop-Up; Blackcurrant Flavor Purple"）的组件 1 按词表
+# 翻译+数字提取，与中文名做字符集匹配（机翻词序不稳定，用无序比对）。
+WORD_ZH = {
+    "Blackcurrant": "黑加仑", "Salmon": "鲑鱼", "Strawberry": "大草莓", "Vanilla": "香草",
+    "Honey": "蜂蜜", "Garlic": "大蒜", "Crab & Mussels": "螃蟹和贻贝", "Crab & Fish": "螃蟹和鱼",
+    "Crab": "螃蟹", "Mussels": "贻贝", "Mussel": "贻贝", "Cranberry": "蔓越莓",
+    "Fresh Cranberry": "新鲜蔓越莓", "Spice Mix": "七种香料", "Sweet Cream": "甜奶油",
+    "Cream": "奶油", "Caramel": "焦糖", "Cocos": "椰子", "Coconut": "椰子",
+    "Squid": "鱿鱼", "Octopus": "章鱼", "Krill": "磷虾", "Pepper": "胡椒",
+    "Tuna": "吞拿鱼", "Halibut": "庸鲽", "Pineapple": "菠萝", "Tropical": "热带的",
+    "Fruit": "水果", "Fish": "鱼", "Herbs": "香草", "Plum": "李子", "Peach": "桃",
+    "Hemp": "麻", "Scallop": "扇贝", "Shrimp": "虾", "Mint": "薄荷", "Bee": "蜜蜂",
+    "Pop-Up": "PopUp", "Pop Up": "PopUp", "Pop-Ups": "PopUp", "Soluble": "可溶", "Pellets": "",
+    "Flavor": "", "Scent": "", "Worm": "蚯蚓", "Bloodworm": "红虫", "Maggot": "蛆虫",
+    "Tutti Frutti": "什锦水果", "Garlic & Mussels": "大蒜似的贻贝", "Banana": "甜香蕉", "Foam-rubber fish": "泡沫橡胶鱼",
+}
+# 长词优先替换，避免 "Mussels" 被 "Mussel" 截断
+WORD_ORDER = sorted(WORD_ZH, key=len, reverse=True)
+
+
+def squash(s):
+    """去空白/全角空格/连字符，供无序字符集比对。"""
+    return re.sub(r"popups", "popup", re.sub(r"[\s \-]+", "", s)).lower()
+
+
+def translate_component(part):
+    """英文组件 -> 中文候选串（词表替换，数字保留）。"""
+    s = part
+    for en in WORD_ORDER:
+        s = re.sub(re.escape(en), lambda mm: "" + WORD_ZH[en] + "" if WORD_ZH[en] else "", s, flags=re.I)
+    # 提取翻译词与数字
+    words = [w.strip() for w in s.split("") if w.strip() and not w.strip().isdigit()]
+    nums = re.findall(r"\d+", part)
+    return words, nums
+
+
+def load_zh_index(static):
+    """item_catalog.name_zh 规范化 -> item_id（组合饵翻译匹配用）。"""
+    conn = sqlite3.connect(f"file:{static}?mode=ro", uri=True)
+    idx = {}
+    for item_id, name_zh in conn.execute(
+        "SELECT c.item_id, c.name_zh FROM item_def d LEFT JOIN item_catalog c ON c.item_id=d.item_id"
+        " WHERE d.category IN (17,27) AND c.name_zh<>''"
+    ):
+        idx.setdefault(squash(name_zh), item_id)
+    conn.close()
+    return idx
+
+
+def match_by_translate(bait_display, zh_idx):
+    """组合饵翻译匹配：拆组件，跳过 Flavor 味剂，词表翻译后与中文名做
+    字符集（无序）匹配——机翻词序与英文词序不一致仍可命中。"""
+    for part in bait_display.split(";"):
+        part = part.strip()
+        if not part or "Flavor" in part:
+            continue  # 味剂不是独立商品
+        words, nums = translate_component(part)
+        if not words or not nums:
+            continue
+        want = set(squash("".join(words) + "".join(nums)))
+        for zh_norm, item_id in zh_idx.items():
+            if set(zh_norm) == want and abs(len(zh_norm) - len(squash("".join(words) + "".join(nums)))) <= 2:
+                return item_id
+    return ""
+
+
 def load_bait_map(static):
-    """item_catalog.name（英文原名）规范化 -> item_id。"""
+    """合并两源：item_catalog.name（拟饵英文原名）+ 手工补充表（天然饵/活饵）。
+    组合饵（分号连接）在 reparse 时逐成分映射，此处只建单名索引。"""
     conn = sqlite3.connect(f"file:{static}?mode=ro", uri=True)
     m = {}
     for item_id, name in conn.execute(
@@ -51,7 +120,22 @@ def load_bait_map(static):
     ):
         m.setdefault(norm_bait(name), item_id)
     conn.close()
+    sys.path.insert(0, "tools")
+    from rf4records_bait_map import BAIT_MAP
+    for en, item_id in BAIT_MAP.items():
+        m.setdefault(norm_bait(en), item_id)
     return m
+
+
+def bait_id_for(bait_display, bait_map, zh_idx=None):
+    """按分号拆分组合饵，逐成分映射；组合 Pop-Up 走词表翻译匹配；全不中留空。"""
+    for part in bait_display.split(";"):
+        hit = bait_map.get(norm_bait(part))
+        if hit:
+            return hit
+    if zh_idx:
+        return match_by_translate(bait_display, zh_idx)
+    return ""
 
 
 def ensure_table(db):
@@ -78,6 +162,7 @@ def main():
     args = ap.parse_args()
 
     fish_map = load_fish_map()
+    zh_idx = load_zh_index(args.static)
     fv = json.load(urllib.request.urlopen(
         urllib.request.Request("https://rf4records.com/api/records/filter-values",
                                headers={"User-Agent": UA}), timeout=60))
@@ -98,9 +183,18 @@ def main():
         for en, fk in fish_map.items():
             cur = db.execute("UPDATE rf4records_catch SET fish_key=? WHERE fish_name_en=? AND fish_key<>?", (fk, en, fk))
             total += cur.rowcount
+        hit = miss = 0
+        rows = db.execute("SELECT rowid, bait_name FROM rf4records_catch WHERE bait_id=''").fetchall()
+        for rid, bait in rows:
+            bid = bait_id_for(bait, bait_map, zh_idx)
+            if bid:
+                db.execute("UPDATE rf4records_catch SET bait_id=? WHERE rowid=?", (bid, rid))
+                hit += 1
+            else:
+                miss += 1
         db.commit()
         db.close()
-        print(f"reparse 完成：按最新映射刷新 {total} 行 fish_key")
+        print(f"reparse 完成：fish_key 刷新 {total} 行；bait_id 补映射命中 {hit}，仍缺 {miss}")
         return
     total_new = total_seen = total_bait_hit = total_bait_rows = 0
     for i, fish in enumerate(fishes, 1):
