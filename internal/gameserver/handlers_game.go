@@ -1259,6 +1259,17 @@ func hFishingPull(ctx *Ctx) ([]byte, bool) {
 	// 鱼战状态一致性）；精力闸门只在 14/2 抛投入口生效。
 	srv.spendEnergy(ctx.Sess.pushCtx(), ctx.Sess.Userid, srv.conditionParams().PullEnergyCost)
 	st := srv.fishingStateForRequest(ctx)
+	// 【永不脱钩】只有海钓的 14/9 才会走进嘬饵判定，所以先在锁外做一次
+	// 浅判断：玩家搏鱼时会连点右键，不能让每次小刺都开一个 SQLite 事务。
+	st.mu.Lock()
+	marinePull := st.Pending != nil && marineRigType(st.RigType)
+	st.mu.Unlock()
+	noEscape := false
+	if marinePull {
+		// 【永不脱钩】/【简易手杆】都跳过海钓 14/9 的嘬饵否决。
+		noEscape = srv.gearFeatureEnabled(ctx.Sess.pushCtx(), ctx.Sess.Userid, "noescape") ||
+			srv.gearFeatureEnabled(ctx.Sess.pushCtx(), ctx.Sess.Userid, "instantbite")
+	}
 	st.mu.Lock()
 	wasHooked := st.Hooked
 	pending, gear, rigType := st.Pending, st.GearGuid, st.RigType
@@ -1269,7 +1280,7 @@ func hFishingPull(ctx *Ctx) ([]byte, bool) {
 	needsConfirmation := marineRigType(rigType) && pending != nil && castActive && !resolved && !pending.HookConfirmed
 	reconfirm := marineRigType(rigType) && pending != nil && pending.HookConfirmed && !wasHooked && castActive && !resolved
 	nibble := false
-	if needsConfirmation {
+	if needsConfirmation && !noEscape {
 		nibble = srv.hookNibbleEnabled() && !pending.LuckProtected && pending.BiteQuality == "nibble"
 		if !wasHooked && !nibble {
 			nibble = hookRetentionFails(pending)
@@ -1323,6 +1334,11 @@ func hFishingPull(ctx *Ctx) ([]byte, bool) {
 func hFishingHooked(ctx *Ctx) ([]byte, bool) {
 	srv := ctx.Sess.Srv
 	st := srv.fishingStateForRequest(ctx)
+	// 【永不脱钩】要在锁外查库：SQLite 是单连接，持竿锁查库会把这根竿的
+	// 其它帧一起堵住。开启后嘬饵与钩型保持率都不再否决中钩。
+	// 【简易手杆】同样跳过嘬饵/钩型保持：中鱼指示器提示后提杆 100% 上鱼。
+	noEscape := srv.gearFeatureEnabled(ctx.Sess.pushCtx(), ctx.Sess.Userid, "noescape")
+	simpleRod := srv.gearFeatureEnabled(ctx.Sess.pushCtx(), ctx.Sess.Userid, "instantbite")
 	st.mu.Lock()
 	wasHooked := st.Hooked
 	pending := st.Pending
@@ -1345,10 +1361,14 @@ func hFishingHooked(ctx *Ctx) ([]byte, bool) {
 	}
 	// 钩型保持率只在首次中钩确认时抽样一次；已经 Hooked 的早期确认
 	// 或登录恢复不再重抽，但仍需为这尾鱼记录一次确认完成。
-	nibble := pending != nil && srv.hookNibbleEnabled() && !pending.LuckProtected && pending.BiteQuality == "nibble"
-	if pending != nil && !wasHooked && !nibble && hookRetentionFails(pending) {
-		pending.BiteQuality = "nibble"
-		nibble = true
+	// 【永不脱钩】开启时不抽这两项：嘬饵与保持失败都不再否决中钩。
+	nibble := false
+	if !noEscape && !simpleRod && pending != nil {
+		nibble = srv.hookNibbleEnabled() && !pending.LuckProtected && pending.BiteQuality == "nibble"
+		if !wasHooked && !nibble && hookRetentionFails(pending) {
+			pending.BiteQuality = "nibble"
+			nibble = true
+		}
 	}
 	if !nibble {
 		st.Hooked = true
@@ -1449,14 +1469,28 @@ func hFishingLeft(ctx *Ctx) ([]byte, bool) {
 	//   其他：保守按本轮没有鱼处理。
 	srv := ctx.Sess.Srv
 	st := srv.fishingStateForRequest(ctx)
-	f0 := uint32(0)
+	f0, f1, f2 := uint32(0), uint32(0), uint32(0)
 	if ctx.Tree != nil {
-		if o := findObj(ctx.Tree, "lhicjpmglbo"); o != nil && o.FieldCount() > 0 {
-			f0 = u32Of(o.Field(0).Num)
+		if o := findObj(ctx.Tree, "lhicjpmglbo"); o != nil {
+			// f0 是状态码；f1/f2 是客户端遥测（张力保持值/钩保持值），
+			// 原先只记 f0，排查“为什么判没兴趣”时缺依据。
+			if o.FieldCount() > 0 {
+				f0 = u32Of(o.Field(0).Num)
+			}
+			if o.FieldCount() > 1 {
+				f1 = u32Of(o.Field(1).Num)
+			}
+			if o.FieldCount() > 2 {
+				f2 = u32Of(o.Field(2).Num)
+			}
 		}
 	}
+	// 【永不脱钩】只在这几种“鱼跑了”的帧上查开关：14/12 是状态同步帧，
+	// 每条都开一次事务查库没必要。读失败按关闭处理。
+	escapeFrame := f0 == 1 || f0 == 2 || f0 == 7 || f0 == 8
+	noEscape := escapeFrame && srv.gearFeatureEnabled(ctx.Sess.pushCtx(), ctx.Sess.Userid, "noescape")
 	st.mu.Lock()
-	ctx.Log.Info("14/12 鱼状态", "rod", shortGUID(st.GearGuid), "f0", f0, "hooked", st.Hooked)
+	ctx.Log.Info("14/12 鱼状态", "rod", shortGUID(st.GearGuid), "f0", f0, "f1", f1, "f2", f2, "hooked", st.Hooked)
 	// 14/12 顶层 args 为 [竿 GUID, 鱼 GUID, 状态对象]（实机 TRACE 与 14/14
 	// 推送核对）。鱼 GUID 与当前 Pending 不一致的是陈旧/异常帧：它描述的是
 	// 别的鱼，不得影响正在搏斗或待入护的这条。
@@ -1510,6 +1544,23 @@ func hFishingLeft(ctx *Ctx) ([]byte, bool) {
 			st.Resolved = true
 		}
 		st.mu.Unlock()
+		return nil, true
+	}
+	if escapeFrame && noEscape && st.Hooked && st.Pending != nil && st.CastActive &&
+		st.noEscapeRepush < maxNoEscapeRepush {
+		// 【永不脱钩】：客户端判定跑鱼，服务端把同一尾鱼重新挂上。
+		// 复用 14/12 f0=3/5/6 的重推路径（2 秒后重推 14/14 鱼实体），
+		// 区别是不记跑鱼、不消耗鱼，并用 maxNoEscapeRepush 兜底。
+		st.noEscapeRepush++
+		retry := st.noEscapeRepush
+		fish := st.Pending.FishGUID
+		st.Hooked = false
+		st.PushSent = false
+		st.PendingRepush = 0
+		srv.armPendingTimerLocked(ctx.Sess.Userid, st, 2*time.Second)
+		st.mu.Unlock()
+		ctx.Log.Info("【永不脱钩】客户端判定跑鱼，原地重推同一尾", "f0", f0,
+			"fish", shortGUID(fish), "retry", retry)
 		return nil, true
 	}
 	if f0 == 1 || f0 == 2 || f0 == 8 {

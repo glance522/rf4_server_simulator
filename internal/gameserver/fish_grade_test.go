@@ -35,7 +35,7 @@ func TestFishGradeRulerBoundariesAndWire(t *testing.T) {
 					t.Fatalf("%s %dg: grade=%d want=%d", tc.species, weight, grade, want)
 				}
 				f := &RolledFish{FishGUID: newFishGUID(), Species: tc.species, WeightG: weight, Grade: grade}
-				if got := u32Of(s.buildFish27(f, "", "", 24).Field(2).Num); got != uint32(want) {
+				if got := u32Of(s.buildFish27(f, "", "", 24, false).Field(2).Num); got != uint32(want) {
 					t.Fatalf("27 grade=%d want=%d", got, want)
 				}
 				for _, obj := range []*proto.Value{

@@ -152,7 +152,7 @@ func TestFishModelKeySharedByEntityAndKeepnet(t *testing.T) {
 	if want == "" {
 		t.Fatal("大西洋鲑应当有族名")
 	}
-	tree27 := srv.buildFish27(f, "", "", 24)
+	tree27 := srv.buildFish27(f, "", "", 24, false)
 	if tree27.Fields[22].Str == nil || *tree27.Fields[22].Str != want {
 		t.Fatalf("27.f22 = %v，want %q", tree27.Fields[22].Str, want)
 	}
@@ -200,7 +200,7 @@ func TestFishModelVariantOffKeepsOldWire(t *testing.T) {
 	srv.SetDB(db)
 	f := &RolledFish{FishGUID: "11223344556677889900112233445566", Species: "a_salmon",
 		Grade: 2, WeightG: 20000, LengthM: 1.05, Name: "老鲑"}
-	tree27 := srv.buildFish27(f, "", "", 24)
+	tree27 := srv.buildFish27(f, "", "", 24, false)
 	if tree27.Fields[22].Str == nil || *tree27.Fields[22].Str != "老鲑" {
 		t.Fatalf("关闭开关后 27.f22 应为命名鱼名字，得到 %v", tree27.Fields[22].Str)
 	}
