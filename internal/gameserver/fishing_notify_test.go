@@ -317,7 +317,52 @@ func TestFishLandedFallsBackToPlainChatWithoutKV(t *testing.T) {
 		t.Fatalf("KV 未启用时上鱼播报应退化为 kind=0 纯文本，实得 %v", got)
 	}
 	mf1 := msg.Field(1)
-	if txt := mf1.StrOr(); !strings.Contains(txt, "钓获奖杯") || !strings.Contains(txt, "4.10kg") {
+	if txt := mf1.StrOr(); !strings.Contains(txt, "4.10kg") {
 		t.Fatalf("上鱼播报文本不符: %q", txt)
+	}
+}
+
+// 频道播报：本人与其他在线玩家各收到一条 24/27，本人不重复。
+func TestFishLandedBroadcastsToPeersOnce(t *testing.T) {
+	srv, db := newRigTestServer(t)
+	if _, err := db.SQL.Exec(`INSERT INTO loc_wiki_fish(loc,fish_key,fish_zh)
+		VALUES('catch-chat-test','g_tench','丁鱵')`); err != nil {
+		t.Fatal(err)
+	}
+	me, meGC := newTunnelProbe(t, srv)
+	me.ID, me.Userid = 71, 1000001
+	srv.sessions[me.ID] = me
+	peer, peerGC := newTunnelProbe(t, srv)
+	peer.ID, peer.Userid = 72, 1000002
+	srv.sessions[peer.ID] = peer
+
+	fish := &RolledFish{Species: "g_tench", Grade: 3, WeightG: 4100}
+	srv.notifyFishLanded(me, fish, false)
+
+	for _, c := range []struct {
+		name string
+		gc   *tunnel.Conn
+	}{{"本人", meGC}, {"其他玩家", peerGC}} {
+		env := awaitPushEnvelope(t, c.gc)
+		if env.Main != 24 || env.Sub != 27 {
+			t.Fatalf("%s应收到 24/27，实得 %d/%d", c.name, env.Main, env.Sub)
+		}
+		if !bytes.Contains(env.Body, []byte("4.10kg")) {
+			t.Fatalf("%s收到的频道正文缺少重量", c.name)
+		}
+	}
+
+	// 每人不重复：再等一小段窗口，不应有第二条推送。
+	ch := make(chan error, 2)
+	for _, gc := range []*tunnel.Conn{meGC, peerGC} {
+		go func(gc *tunnel.Conn) {
+			_, _, _, err := gc.ReadRecord()
+			ch <- err
+		}(gc)
+	}
+	select {
+	case err := <-ch:
+		t.Fatalf("同一尾鱼不应重复播报，实得多余推送: %v", err)
+	case <-time.After(400 * time.Millisecond):
 	}
 }

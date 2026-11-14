@@ -2537,6 +2537,10 @@ func (s *Server) fishLandedKV(f *RolledFish) *proto.Value {
 }
 
 // notifyFishLanded 播报达标、奖杯和蓝冠；普通鱼由结算卡展示。
+// 默认同时把同一条播报推给其他在线玩家（频道播报），可用 tunables 关闭：
+//
+//	fish_catch_channel       1=开启跨玩家频道播报（默认 1），0=只播给自己
+//	fish_catch_channel_grade 播报最低档位（默认 0=全部；2=达标及以上）
 func (s *Server) notifyFishLanded(sess *Session, f *RolledFish, newRecord bool) {
 	if sess == nil || f == nil {
 		return
@@ -2545,13 +2549,41 @@ func (s *Server) notifyFishLanded(sess *Session, f *RolledFish, newRecord bool) 
 	// 管理员显式设置 fish_tv_kv=0 时退化为普通系统文本播报，避免客户端
 	// 解析模板缺参导致断连。
 	kind := fishAnnouncementKind(f.Grade)
-	if kind != 0 && s.tunableF("fish_tv_kv", 1) != 0 {
-		sess.pushChatProbe(27, kind, "", s.fishLandedKV(f))
+	useKV := kind != 0 && s.tunableF("fish_tv_kv", 1) != 0
+
+	// 频道播报开启且这条鱼符合档位门槛时，本人也只保留频道那一行：
+	// 之前"本人卡 + 频道行"会让当事人看到两条同样的播报。
+	broadcast := s.tunableF("fish_catch_channel", 1) != 0 &&
+		f.Grade >= int64(s.tunableF("fish_catch_channel_grade", 0))
+	if !broadcast {
+		if useKV {
+			sess.pushChatProbe(27, kind, "", s.fishLandedKV(f))
+		} else if text := s.fishLandedText(f, newRecord); text != "" {
+			sess.pushSystemChat(text)
+		}
 		return
 	}
-	if text := s.fishLandedText(f, newRecord); text != "" {
-		sess.pushSystemChat(text)
+	// 频道那一行按实测 C 形态写：kind 决定颜色（25=蓝冠深橘红、26=奖杯橘黄、
+	// 3=达标/普通蓝色）+ 仍带模板参数 + 正文自己给；实测 25/26/3 都只渲染正文，
+	// 不会追加昵称和"钓获："前缀。
+	// 文案形如「河鳌虾179g」「江鳕2.63kg」，与挡位无关。
+	// skip=nil：本人也算接收者，每人只看到这一条。
+	label := s.speciesZhName(s.dbCtx(), f.Species)
+	if label == "" {
+		label = f.Species
 	}
+	text := label + formatWeightG(f.WeightG)
+	if s.tunableF("fish_tv_kv", 1) == 0 {
+		// 管理员关掉模板参数时退化为纯文本（白色），避免客户端解析缺参断连。
+		s.broadcastChatProbeIncludingSelf(sess, uint64(sess.Userid), 27, 0, text, nil)
+		return
+	}
+	gradeKind := fishAnnouncementKind(f.Grade)
+	if gradeKind == 0 {
+		// 普通鱼（未达标）没有专属模板，统一用达标蓝。
+		gradeKind = 3
+	}
+	s.broadcastChatProbeIncludingSelf(sess, uint64(sess.Userid), 27, gradeKind, text, s.fishLandedKV(f))
 }
 
 // notifyFishKept 入护播报已永久停用：结算卡已经展示入护结果，
@@ -2603,6 +2635,8 @@ var fishEscapeTaunts = []string{
 // notifyFishEscape 跑鱼提示：类型3（蓝色 KV 模板），文案带随机语气词，
 // 重量走键2（客户端模板句尾自动显示“X 克/公斤”）。
 // fish_escape_taunt=0 或没有在途鱼体时回退官方原因模板。
+// 默认同时推给其他在线玩家（频道播报），fish_escape_channel=0 可关闭；
+// fish_escape_channel_grade 只播档位不低于该值的跑鱼（默认 0=全部）。
 func (s *Server) notifyFishEscape(sess *Session, f *RolledFish, reason string) {
 	if s == nil || sess == nil {
 		return
@@ -2611,33 +2645,47 @@ func (s *Server) notifyFishEscape(sess *Session, f *RolledFish, reason string) {
 	if kind, ok := escapeTemplateKind[reason]; ok {
 		officialKind = kind
 	}
-	if f == nil || s.tunableF("fish_escape_taunt", 1) == 0 {
-		sess.pushChatProbe(27, officialKind, "", nil)
-		return
-	}
-	weight := int64(0)
-	name := ""
-	tier := ""
-	if f != nil {
+	kind := officialKind
+	var kv *proto.Value
+	if f != nil && s.tunableF("fish_escape_taunt", 1) != 0 {
+		weight := int64(0)
 		if f.WeightG > 0 {
 			weight = f.WeightG
 		}
-		name = s.speciesZhName(s.dbCtx(), f.Species)
+		name := s.speciesZhName(s.dbCtx(), f.Species)
 		if name == "" {
 			name = f.Species
 		}
+		tier := ""
 		if f.Grade >= 4 {
 			tier = "超级稀有 "
 		} else if f.Grade == 3 {
 			tier = "稀有 "
 		}
+		taunt := fishEscapeTaunts[rand.Intn(len(fishEscapeTaunts))]
+		// 客户端 KV 模板恒在文案末尾追加“X 克/公斤”（缺键2 显示“0 克”），
+		// 服务端无法把重量插到句子中间。想让重量紧跟鱼名，只能把鱼名放到句尾：
+		//   "这都能跑！你的 稀有 丁鱵" + 客户端追加 " 1.5 千克"
+		text := "你的 " + tier + name + "，跑掉了，" + taunt + "！"
+		kv = fishTVKv(text, weight)
+		kind = 3
 	}
-	taunt := fishEscapeTaunts[rand.Intn(len(fishEscapeTaunts))]
-	// 客户端 KV 模板恒在文案末尾追加“X 克/公斤”（缺键2 显示“0 克”），
-	// 服务端无法把重量插到句子中间。想让重量紧跟鱼名，只能把鱼名放到句尾：
-	//   "这都能跑！你的 稀有 丁鱵" + 客户端追加 " 1.5 千克"
-	text := "你的 " + tier + name + "，跑掉了，" + taunt + "！"
-	sess.pushChatProbe(27, 3, "", fishTVKv(text, weight))
+
+	broadcast := s.tunableF("fish_escape_channel", 1) != 0 &&
+		(f == nil || f.Grade >= int64(s.tunableF("fish_escape_channel_grade", 0)))
+	if !broadcast {
+		if kv != nil {
+			sess.pushChatProbe(27, kind, "", kv)
+			return
+		}
+		sess.pushChatProbe(27, officialKind, "", nil)
+		return
+	}
+	// 频道播报开着时本人不再单独收一条：每人只看到频道里这一行。
+	if s.log != nil {
+		s.log.Info("跑鱼频道播报", "from", sess.Userid, "reason", reason, "kind", kind)
+	}
+	s.broadcastChatProbeIncludingSelf(sess, uint64(sess.Userid), 27, kind, "", kv)
 }
 
 // bumpFishingCounter 增加玩家钓鱼计数器（escapes 等），幂等累加。
