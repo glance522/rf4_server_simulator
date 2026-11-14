@@ -319,7 +319,7 @@ func baitQuantity(row *store.Item) int64 {
 		return 0
 	}
 	if fields, err := FieldsFromJSON(row.FieldsJSON); err == nil {
-		if idx := fieldIdxByCS(row.WireClass, csQty); idx >= 0 && idx < len(fields) && fields[idx].Num != nil {
+		if idx := itemQtyFieldIdx(row.WireClass); idx >= 0 && idx < len(fields) && fields[idx].Num != nil {
 			return int64(u64Of(fields[idx].Num))
 		}
 	}

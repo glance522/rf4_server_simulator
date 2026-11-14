@@ -2,12 +2,14 @@ package gameserver
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
 	"rf4server/internal/logging"
 	"rf4server/internal/proto"
 	"rf4server/internal/store"
+	"rf4server/internal/tunnel"
 )
 
 // enableLootBox 打开总开关（默认关闭，测试里显式开启）。
@@ -229,5 +231,91 @@ func TestLootBoxAwardsOnceOnKeptReplay(t *testing.T) {
 	}
 	if got != 1 {
 		t.Fatalf("重复 14/5 后礼包物品应为 1 件，实得 %d", got)
+	}
+}
+
+// TestLootBoxPushesEveryCouponRow 复审 P2-6：礼包开出多张券时，每一张券行
+// 都要推一条 4/22 背包增量。旧实现只推 AddToStack 返回的最后一行。
+func TestLootBoxPushesEveryCouponRow(t *testing.T) {
+	srv, db := newRigTestServer(t)
+	ctx := context.Background()
+	if _, err := db.SQL.Exec(`INSERT OR IGNORE INTO item_def(numeric_id,item_id,category,kind,brand,attrs_json)
+		VALUES(4825,'coupon_chuchelo',74,'coupon','','{}')`); err != nil {
+		t.Fatal(err)
+	}
+	def, err := db.GetItemDefByItemID(ctx, couponChucheloItemID)
+	if err != nil || def == nil {
+		t.Skip("静态库无券定义")
+	}
+
+	serverNet, peerNet := net.Pipe()
+	t.Cleanup(func() { _ = serverNet.Close(); _ = peerNet.Close() })
+	_ = serverNet.SetDeadline(time.Now().Add(10 * time.Second))
+	_ = peerNet.SetDeadline(time.Now().Add(10 * time.Second))
+	ready := make(chan *tunnel.Conn, 1)
+	go func() {
+		conn, err := tunnel.HandshakeServer(serverNet, srv.cfg.Tunnel.PSK)
+		if err == nil {
+			ready <- conn
+		}
+	}()
+	peer, err := tunnel.HandshakeClient(peerNet, srv.cfg.Tunnel.PSK)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var conn *tunnel.Conn
+	select {
+	case conn = <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("handshake 超时")
+	}
+	uid := int64(2100040)
+	sess := newSession(srv, 1, "loot-coupon-push", uid, conn)
+	srv.mu.Lock()
+	srv.sessions[1] = sess
+	srv.mu.Unlock()
+
+	// 后台持续读帧：net.Pipe 是同步写，没有读端会把 Push 卡死。
+	frames := make(chan *proto.Envelope, 64)
+	go func() {
+		for {
+			_, _, payload, err := peer.ReadRecord()
+			if err != nil {
+				return
+			}
+			if env, ok := proto.ParseEnvelope(payload); ok {
+				frames <- env
+			}
+		}
+	}()
+
+	box := lootBoxDef{ID: "coupon_box", Name: "券礼包", Chance: 1.0,
+		Rewards: []lootBoxReward{{ItemID: couponChucheloItemID, Qty: 3, Weight: 100}}}
+	if got := srv.grantLootBox(ctx, sess, box, nil, "测试"); got != couponChucheloItemID {
+		t.Fatalf("应开出券，实得 %q", got)
+	}
+
+	// grantLootBox 末尾还有一条 24/27 聊天推送，只数 4/22 背包增量。
+	updates := 0
+	deadline := time.After(2 * time.Second)
+	collect := true
+	for collect {
+		select {
+		case env := <-frames:
+			if env.Main == 4 && env.Sub == 22 {
+				updates++
+				if updates == 3 {
+					collect = false
+				}
+			}
+		case <-deadline:
+			collect = false
+		}
+	}
+	if updates != 3 {
+		t.Fatalf("应推 3 条 4/22（每张券一行），实得 %d", updates)
+	}
+	if r, q := couponRowCount(t, srv, uid); r != 3 || q != 3 {
+		t.Fatalf("应落 3 行 3 张，实得 %d 行 %d 张", r, q)
 	}
 }

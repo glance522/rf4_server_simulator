@@ -178,12 +178,14 @@ func (s *Server) grantLootBox(ctx context.Context, sess *Session, def lootBoxDef
 	if itemID == "" {
 		return ""
 	}
-	row, _, err := s.AddToStack(ctx, sess.Userid, itemID, "backpack", qty)
+	rows, err := s.grantItemUnits(ctx, sess.Userid, itemID, "backpack", qty)
 	if err != nil {
 		s.log.Warn("礼包发奖失败", "uid", sess.Userid, "box", def.ID, "item", itemID, "err", err)
 		return ""
 	}
-	s.pushItemUpdate(sess.Userid, row)
+	for _, row := range rows {
+		s.pushItemUpdate(sess.Userid, row)
+	}
 	// 可选载体：让背包里出现一个看得见的"袋子"。
 	if def.CarrierItem != "" && def.CarrierItem != itemID {
 		qty := def.CarrierQty
@@ -192,8 +194,10 @@ func (s *Server) grantLootBox(ctx context.Context, sess *Session, def lootBoxDef
 		}
 		if !s.lootCarrierItemEligible(ctx, def.CarrierItem) {
 			s.log.Warn("福袋载体已跳过", "uid", sess.Userid, "carrier", def.CarrierItem)
-		} else if crow, _, cerr := s.AddToStack(ctx, sess.Userid, def.CarrierItem, "backpack", qty); cerr == nil {
-			s.pushItemUpdate(sess.Userid, crow)
+		} else if crows, cerr := s.grantItemUnits(ctx, sess.Userid, def.CarrierItem, "backpack", qty); cerr == nil {
+			for _, crow := range crows {
+				s.pushItemUpdate(sess.Userid, crow)
+			}
 		} else {
 			s.log.Warn("福袋载体发放失败", "uid", sess.Userid, "carrier", def.CarrierItem, "err", cerr)
 		}

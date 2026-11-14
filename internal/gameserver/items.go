@@ -117,6 +117,12 @@ var categoryWireClass = map[int64]wireClassEntry{
 	70: {"lligmmmgllg", 12703}, // case 68 ddhcineacka
 	71: {"focdogajjcc", 13001}, // case 69 lcadlijehco
 	72: {"enikeammfen", 2015},  // case 70 iidloljandl
+	// 梦鱼优惠券（cat 74）此前没有映射，prepareNewItem 回落到钓线兜底类
+	// ohciikgjghe/140，客户端按钓线 DTO 强转，标本制作商店的材料列表里
+	// 找不到这张券，制作无法进行。定义类 fpcfjngdcho/13015 的域字段
+	// fopbhlmkcpe/ppiooalfgii/eiofdcjlaai 与 coupon_chuchelo.attrs_json
+	// 完全吻合，其配对实例类为 ahgeldclmdj/13018（同族锚点：cat76→13041）。
+	74: {"ahgeldclmdj", 13018}, // case 72 mpjcnoimibo：梦鱼优惠券
 	76: {"fdnngkgnmon", 13041}, // case 74 ghikepgmojg
 	78: {"dapkdcghfmg", 11301}, // case 76 ipdpoaiekem
 	82: {"ckfmndabaei", 11304}, // imdcjllgdcn 卡册
@@ -134,6 +140,15 @@ func resolveWireClass(def *store.ItemDef) (wireClassEntry, bool) {
 	cls, ok := categoryWireClass[def.Category]
 	return cls, ok
 }
+
+// couponCategory 梦鱼优惠券（标本制作商店的免单券，一次制作消耗一张）。
+//
+// 券**不入** countableCategories：它的实例类 ahgeldclmdj 只有 dnmfciolgep
+// （剩余数量），没有客户端 UI 数量槽 ljnnpokapig，整个票券族（cat 39/55/74/76）
+// 都没有该槽，所以一张券堆成一行永远显示不出「还剩几张」。改为「一张券一个
+// 实例」：每行 dnmfciolgep 恒为 1，发放 N 张就建 N 行，制作一次删一行——客户端
+// 按 GUID 逐件渲染，玩家看到的就是 N 张卡（实机两行=两张卡已验证）。
+const couponCategory = 74
 
 // 客户端计件类别（可堆叠合并）；钓线(11)/前导(15) 同名字段是长度 m；浮漂(28) 显式非计件。
 var countableCategories = map[int64]bool{
@@ -168,7 +183,8 @@ func fieldOpAt(class string, idx int) string {
 // PVA pcngolccead/bebejlknhka。
 func metaQtyFamily(class string) bool {
 	return class == "abmokghdbhf" || class == "bpmmimcmpof" || class == "deckldefiap" ||
-		class == "dpghngjmnap" || class == "pcngolccead"
+		class == "dpghngjmnap" || class == "pcngolccead" ||
+		class == "ahgeldclmdj" // 梦鱼优惠券：13 字段 meta 基类，权威数量槽 dnmfciolgep
 }
 
 // itemQtyFieldIdx 可堆叠数量槽 idx。多数实例类的数量字段就叫 ljnnpokapig；
@@ -1190,8 +1206,8 @@ func netTicksNow() int64 {
 var reclassifyCategories = map[int64]bool{
 	2: true, 19: true, 20: true, 30: true, 33: true, 38: true, 41: true,
 	42: true, 45: true, 47: true, 55: true, 57: true, 58: true, 61: true,
-	62: true, 63: true, 69: true, 70: true, 71: true, 72: true, 76: true,
-	78: true, 79: true, 82: true,
+	62: true, 63: true, 69: true, 70: true, 71: true, 72: true, 74: true,
+	76: true, 78: true, 79: true, 82: true,
 }
 
 func (s *Server) reclassifyStoredItem(ctx context.Context, it *store.Item, def *store.ItemDef) (bool, error) {
@@ -1246,6 +1262,10 @@ func (s *Server) reclassifyStoredItem(ctx context.Context, it *store.Item, def *
 	setNum(csNumericID, uint64(def.NumericID))
 	rowQty := it.Qty
 	if countableCategories[def.Category] {
+		writeItemQty(cls.Class, obj, uint64(rowQty))
+	} else if def.Category == couponCategory {
+		// 券已退出 countableCategories，但实例类 ahgeldclmdj 的权威数量槽
+		// dnmfciolgep 仍须写回，否则改写后数量槽保持 0，客户端读不出这一张。
 		writeItemQty(cls.Class, obj, uint64(rowQty))
 	}
 	workmanship := it.Workmanship
@@ -1329,6 +1349,13 @@ func (s *Server) CreateItem(ctx context.Context, uid int64, itemID, container st
 			writeItemQty(cls.Class, obj, fieldQty)
 			rowQty = int64(fieldQty)
 		}
+	} else if def.Category == couponCategory {
+		// 一券一实例：数量槽固定 1，行数即张数。units 必须严格等于 1：
+		// 多张请走 grantItemUnits/prepareCouponRows；units<1 也不能白送一张。
+		if units != 1 {
+			return nil, fmt.Errorf("梦鱼券需按张建行，CreateItem 不支持 units=%d", units)
+		}
+		writeItemQty(cls.Class, obj, 1)
 	}
 	// 嵌套子配置物化（渔轮/前导/拟饵）
 	s.materializeInto(ctx, cls.Class, def, obj, guid, 1.0, 1.0)
@@ -1405,11 +1432,92 @@ func (s *Server) prepareNewItemWithCount(ctx context.Context, uid int64, itemID,
 	return it, nil
 }
 
+// prepareCouponRows 按「一张券一个实例」构造 count 张独立券（不落库）。
+//
+// 券的数量槽本身可用（dnmfciolgep），但客户端背包不读它、只按行渲染，
+// 所以张数必须用行数表达。上限沿用组合包的实例数上限，避免一次构造过多。
+func (s *Server) prepareCouponRows(ctx context.Context, uid int64, itemID, container string, count int64) ([]*store.Item, error) {
+	if count < 1 {
+		count = 1
+	}
+	if count > maxBundlePreparedItems {
+		return nil, fmt.Errorf("梦鱼券张数 %d 超过上限 %d", count, maxBundlePreparedItems)
+	}
+	rows := make([]*store.Item, 0, count)
+	for i := int64(0); i < count; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		it, err := s.prepareNewItem(ctx, uid, itemID, container, 1, "")
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, it)
+	}
+	return rows, nil
+}
+
+// insertPreparedRows 在一个经济事务里插入多行，任一行失败整体回滚。
+func (s *Server) insertPreparedRows(ctx context.Context, rows []*store.Item) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	tx, err := beginEconomyTx(ctx, s.DB)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, it := range rows {
+		if _, _, gerr := grantPreparedItemTx(ctx, tx, it, false); gerr != nil {
+			return gerr
+		}
+	}
+	return tx.Commit()
+}
+
+// grantItemUnits 发放 units 件物品并返回全部新行：可堆叠类别合并成一行，
+// 梦鱼券按件建行。管理指令、礼包等按「件数」发东西的入口都走这里。
+func (s *Server) grantItemUnits(ctx context.Context, uid int64, itemID, container string, units int64) ([]*store.Item, error) {
+	def, err := s.DB.GetItemDefByItemID(ctx, itemID)
+	if err != nil || def == nil {
+		return nil, fmt.Errorf("物品定义不存在: %s", itemID)
+	}
+	if def.Category != couponCategory {
+		it, _, aerr := s.AddToStack(ctx, uid, itemID, container, units)
+		if aerr != nil {
+			return nil, aerr
+		}
+		return []*store.Item{it}, nil
+	}
+	rows, err := s.prepareCouponRows(ctx, uid, itemID, container, units)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.insertPreparedRows(ctx, rows); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 // AddToStack 为可堆叠物品合并数量，返回现有物品或新行。
 func (s *Server) AddToStack(ctx context.Context, uid int64, itemID, container string, units int64) (*store.Item, bool, error) {
 	def, err := s.DB.GetItemDefByItemID(ctx, itemID)
 	if err != nil || def == nil {
 		return nil, false, fmt.Errorf("物品定义不存在: %s", itemID)
+	}
+	if def.Category == couponCategory {
+		// 梦鱼券：一张一个实例。调用方给的是张数，就逐张建行。
+		rows, err := s.prepareCouponRows(ctx, uid, itemID, container, units)
+		if err != nil {
+			return nil, false, err
+		}
+		if len(rows) == 0 {
+			return nil, false, fmt.Errorf("梦鱼券张数无效: %d", units)
+		}
+		if err := s.insertPreparedRows(ctx, rows); err != nil {
+			return nil, false, err
+		}
+		return rows[len(rows)-1], false, nil
 	}
 	if !countableCategories[def.Category] {
 		it, err := s.CreateItem(ctx, uid, itemID, container, units)

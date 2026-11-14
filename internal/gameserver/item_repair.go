@@ -218,6 +218,22 @@ func (s *Server) RepairItemPhysics(ctx context.Context) error {
 		s.log.Info("拟饵钩槽迁移完成", "lures_fixed", fixed)
 	}
 
+	// 梦鱼优惠券存量补偿：数量塌陷的券行按发放审计 + 制作流水补回余量。
+	// 放在常规扫描之前——常规扫描只对齐字段结构，不会把 qty=1 抬回真实余量。
+	if fixed, err := s.repairCouponGrantQuantities(ctx); err != nil {
+		return fmt.Errorf("物品物理状态修复：梦鱼券存量补偿: %w", err)
+	} else if fixed > 0 {
+		s.log.Info("梦鱼券存量补偿完成", "coupons_fixed", fixed)
+	}
+
+	// 梦鱼券「一张一个实例」展开：券类没有客户端数量槽，一行多张显示不出张数。
+	// 必须在数量补偿之后——先让总张数正确，再按张数铺成多行。
+	if fixed, err := s.repairCouponRowLayout(ctx); err != nil {
+		return fmt.Errorf("物品物理状态修复：梦鱼券展开: %w", err)
+	} else if fixed > 0 {
+		s.log.Info("梦鱼券展开完成", "players_fixed", fixed)
+	}
+
 	rows, err := s.DB.SQL.QueryContext(ctx, `SELECT guid FROM item ORDER BY guid`)
 	if err != nil {
 		return fmt.Errorf("物品物理状态修复：列出物品: %w", err)
@@ -347,6 +363,9 @@ func (s *Server) RepairItemPhysics(ctx context.Context) error {
 			rowChanged = true
 		}
 		// 计件物品以 fields_json 的 ljnnpokapig 为准，修正 item.qty。
+		// 这里必须用 csQty 而不是 itemQtyFieldIdx：后者对 metaQtyFamily 类
+		// （如 cat58 的 bpmmimcmpof）返回的是 dnmfciolgep 槽，那是 attrs 里的
+		// 常量语义而不是「还剩多少件」，会把 item.qty 改写成该常量（实测 100）。
 		if def, derr := s.DB.GetItemDef(ctx, it.NumericID); derr == nil && def != nil && countableCategories[def.Category] {
 			if qi := fieldIdxByCS(it.WireClass, csQty); qi >= 0 && qi < len(fields) {
 				if q := int64(u64Of(fields[qi].Num)); q > 0 && q != it.Qty {

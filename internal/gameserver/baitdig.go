@@ -369,7 +369,7 @@ func setPreparedItemQuantity(it *store.Item, qty int64) error {
 	if err != nil {
 		return err
 	}
-	idx := fieldIdxByCS(it.WireClass, csQty)
+	idx := itemQtyFieldIdx(it.WireClass)
 	if idx < 0 || idx >= len(fields) {
 		return fmt.Errorf("物品 %s 没有数量字段", it.ItemID)
 	}

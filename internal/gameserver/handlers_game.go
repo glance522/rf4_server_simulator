@@ -1868,18 +1868,23 @@ func (s *Server) grantPremiumBundle(ctx context.Context, c *Ctx, uid int64, plac
 	}
 	granted := 0
 	for _, it := range hit.Items {
-		row, gerr := s.CreateItem(ctx, uid, it.ItemID, "backpack", it.Qty)
-		if gerr != nil || row == nil {
+		rows, gerr := s.grantItemUnits(ctx, uid, it.ItemID, "backpack", it.Qty)
+		if gerr != nil {
 			c.Log.Warn("捆绑包物品发放失败", "bundle", name, "item", it.ItemID, "err", gerr)
 			continue
 		}
-		if serr := s.DB.SetItemSlot(ctx, row.GUID, slot); serr != nil {
-			c.Log.Warn("捆绑包物品槽位设置失败", "item", it.ItemID, "slot", slot, "err", serr)
-		}
-		slot++
-		granted++
-		if c.Sess != nil {
-			s.pushItemUpdate(c.Sess.Userid, row)
+		for _, row := range rows {
+			if row == nil {
+				continue
+			}
+			if serr := s.DB.SetItemSlot(ctx, row.GUID, slot); serr != nil {
+				c.Log.Warn("捆绑包物品槽位设置失败", "item", it.ItemID, "slot", slot, "err", serr)
+			}
+			slot++
+			granted++
+			if c.Sess != nil {
+				s.pushItemUpdate(c.Sess.Userid, row)
+			}
 		}
 	}
 	c.Log.Info("捆绑包附赠物品已发放", "bundle", name, "place", place, "price", price,

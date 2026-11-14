@@ -595,6 +595,24 @@ func (s *Server) acceptMails(ctx *Ctx, ids []int64) (int, []*store.Item, error) 
 					plan.prepared = append(plan.prepared, items...)
 					continue
 				}
+				if def.Category == couponCategory {
+					// 梦鱼券一张一个实例：附件写 999 张就落 999 行。
+					// 券没有逐实例差异（字段全是定义属性），直接按定义重建，
+					// 不走快照，避免多行复用同一个快照 GUID 撞主键。
+					couponQty := att.Qty
+					if couponQty < 1 {
+						couponQty = 1
+					}
+					rows, rerr := s.prepareCouponRows(cctx, uid, att.ItemID, "backpack", couponQty)
+					if rerr != nil {
+						ctx.Log.Warn("19/3 梦鱼券构造失败", "mail", id, "qty", couponQty, "err", rerr)
+						skipped = append(skipped, fmt.Errorf("邮件 %d 梦鱼券构造失败: %w", id, rerr))
+						plan.invalid = true
+						break
+					}
+					plan.prepared = append(plan.prepared, rows...)
+					continue
+				}
 				var it *store.Item
 				if m.AttachmentSnapshotVersion > 0 {
 					it, err = s.prepareMailSnapshotItem(cctx, uid, att)
@@ -887,12 +905,15 @@ func (s *Server) execAdminCmd(cmd *AdminCommand) {
 			s.log.Info("管理指令：踢下线", "uid", cmd.UID)
 		}
 	case "grant_item":
-		row, _, err := s.AddToStack(ctx, cmd.UID, cmd.ItemID, "backpack", cmd.Qty)
+		rows, err := s.grantItemUnits(ctx, cmd.UID, cmd.ItemID, "backpack", cmd.Qty)
 		if err != nil {
 			s.log.Warn("管理指令：发物品失败", "uid", cmd.UID, "item", cmd.ItemID, "err", err)
 		} else {
-			s.pushItemUpdate(cmd.UID, row)
-			s.log.Info("管理指令：发物品", "uid", cmd.UID, "item", cmd.ItemID, "qty", cmd.Qty)
+			for _, row := range rows {
+				s.pushItemUpdate(cmd.UID, row)
+			}
+			s.log.Info("管理指令：发物品", "uid", cmd.UID, "item", cmd.ItemID,
+				"qty", cmd.Qty, "rows", len(rows))
 		}
 	case "delete_item":
 		deleted := make([]string, 0, len(cmd.GUIDs))

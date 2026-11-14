@@ -140,7 +140,7 @@ func (s *Server) useAlcoholDrink(ctx *Ctx) ([]byte, bool) {
 	if err != nil {
 		return failed(err)
 	}
-	qtyIdx := fieldIdxByCS(row.WireClass, csQty)
+	qtyIdx := itemQtyFieldIdx(row.WireClass)
 	if len(fields) != len(s.table.OpsFor(row.WireClass)) {
 		return fail("饮品数量无效，请刷新背包")
 	}
