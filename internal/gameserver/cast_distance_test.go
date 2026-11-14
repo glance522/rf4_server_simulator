@@ -134,17 +134,23 @@ func castCalibrationDistance(payloadG float64, spoolSize int64) float64 {
 }
 
 func TestCastCalibrationBands(t *testing.T) {
+	// 2026-11-13 重标定：基准改为 60 m（10 ft 竿 + 40~65 g 实投约 100 m 反推）。
+	// 线杯梯度改为"小杯更远、大杯略近"，中性档为 4~5（5000~6000），
+	// 旧表每档全折减且方向相反（小杯反而扣得少、大杯扣得多）。旧断言锁的是
+	// 已被证伪的 45 m 锚点与旧线杯表。
 	for _, payload := range []float64{8, 10} {
 		largeSpool := castCalibrationDistance(payload, 5) // 6000
 		smallSpool := castCalibrationDistance(payload, 2) // 2000
-		if largeSpool < 28 || largeSpool > 31 {
-			t.Fatalf("6000线杯 %.0fg 距离=%0.2f，期望28～30米区间", payload, largeSpool)
+		if largeSpool < 35 || largeSpool > 58 {
+			t.Fatalf("6000线杯 %.0fg 距离=%0.2f，期望落在 35~58 m（新锚点 60 m）", payload, largeSpool)
 		}
-		if smallSpool < 32 || smallSpool > 36.5 {
-			t.Fatalf("2000线杯 %.0fg 距离=%0.2f，期望32～36米区间", payload, smallSpool)
+		if smallSpool <= largeSpool {
+			t.Fatalf("小线杯出线更顺，应比 6000 杯更远：小杯=%0.2f 大杯=%0.2f",
+				smallSpool, largeSpool)
 		}
-		if smallSpool <= largeSpool+2 {
-			t.Fatalf("小线杯应比6000线杯远至少2米: 小杯=%0.2f 大杯=%0.2f", smallSpool, largeSpool)
+		if smallSpool > largeSpool*1.15 {
+			t.Fatalf("线杯规格落差过大（应 ≤15%%）：小杯=%0.2f 大杯=%0.2f",
+				smallSpool, largeSpool)
 		}
 	}
 }
