@@ -1,15 +1,26 @@
-# rf4records.com 英文鱼名 -> 本地 fish_key 映射表。
-# rf4records.com 英文鱼名 -> 本地 fish_key。rf4records /api/records/filter-values 的 252 个英文名对本库 251 个 fish_key。规则：有把握的直接映射；不确定的不要填键（入库时 fish_key 留空、保留英文名，待人工补）。对照依据：loc_wiki_fish/loc_fish 中文名 + RF4 鱼种英文名常识。校对者请只增改不删。
-# 未映射的 14 个源站名（入库 fish_key 留空）：American plaice, Beloribitsa Whitefish,
-# Black Sea trout, Caspian Brown Trout, Crucian Carp, Dryagin Char, Longear eelpout,
-# Longhead dab, Red Starvas Carp - Scaly, Siberian Lamprey, Sichel,
-# Starvas Red Carp - Mirror, Volga Zander, White Bream
+# rf4records.com 英文鱼名 -> 本地 fish_key 映射表（源站 252 名单全覆盖）。
+# 判据（2026-11-15）：240 条按 RF4 鱼种常识，12 条难点用三层证据裁决：
+# 1) top 饵清单逐项对照（companion 中文名 vs rf4records bait_display）：
+#    Crucian->c.carp（大麦粥/湿面包/黑加仑/甜奶油）、Beloribitsa->wfish、Sichel->sabrefish、
+#    Volga Zander->barsch、Dryagin->dr_char（Veikko/Type1/七鳃鳗特征组）、Siberian Lamprey->s_lamprey
+# 2) 水域分布（rf4records waterbody vs loc_fish）：Beloribitsa 1.000 唯阿赫图巴、
+#    Dryagin 100% 下通古斯卡、Vimba->v_bream 0.782、Sichel->sabrefish 0.972
+# 3) 官方体重线（fish_grade_lines）：Red Char max 7036g 吻合 palia_lud blue 7600（粗壮=大体型），
+#    Gray Char max 4312g 吻合 palia_kr 3000/4500（黑口=小体型）
+# 学名定案：American plaice->hippoglos_p（Hippoglossoides platessoides）、European plaice->sea_kambala、
+#    Longhead dab->lh_kambala（Limanda 黄盖鲽）、Round Whitefish->valyok（Prosopium cylindraceum 真柱白鲑）、
+#    White Bream->s.bream（Blicca bjoerkna 银鲷鱼）、Caspian Brown Trout->k_salmon（里海鳟=里海鲑鱼）
+# 已知边界：
+# - Black Sea trout（黑海鳟）模拟器无此鱼种，映射留空（源站 252 名单唯一无法映射项）；
+# - 本地 roach（species_weight source=seed，无中文名/无任何数据）为种子遗留废弃键，无源站对应鱼；
+# 即 250 对有效一一对应，两边各 1 条真实差异。
 FISH_MAP = {
     "Albino Catfish": "w_catfish_a",
     "Albino Grass Carp": "g_carp_albino",
     "Albino barbel": "alb_barbel",
     "Alfonsino": "alfonsino",
     "Alligator gar": "agar",
+    "American plaice": "hippoglos_p",
     "Amur Catfish": "a_catfish",
     "Arctic Char": "a_char",
     "Arctic Grayling": "zs_grayling",
@@ -33,6 +44,7 @@ FISH_MAP = {
     "Basking shark": "cetorhinus_m",
     "Bastard Sturgeon": "osetr_ship",
     "Beaked redfish": "red_fish",
+    "Beloribitsa Whitefish": "wfish",
     "Beluga": "beluga",
     "Bighead Carp": "bh_carp",
     "Black Buffalo": "bl_buffalo",
@@ -60,11 +72,10 @@ FISH_MAP = {
     "Burbot": "burbot",
     "Butterfly Peacock bass": "bp_bass",
     "C2 SuperFreak": "s_freaks",
-    "Caspian Brown Trout": "",
+    "Caspian Brown Trout": "k_salmon",
     "Caspian Kutum": "kutum",
     "Caspian Lamprey": "c_lamprey",
     "Caspian Roach": "vobla",
-    "Caspian salmon": "k_salmon",
     "Catfish": "w_catfish",
     "Channel catfish": "ch_catfish",
     "Char": "salvel_l",
@@ -82,6 +93,7 @@ FISH_MAP = {
     "Common Scaly Albino Carp": "carp_albino",
     "Common ling": "molva",
     "Conger": "conger",
+    "Crucian Carp": "c.carp",
     "Cusk": "menek",
     "Dace": "dace",
     "Dinks leather carp": "din_n_carp",
@@ -89,6 +101,7 @@ FISH_MAP = {
     "Dinks mirror carp": "din_m_carp",
     "Dolly Varden Trout": "malma",
     "Donets Ruffe": "ruffe_n",
+    "Dryagin Char": "dr_char",
     "East Siberian Grayling": "os_grayling",
     "East Siberian Sturgeon": "zs_sturgeon",
     "Eastern Bream": "e_bream",
@@ -98,7 +111,7 @@ FISH_MAP = {
     "European Angler": "lophius_p",
     "European chimaera": "chimaera",
     "European hake": "merluza",
-    "European plaice": "lh_kambala",
+    "European plaice": "sea_kambala",
     "European squid": "c_squid",
     "F1": "karasekarp",
     "Far Eastern Brook Lamprey": "fe_lamprey",
@@ -144,6 +157,8 @@ FISH_MAP = {
     "Linear albino carp": "l_carp_albino",
     "Linear carp": "l_carp",
     "Loach": "vjun",
+    "Longear eelpout": "lycodes_s",
+    "Longhead dab": "lh_kambala",
     "Longnose Sucker": "chukuchan",
     "Ludoga Whitefish": "sig_ludoga",
     "Lumpfish": "pinagor",
@@ -178,14 +193,14 @@ FISH_MAP = {
     "Porbeagle": "lamna_n",
     "Pumpkinseed Sunfish": "pumps_sunfish",
     "Rainbow Trout": "riv_rb_trout",
-    "Red Char": "dr_char",
-    "Red Starvas Carp - Scaly": "",
+    "Red Char": "palia_lud",
+    "Red Starvas Carp - Scaly": "carp_red",
     "Red king crab": "rk_crab",
     "Redear sunfish": "resfish",
     "Ripus": "ripus",
     "River mussel": "freshwater_mussel",
     "Roughhead grenadier": "macrourus_b",
-    "Round Whitefish": "wfish",
+    "Round Whitefish": "valyok",
     "Rudd": "rudd",
     "Ruffe": "ruffe",
     "Russian Sturgeon": "r_sturgeon",
@@ -201,11 +216,12 @@ FISH_MAP = {
     "Siberian Char Loach": "barb_toni",
     "Siberian Dace": "syb_elets",
     "Siberian Gudgeon": "syb_gudgeon",
+    "Siberian Lamprey": "s_lamprey",
     "Siberian Roach": "syb_roach",
     "Siberian Sardine Cisco": "syb_vendace",
     "Siberian Sculpin": "bullhead_syb",
     "Siberian Sterlet": "syb_sterlet",
-    "Silver Bream": "s.bream",
+    "Sichel": "sabrefish",
     "Silver Carp": "s_carp",
     "Small Southern Stickleback": "stickleback_ss",
     "Small redfish": "sebastes_n",
@@ -216,7 +232,7 @@ FISH_MAP = {
     "Spotted Gar": "sgar",
     "Spotted bass": "sp_bass",
     "Spotted wolffish": "d_zubatka",
-    "Starvas Red Carp - Mirror": "",
+    "Starvas Red Carp - Mirror": "m_carp_red",
     "Stellate Sturgeon": "st_sturgeon",
     "Sterlet": "sterlet",
     "Striped Bass (Striper)": "s_bass",
@@ -236,10 +252,12 @@ FISH_MAP = {
     "Vendace": "vendace",
     "Vimba": "v_bream",
     "Viviparous eelpout": "zoarces_v",
+    "Volga Zander": "barsch",
     "Volkhov Whitefish": "sig",
     "Vuoksa Whitefish": "sig_vouksa",
     "Walleye": "walleye",
     "Warmouth": "warm",
+    "White Bream": "s.bream",
     "White bass": "wh_bass",
     "White crappie": "white_crappie",
     "White-eye Bream": "wa_bream",

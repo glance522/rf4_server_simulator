@@ -74,6 +74,7 @@ def main():
     ap.add_argument("--sleep", type=float, default=2.0, help="请求间隔秒")
     ap.add_argument("--limit", type=int, default=0, help="只抓前 N 条鱼（试跑）")
     ap.add_argument("--fish", default="", help="只抓指定英文名（逗号分隔），补抓失败鱼用")
+    ap.add_argument("--reparse", action="store_true", help="不抓网，只按最新映射刷新库内 fish_key")
     args = ap.parse_args()
 
     fish_map = load_fish_map()
@@ -92,6 +93,15 @@ def main():
     ensure_table(db)
 
     now = time.time()
+    if args.reparse:
+        total = 0
+        for en, fk in fish_map.items():
+            cur = db.execute("UPDATE rf4records_catch SET fish_key=? WHERE fish_name_en=? AND fish_key<>?", (fk, en, fk))
+            total += cur.rowcount
+        db.commit()
+        db.close()
+        print(f"reparse 完成：按最新映射刷新 {total} 行 fish_key")
+        return
     total_new = total_seen = total_bait_hit = total_bait_rows = 0
     for i, fish in enumerate(fishes, 1):
         url = API + urllib.parse.quote(fish)
