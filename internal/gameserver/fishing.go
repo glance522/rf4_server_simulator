@@ -1207,6 +1207,16 @@ func (s *Server) sampleWeightDB(ctx context.Context, key string, modeMult, scale
 	if s.tunableF("grade_ratio_enabled", 1) == 1 {
 		settle := s.cachedSettleStatics(ctx, c, key)
 		ratioLines := cachedGradeLines{val: &settle[0], trophy: &settle[1], blue: &settle[2]}
+		// 「未达标」档的下界取该鱼种自然最小体重（species_weight.min_g）。
+		if minG, ok := s.cachedSpeciesMinG(ctx, c, key); ok {
+			ratioLines.minG = &minG
+		} else if floor := belowGradeFloorFromVal(settle[0]); floor > 0 {
+			// min_g 没登记的鱼种（静态库 207/1043 个）不能退回 1 g——否则
+			// 上一轮修复对这批鱼种形同虚设。用 settle[0]（达标线，已经过
+			// Wiki 表/内置表/奖杯线估算三级回退）按同一 5% 异常兜底的量级
+			// 推下界，钳到 [1,30] g，只影响这批缺数据鱼种。
+			ratioLines.minG = &floor
+		}
 		if w, ok := s.sampleWeightByGradeRatio(ratioLines, modeMult, scale, capG); ok {
 			return w
 		}
@@ -1243,6 +1253,23 @@ func (s *Server) rollGradeDB(ctx context.Context, key string, weightG int64) int
 	return gradeFromLines(&lines[0], &lines[1], &lines[2], weightG)
 }
 
+// belowGradeFloorFromVal 由达标线推「未达标」档兜底下界：达标线的 6%
+// （与 min_g ≥ 达标线异常分支的 5% 同量级），钳到 [1,30] g。达标线未知
+// （≤0）时返回 0 表示无兜底，沿用旧行为。
+func belowGradeFloorFromVal(valG int64) int64 {
+	if valG <= 0 {
+		return 0
+	}
+	f := int64(math.Round(float64(valG) * 0.06))
+	if f < 1 {
+		f = 1
+	}
+	if f > 30 {
+		f = 30
+	}
+	return f
+}
+
 // gradeRatioBand 一个档位的重量区间（g），下界含、上界开。
 type gradeRatioBand struct {
 	grade  int64
@@ -1274,7 +1301,19 @@ func (s *Server) gradeRatioModel(l cachedGradeLines, modeMult, scale, capG float
 	if l.blue != nil {
 		supf = float64(*l.blue)
 	}
+	// 「未达标」档下界取该鱼种的自然最小体重。旧实现写死 1 g，而档内是对数
+	// 均匀采样，达标线 500 g 的鱼种会有约 37% 的未达标个体落到 10 g 以下
+	// （实测出现过 1 g 鲤鱼、5 g 狗鱼）。species_weight 里本来就有 min_g。
 	lo := 1.0
+	if l.minG != nil && *l.minG > 0 {
+		lo = float64(*l.minG)
+	}
+	// 数据异常（最小体重 ≥ 达标线）时退回达标线的 5%，保证未达标档不会消失。
+	// 注：min_g 完全缺失的兜底在 sampleWeightDB 层（belowGradeFloorFromVal），
+	// 这里 minG==nil 仍表示"上层没有可用下界"。
+	if vf > 0 && lo >= vf {
+		lo = math.Max(1, vf*0.05)
+	}
 	bands := make([]gradeRatioBand, 0, 4)
 	if vf > lo {
 		bands = append(bands, gradeRatioBand{1, lo, vf}) // 未达标
