@@ -948,14 +948,25 @@ func TestQualificationRodTypesFollowTaskText(t *testing.T) {
 		}
 	}
 
-	// 1402：抽停硬饵 + 稀有狗鱼，抽停竿(12)必须能完成。
-	land(qualificationEvent{Species: "n.pike", Grade: 3, RodType: 12, Bait: "jerkbaits_1148", BaitCat: 17})
+	// 1402：客户端 pgjliohpiie 只允许抽停竿(12)装抽停钓组(22)；
+	// 纺车杆 + 路亚钓组 + 抽停饵不算（文案点名的是抽停硬饵钓组）。
+	land(qualificationEvent{Species: "n.pike", Grade: 3, RodType: 1, RigType: 5, Bait: "jerkbaits_1148", BaitCat: 17})
+	if n, _ := state(1402); n != 0 {
+		t.Fatalf("纺车竿+路亚钓组不应计入 1402，实得 %d", n)
+	}
+	land(qualificationEvent{Species: "n.pike", Grade: 3, RodType: 12, RigType: 22, Bait: "jerkbaits_1148", BaitCat: 17})
 	if n, ts := state(1402); n != 1 || ts == 0 {
-		t.Fatalf("抽停竿钓获奖杯狗鱼应完成 1402，实得 %d/%g", n, ts)
+		t.Fatalf("抽停竿+抽停钓组钓获奖杯狗鱼应完成 1402，实得 %d/%g", n, ts)
 	}
 
 	// 1501：水表路亚 + 稀有细鳞鲑，枪柄竿(2)必须能完成。
-	land(qualificationEvent{Species: "lenok_o", Grade: 3, RodType: 2, Bait: "topwater_1928", BaitCat: 17})
+	// 用 X-Walker（item_id 是 plug_w_*，拟饵类型 5=水表）验证：只按前缀会误判
+	// 成鱼形硬饵，必须按 item_def 的拟饵类型归族。
+	land(qualificationEvent{Species: "lenok_o", Grade: 3, RodType: 2, Bait: "plug_w_2368", BaitCat: 17})
+	if n, _ := state(1501); n != 0 {
+		t.Fatalf("拟饵类型缺失时不应把 X-Walker 当水表饵，实得 %d", n)
+	}
+	land(qualificationEvent{Species: "lenok_o", Grade: 3, RodType: 2, Bait: "plug_w_2368", BaitCat: 17, LureType: 5})
 	if n, ts := state(1501); n != 1 || ts == 0 {
 		t.Fatalf("枪柄竿水表路亚钓获奖杯细鳞鲑应完成 1501，实得 %d/%g", n, ts)
 	}
@@ -1069,6 +1080,21 @@ func TestQualificationRule5007Conditions(t *testing.T) {
 		t.Fatalf("3302 竿型应为 [1]，实得 %v", got)
 	}
 
+	// 回归（玩家反馈 纺车 5-2/6-1）：1402 文案点名「抽停硬饵钓组」，客户端
+	// pgjliohpiie 只允许抽停竿(12)装 rig 22，故 Idx5 必须是 [12]；
+	// 1501 只写「水表路亚」，文案没限定竿型，不下发 Idx5。
+	r1402 := decode(1402)
+	if got := uint32(*r1402.Fields[4].Num); got != 2 {
+		t.Fatalf("1402 钓组大类应为 2（路亚），实得 %d", got)
+	}
+	if got := u32s(r1402.Fields[5].Val); len(got) != 1 || got[0] != 12 {
+		t.Fatalf("1402 竿型应为 [12]（抽停竿），实得 %v", got)
+	}
+	r1501 := decode(1501)
+	if v := r1501.Fields[5].Val; v != nil && len(v.Items) > 0 {
+		t.Fatalf("1501 文案未限定竿型，Idx5 不应下发，实得 %v", v)
+	}
+
 	// 硬度档也按文案：3003/4303 只写「超轻」→ [1]；3102 写「轻型或超轻型」→ [1,2]。
 	r3003 := decode(3003)
 	if got := u32s(r3003.Fields[6].Val); len(got) != 1 || got[0] != 1 {
@@ -1174,6 +1200,29 @@ func TestLureFamilyPrefixes(t *testing.T) {
 	for bait, want := range cases {
 		if got := lureFamily(bait); got != want {
 			t.Fatalf("%s 应归为 %q，实得 %q", bait, want, got)
+		}
+	}
+}
+
+// 拟饵族优先按 item_def 的拟饵类型判：X-Walker 的 item_id 是 plug_w_*，
+// 前缀看着像鱼形硬饵，类型字段却是 5（水表），只按前缀会漏算水表任务。
+func TestLureFamilyUsesLureType(t *testing.T) {
+	cases := []struct {
+		ev   qualificationEvent
+		want string
+	}{
+		{qualificationEvent{Bait: "plug_w_2368", LureType: 5}, "topwater"},
+		{qualificationEvent{Bait: "plug_w_2381", LureType: 4}, "wobbler"},
+		{qualificationEvent{Bait: "jerkbaits_1148", LureType: 7}, "jerkbait"},
+		{qualificationEvent{Bait: "spinnerbaits_1558", LureType: 1}, "spinner"},
+		{qualificationEvent{Bait: "spoon_lures_1797", LureType: 2}, "spoon"},
+		// 类型缺失时回落到前缀。
+		{qualificationEvent{Bait: "topwater_1928"}, "topwater"},
+		{qualificationEvent{Bait: "plug_w_2381"}, "wobbler"},
+	}
+	for _, tc := range cases {
+		if got := lureFamilyOf(tc.ev); got != tc.want {
+			t.Fatalf("%+v 应归为 %q，实得 %q", tc.ev, tc.want, got)
 		}
 	}
 }

@@ -46,6 +46,7 @@ type qualificationEvent struct {
 	BaitCat        int64   // 饵品类（17 拟饵 / 27 天然饵）
 	BaitClass      int64   // 天然饵饵类（item_def fopbhlmkcpe：2/7=昆虫，9=颗粒，13=面团）
 	BaitFlavor     int64   // 天然饵味型（item_def acclagajcdn）
+	LureType       int64   // 拟饵类型（item_def mbemakijdeh），拟饵族判定用
 	LureLenCM      float64 // 拟饵长度（厘米，item_def bbhhojphpfa）
 	BaitSizeMM     float64 // 饵尺寸/直径（毫米，item_def hkgndoipdlc）
 	Grade          int64   // 档位（1..4，4=蓝冠）
@@ -72,7 +73,7 @@ type qualificationRuleDef struct {
 }
 
 // 竿型枚举（celffbjpmma）：1=纺车 2=枪柄 3=手竿 4=博洛尼亚 5=竞赛
-// 9=Picker 10=飞德 11=鲤竿 15=海钓铁板 16=海钓船竿。
+// 9=Picker 10=飞德 11=鲤竿 12=抽停 15=海钓铁板 16=海钓船竿。
 const (
 	rodTypeSpinning  = 1
 	rodTypeCasting   = 2
@@ -82,6 +83,7 @@ const (
 	rodTypePicker    = 9
 	rodTypeFeeder    = 10
 	rodTypeCarp      = 11
+	rodTypeJerking   = 12
 	rodTypePilker    = 15
 	rodTypeMarine    = 16
 )
@@ -92,13 +94,20 @@ const (
 // 竿型条件只来自任务文案（客户端 qlfctn_t_<id>），分支名只是分组：文案没写
 // 竿型就不下发、不拦。按分支兜底（如把 1xxx 全限成纺车竿）会两头出错：
 //   - 客户端「鱼竿」行显示文案里没有的竿型（例：1402 抽停硬饵显示「纺车竿」）；
-//   - 把唯一可行的钓法挡在门外（1402 抽停钓组只能配抽停竿 12，
-//     1501 水表路亚常用枪柄竿 2），任务因此永远无法完成。
+//   - 把唯一可行的钓法挡在门外（1402 抽停钓组只能配抽停竿 12），任务因此
+//     永远无法完成。
+//
+// 1402 文案点名的「抽停(jerkbait)硬饵钓组」就是 rig 22：客户端
+// GameAssembly.pgjliohpiie(竿型, 钓组) 对 rig 22 只在竿型 12 返回 true
+// （纺车/枪柄的允许钓组是 5..11、19、20、35），所以这里的竿型取 [12]。
 func qualificationRodTypesFor(ruleID int64) []int64 {
 	if ruleID/1000 >= 9 {
 		return eventRodTypes[ruleID]
 	}
 	switch ruleID {
+	// 分支 1：1402 文案点名抽停硬饵钓组（rig 22），只有抽停竿能装。
+	case 1402:
+		return []int64{rodTypeJerking}
 	// 分支 3：「轻型/超轻纺车竿」。
 	case 3302, 3501, 3601:
 		return []int64{rodTypeSpinning}
@@ -121,7 +130,7 @@ func qualificationRodTypesFor(ruleID int64) []int64 {
 	case 6102, 6201, 6203, 6301, 6302, 6401, 6403, 6503, 6601, 6602, 6603:
 		return []int64{rodTypePicker, rodTypeFeeder}
 	default:
-		// 分支 1/2/4/7/8 的文案不写竿型（只写钓组/硬度/鱼种/水域），
+		// 分支 1/2/4/7/8 的其余文案不写竿型（只写钓组/硬度/鱼种/水域），
 		// 5001/5002/5102/5502/5603/6502 文案只写钓组，竿型由钓组装配矩阵约束。
 		return nil
 	}
@@ -216,7 +225,7 @@ var qualificationRules = []qualificationRuleDef{
 	{ID: 1303, Event: qevFishLanded, Counted: qCountSingle(qSpeciesIn("a_char"), qGradeAtLeast(3))},
 	// 阶段 5
 	{ID: 1401, Event: qevFishLanded, Counted: qCountSpecies(qArtificialLure())},
-	{ID: 1402, Event: qevFishLanded, Counted: qCountSingle(qLureFamilyIn("jerkbait"), qSpeciesIn("n.pike"), qGradeAtLeast(3))},
+	{ID: 1402, Event: qevFishLanded, Counted: qCountSingle(qRigIn(22), qLureFamilyIn("jerkbait"), qSpeciesIn("n.pike"), qGradeAtLeast(3))},
 	{ID: 1403, Event: qevFishLanded, Counted: qCountSingle(qFromShore(), qLureFamilyIn("spoon"), qSpeciesIn("asp"), qGradeAtLeast(3))},
 	// 阶段 6
 	{ID: 1501, Event: qevFishLanded, Counted: qCountSingle(qLureFamilyIn("topwater"), qSpeciesIn("lenok_o"), qGradeAtLeast(3))},
@@ -578,6 +587,7 @@ func (s *Server) qualificationEventForCatch(ctx context.Context, f *RolledFish, 
 	ev.Grade, ev.CatchGUID, ev.Rarity = f.Grade, f.FishGUID, rarity
 	ev.Bait, ev.BaitCat = bait.ID, bait.Cat
 	ev.BaitClass, ev.BaitFlavor = bait.Class, bait.Flavor
+	ev.LureType = bait.LureType
 	ev.LureLenCM, ev.BaitSizeMM = bait.LenCM, bait.SizeMM
 	ev.DepthCM, ev.IsShore = f.DepthCM, !f.OnBoat
 	ev.IsNight, ev.Drift = f.IsNight, f.Drift
@@ -599,20 +609,22 @@ func qualificationHasGUID(fish []store.QualificationFish, guid string) bool {
 
 // qualificationBait 是从咬钩挂载快照解析出的饵信息。
 type qualificationBait struct {
-	ID     string
-	Cat    int64
-	Class  int64
-	Flavor int64
-	LenCM  float64
-	SizeMM float64
+	ID       string
+	Cat      int64
+	Class    int64
+	Flavor   int64
+	LureType int64 // 拟饵类型（item_def mbemakijdeh），拟饵族判定的权威来源
+	LenCM    float64
+	SizeMM   float64
 }
 
-// lureAttrLengthCM / baitAttrSizeMM / baitAttrFlavor 是饵定义属性键。
-// 拟饵长度与天然饵尺寸都是 F32 位型，味型是整型。
+// lureAttrLengthCM / baitAttrSizeMM / baitAttrFlavor / lureAttrType 是饵定义属性键。
+// 拟饵长度与天然饵尺寸都是 F32 位型，味型与拟饵类型是整型。
 const (
 	lureAttrLengthCM = "bbhhojphpfa"
 	baitAttrSizeMM   = "hkgndoipdlc"
 	baitAttrFlavor   = "acclagajcdn"
+	lureAttrType     = "mbemakijdeh"
 )
 
 // qualificationMountedBait 从咬钩时的挂载快照解析饵信息。
@@ -632,7 +644,8 @@ func (s *Server) qualificationMountedBait(ctx context.Context, baitGUIDs string)
 		case 17:
 			return qualificationBait{
 				ID: def.ItemID, Cat: 17,
-				LenCM: itemDefF32(def, lureAttrLengthCM),
+				LureType: itemDefInt(def, lureAttrType),
+				LenCM:    itemDefF32(def, lureAttrLengthCM),
 			}
 		case 27:
 			if natural.ID == "" {

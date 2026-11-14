@@ -13,10 +13,33 @@ import (
 // jerkbait→抽停硬饵。与成就系统 baitPrefix 同源，前缀匹配兼容复数形式
 // （spinnerbaits/crankbaits/jerkbaits/poppers）。
 
+// 拟饵分类优先按 item_def 的拟饵类型（mbemakijdeh）判族，类型未知时回落到
+// item_id 前缀。前缀会误判少数族：X-Walker 系列 item_id 是 plug_w_*（看着像
+// 鱼形硬饵），拟饵类型却是 5（水表），只按前缀会漏算「水表路亚」任务。
+//
+// 类型→族：1/20 旋转亮片、2 勺子路亚、4 鱼形硬饵、5/10 水表路亚、7 抽停硬饵。
+var lureTypeFamilies = map[int64]string{
+	1: "spinner", 20: "spinner",
+	2: "spoon",
+	4: "wobbler",
+	5: "topwater", 10: "topwater",
+	7: "jerkbait",
+}
+
+// lureFamilyOf 返回本尾鱼拟饵所属的族：拟饵类型优先，未知时按 item_id 前缀。
+func lureFamilyOf(ev qualificationEvent) string {
+	if fam, ok := lureTypeFamilies[ev.LureType]; ok {
+		return fam
+	}
+	return lureFamily(ev.Bait)
+}
+
 // lureFamily 返回拟饵 item_id 所属的拟饵族；非上述硬饵/亮片族返回空串。
 // 自制拟饵（hm_*）按子类型前缀归族：它们的 item_id 不带商店货的族前缀
 // （hm_walker/hm_popper、hm_jerk、hm_spoon、hm_spinner、hm_pl/hm_crank/
 // hm_shad/hm_minnow），不补映射会让「使用某类拟饵」的任务在手工饵上永不计数。
+//
+// 这是拟饵类型缺失时的兜底，不是权威判定；新代码请用 lureFamilyOf。
 func lureFamily(bait string) string {
 	switch {
 	case strings.HasPrefix(bait, "hm_spinner"):
@@ -100,7 +123,7 @@ func qLocLevelIn(levels ...string) qFilter {
 
 func qLureFamilyIn(families ...string) qFilter {
 	return func(ev qualificationEvent) bool {
-		f := lureFamily(ev.Bait)
+		f := lureFamilyOf(ev)
 		for _, want := range families {
 			if f == want {
 				return true
@@ -406,7 +429,7 @@ func qCountLureFamily(filters ...qFilter) func(qualificationEvent) string {
 		if !qPassAll(ev, filters) {
 			return ""
 		}
-		fam := lureFamily(ev.Bait)
+		fam := lureFamilyOf(ev)
 		if fam == "" {
 			return ""
 		}
