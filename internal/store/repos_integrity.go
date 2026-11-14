@@ -39,6 +39,9 @@ var RuntimeTables = []string{
 	"request_receipts", "market_offer", "shop_item_override",
 	"fish_weight_override", "fish_bite_setting", "fish_grade_lines", "skill_link",
 	"fish_ecology", "skill_fish_effect_def", "hook_bite_profile", "fish_bait_override",
+	// rf4records 官方周纪录捕获表：tools/fetch_rf4records.py（外部证据管道）写入，
+	// 运营数据，非静态资料也非玩家存档。
+	"rf4records_catch",
 }
 
 // TableOwnership 返回每张用户表的唯一归属。静态、玩家、运行时三组必须互不相交。

@@ -59,6 +59,14 @@ func seedBaitRuleTest(t *testing.T) (*Server, *store.DB) {
 			t.Fatal(err)
 		}
 	}
+	// 食性分级（bait-evidence-threshold）默认关闭：旧测试验证的是规则匹配与
+	// 替代路径；分级路径由 TestBaitEvidenceThresholdGrading 显式开启覆盖。
+	s.tunMu.Lock()
+	if s.tunCache == nil {
+		s.tunCache = map[string]float64{}
+	}
+	s.tunCache["bait_share_strong"] = 0
+	s.tunMu.Unlock()
 	return s, db
 }
 
