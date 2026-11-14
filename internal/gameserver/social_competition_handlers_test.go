@@ -215,7 +215,7 @@ func TestSocialHandlersUseRequestedUIDAndWater(t *testing.T) {
 	if err := json.Unmarshal(mustHex(t, v.Hex), &named); err != nil {
 		t.Fatal(err)
 	}
-	if named["placeid"] != "level_x" {
+	if _, ok := named["namedfish"].([]any); !ok {
 		t.Fatalf("24/24 named=%v", named)
 	}
 }

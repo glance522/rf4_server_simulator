@@ -3,6 +3,7 @@ package gameserver
 import (
 	"database/sql"
 	"encoding/json"
+	"strings"
 
 	"rf4server/internal/proto"
 	"rf4server/internal/store"
@@ -222,15 +223,67 @@ func hSocialRecordFish(ctx *Ctx) ([]byte, bool) {
 	return encodeSocialTree(ctx, v)
 }
 
+// namedFishGUID 把 32 位十六进制鱼标识格式化成客户端使用的 GUID。
+func namedFishGUID(id string) string {
+	if len(id) == 32 && !strings.Contains(id, "-") {
+		return id[0:8] + "-" + id[8:12] + "-" + id[12:16] + "-" + id[16:20] + "-" + id[20:32]
+	}
+	return id
+}
+
+// namedFishFallbackID 在没有结算记录时生成一个稳定的 history id。
+func namedFishFallbackID(id string) int64 {
+	var h int64
+	for i := 0; i < len(id) && i < 8; i++ {
+		h *= 16
+		switch c := id[i]; {
+		case c >= '0' && c <= '9':
+			h += int64(c - '0')
+		case c >= 'a' && c <= 'f':
+			h += int64(c-'a') + 10
+		case c >= 'A' && c <= 'F':
+			h += int64(c-'A') + 10
+		}
+	}
+	return h
+}
+
+// namedFishWire 按官方 24/24 JSON 结构编码一条命名鱼：
+// {"id","systemID","name","history":[{"id","catched","weight","length","baitID"}]}
+// weight 是公斤、length 是米、catched 是 Unix 秒。
+func namedFishWire(nf store.NamedFish) map[string]any {
+	histID := nf.CatchID
+	if histID == 0 {
+		histID = namedFishFallbackID(nf.FishID)
+	}
+	return map[string]any{
+		"id":       namedFishGUID(nf.FishID),
+		"systemID": nf.Species,
+		"name":     nf.Name,
+		"history": []any{map[string]any{
+			"id":      histID,
+			"catched": int64(nf.TS),
+			"weight":  float64(nf.WeightG) / 1000,
+			"length":  nf.LengthM,
+			"baitID":  nf.Bait,
+		}},
+	}
+}
+
 func hSocialNamedFish(ctx *Ctx) ([]byte, bool) {
 	key := argFirstStr(ctx.Tree)
-	payload := struct {
-		Success   bool              `json:"success"`
-		Modified  int64             `json:"modified"`
-		PlaceID   string            `json:"placeid"`
-		NamedFish []json.RawMessage `json:"namedfish"`
-	}{Success: true, PlaceID: key, NamedFish: []json.RawMessage{}}
-	raw, err := json.Marshal(payload)
+	entries := make([]any, 0)
+	if s := ctx.Sess.Srv; s != nil && s.DB != nil {
+		rows, err := s.DB.NamedFishList(s.dbCtx(), key)
+		if err != nil {
+			ctx.Log.Error("24/24 命名鱼查询失败", "place", key, "err", err)
+		}
+		for _, nf := range rows {
+			entries = append(entries, namedFishWire(nf))
+		}
+		ctx.Log.Info("24/24 明星居民", "place", key, "count", len(rows))
+	}
+	raw, err := json.Marshal(map[string]any{"namedfish": entries})
 	if err != nil {
 		ctx.Log.Error("24/24 JSON 编码失败", "err", err)
 		return []byte{0x00}, true

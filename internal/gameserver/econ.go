@@ -414,6 +414,12 @@ func (s *Server) fishingRelease(ctx *Ctx) ([]byte, bool) {
 	giftRows := proto.Null()
 	if pending != nil {
 		cctx := ctx.Sess.pushCtx()
+		// 24/24 按水域 level key 查询；优先用结算快照里的 LocLevel，
+		// 缺省时退回 loc（旧快照没有该字段）。
+		place := pending.LocLevel
+		if place == "" {
+			place = loc
+		}
 		// 只有蓝冠鱼可以命名，已命名的鱼不能改名。
 		// 命名条件不满足时按普通放生处理，并记录日志。
 		if name := releaseFishName(ctx.Tree); name != "" {
@@ -422,7 +428,7 @@ func (s *Server) fishingRelease(ctx *Ctx) ([]byte, bool) {
 				fid = pending.FishGUID
 			}
 			if ok, why := canNameFish(cctx, s.DB, pending.Grade, fid); ok {
-				if ok2, why2 := s.insertNamedFish(cctx, uid, pending, fid, name, loc); ok2 {
+				if ok2, why2 := s.insertNamedFish(cctx, uid, pending, fid, name, place); ok2 {
 					st.mu.Lock()
 					pending.Name = strings.TrimSpace(name)
 					pending.NamedID = fid
