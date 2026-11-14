@@ -20,16 +20,18 @@ import (
 
 func testConditionParams() conditionParams {
 	return conditionParams{
-		Enabled:            true,
-		HungerDecayPerHour: 0.24,
-		EnergyRegenPerHour: 0.5,
-		EnergyMax:          1.0,
-		EnergyRegenCap:     0.85,
-		HungerRegenFloor:   0.25,
-		CastEnergyCost:     0.01,
-		PullEnergyCost:     0.005,
-		LowEnergyThreshold: 0.05,
-		MaxBackfillHours:   12,
+		Enabled:             true,
+		HealthEnabled:       true,
+		FishingPauseEnabled: true,
+		HungerDecayPerHour:  0.24,
+		EnergyRegenPerHour:  0.5,
+		EnergyMax:           1.0,
+		EnergyRegenCap:      0.85,
+		HungerRegenFloor:    0.25,
+		CastEnergyCost:      0.01,
+		PullEnergyCost:      0.005,
+		LowEnergyThreshold:  0.05,
+		MaxBackfillHours:    12,
 
 		ComfortRainPenalty:   0.35,
 		ComfortColdPenalty:   0.35,

@@ -56,6 +56,15 @@ const (
 	tunableHealthHungerThreshold  = "condition_health_hunger_threshold"
 	tunableHealthComfortThreshold = "condition_health_comfort_threshold"
 	tunableMedicineHealthRestore  = "condition_medicine_health_restore"
+
+	// 功能开关（默认 1 开启；tunables 置 0 关闭，30 秒缓存生效免重启）：
+	//   condition_health_enabled=0        PR317 健康动态整体旁路——饥寒不掉血、
+	//                                     不自愈，f4 恒 0 满血透传，药品无恢复效果，
+	//                                     回到 00046 迁移后、PR317 之前的口径。
+	//   condition_fishing_pause_enabled=0 PR449 垂钓停摆旁路——竿在水中时精力
+	//                                     照常按基础速率自然恢复。
+	tunableHealthEnabled       = "condition_health_enabled"
+	tunableFishingPauseEnabled = "condition_fishing_pause_enabled"
 )
 
 // 缺省标定值：
@@ -126,6 +135,8 @@ const operationResultLowEnergyLevel = 84
 
 type conditionParams struct {
 	Enabled                bool
+	HealthEnabled          bool
+	FishingPauseEnabled    bool
 	HungerDecayPerHour     float64
 	EnergyRegenPerHour     float64
 	EnergyMax              float64
@@ -163,6 +174,8 @@ type conditionParams struct {
 func (s *Server) conditionParams() conditionParams {
 	return conditionParams{
 		Enabled:                s.tunableF(tunableConditionEnabled, 1) >= 0.5,
+		HealthEnabled:          s.tunableF(tunableHealthEnabled, 1) >= 0.5,
+		FishingPauseEnabled:    s.tunableF(tunableFishingPauseEnabled, 1) >= 0.5,
 		HungerDecayPerHour:     s.tunableF(tunableHungerDecayPerHour, defHungerDecayPerHour),
 		EnergyRegenPerHour:     s.tunableF(tunableEnergyRegenPerHour, defEnergyRegenPerHour),
 		EnergyMax:              s.tunableF(tunableEnergyMax, defEnergyMax),
@@ -240,6 +253,7 @@ type conditionEnv struct {
 //     速率 ComfortDriftPerHour。
 //   - 健康（f4，HUD 显示 1-f4）按饥寒压力掉血：饱食度低于阈值、舒适度低于阈值
 //     各算一个压力源，压力源越多掉得越快；两个压力源都消失后按自愈速率回升。
+//     condition_health_enabled=0 时该动态整体旁路，f4 恒 0 满血透传。
 func advancePlayerCondition(cur store.PlayerCondition, now float64, p conditionParams, env conditionEnv) store.PlayerCondition {
 	out := cur
 	out.UpdatedTS = now
@@ -257,7 +271,8 @@ func advancePlayerCondition(cur store.PlayerCondition, now float64, p conditionP
 	}
 	// 垂钓中停摆：动作消耗只发生在竿在水里的时候，恢复若同时进行就把消耗
 	// 抹平（0.01 的消耗在 100/h 下 0.36 秒补回）。乘数默认 0，停竿即恢复。
-	if env.Fishing {
+	// condition_fishing_pause_enabled=0 时整体旁路：垂钓中照常按基础速率恢复。
+	if env.Fishing && p.FishingPauseEnabled {
 		regen *= p.EnergyRegenFishingMult
 	}
 	factor := p.HungerRegenFloor + (1-p.HungerRegenFloor)*out.Secondary
@@ -295,18 +310,24 @@ func advancePlayerCondition(cur store.PlayerCondition, now float64, p conditionP
 
 	// 健康：饥寒各算一个压力源，压力期线性掉血、无压力时线性自愈。
 	// 门槛用推进后的饱食度/舒适度判定，与同一拍下发的 f1/f3 自洽。
-	stress := 0
-	if out.Secondary < p.HealthHungerThreshold {
-		stress++
+	// condition_health_enabled=0 时回到 PR317 之前的口径：f4 恒 0 满血透传，
+	// 既不掉血也不自愈；归零会随写回路径持久化，重开开关不从旧损耗起步。
+	if p.HealthEnabled {
+		stress := 0
+		if out.Secondary < p.HealthHungerThreshold {
+			stress++
+		}
+		if out.Comfort < p.HealthComfortThreshold {
+			stress++
+		}
+		delta := -p.HealthRegenPerHour * elapsedH
+		if stress > 0 {
+			delta = p.HealthDecayPerHour * float64(stress) * elapsedH
+		}
+		out.LuckPenalty = clampFloat(cur.LuckPenalty+delta, 0, 1)
+	} else {
+		out.LuckPenalty = 0
 	}
-	if out.Comfort < p.HealthComfortThreshold {
-		stress++
-	}
-	delta := -p.HealthRegenPerHour * elapsedH
-	if stress > 0 {
-		delta = p.HealthDecayPerHour * float64(stress) * elapsedH
-	}
-	out.LuckPenalty = clampFloat(cur.LuckPenalty+delta, 0, 1)
 	return out
 }
 
@@ -407,6 +428,10 @@ func (s *Server) peekPlayerCondition(ctx context.Context, uid int64) store.Playe
 	out.Secondary = clampFloat(out.Secondary, 0, 1)
 	out.Comfort = clampFloat(out.Comfort, 0, 1)
 	out.LuckPenalty = clampFloat(out.LuckPenalty, 0, 1)
+	// 健康开关关闭：307/档案里的 f4 同样恒满血，与 2/2 推进口径一致。
+	if !p.HealthEnabled {
+		out.LuckPenalty = 0
+	}
 	return out
 }
 

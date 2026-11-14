@@ -346,6 +346,8 @@ const TUNABLE_DEFS=[
   ['release_xp_ratio','放生经验比例',0.5,'放生时拿到入护经验的几成，0.5=一半'],
   ['fish_escape_taunt','跑鱼提示',1,'1=随机嘲讽文案；0=回退官方“鱼脱钩了”模板'],
   ['fish_hooked_chat','上钩播报',0,'确认鱼已挂钩时仅向本人显示快捷栏竿号、鱼种和克级重量；默认关闭'],
+  ['condition_health_enabled','健康动态（饥寒掉血）',1,'0=关闭：饿/冻不再掉血、生命恒满血；药品（Sorbimax）不扣数量也无恢复效果。1=饥饿或严寒时生命条缓慢下降，脱离后缓慢自愈'],
+  ['condition_fishing_pause_enabled','垂钓中精力停摆',1,'0=关闭：竿在水里时精力照常自然恢复；1=竿在水里时精力暂停恢复，收竿后照常快速回满'],
   ['loot_box_enabled','钓获礼包开关',0,'默认关闭；1=钓上鱼按概率开礼包'],
   ['loot_box_chance','礼包触发概率',0.05,'0~1；留空则用 kv.loot_box_defs 里的 chance'],
   ['loot_box_trophy_guarantee','奖杯/蓝冠保底',1,'1=钓到奖杯或蓝冠鱼必定开一包；0=关'],
@@ -762,6 +764,10 @@ async function loadTunables(){
     const on=parseFloat(String(t[key]??def))>0;
     return `<div class="tunable-field"><div><label for="tun_hook_nibble_enabled">${esc(label)}</label><div class="tunable-hint">${esc(hint)}</div></div><div><button class="btn sm" id="tun_hook_nibble_enabled" style="min-width:230px;${on?'background:#2f7d4f;border-color:#2f7d4f':'opacity:.6'}" onclick="saveTunableVal('hook_nibble_enabled',${on?0:1})">${on?'嘬饵机制：开（点击关闭）':'嘬饵机制：关（点击开启）'}</button></div></div>`;
   }
+  if(key==='condition_health_enabled'||key==='condition_fishing_pause_enabled'){
+    const on=parseFloat(String(t[key]??def))>0;
+    return `<div class="tunable-field"><div><label for="tun_${key}">${esc(label)}</label><div class="tunable-hint">${esc(hint)}</div></div><div><button class="btn sm" id="tun_${key}" style="min-width:230px;${on?'background:#2f7d4f;border-color:#2f7d4f':'opacity:.6'}" onclick="saveTunableVal('${key}',${on?0:1})">${on?esc(label)+'：开（点击关闭）':esc(label)+'：关（点击开启）'}</button></div></div>`;
+  }
   // 默认值放说明行（整行宽度，再长的值也不会被截断）；占位符只做空状态提示。
   // 早期把 def 塞进 placeholder 再配 112px 输入框，0.000001 这类小值会被截成 0.00000。
   return '<div class="tunable-field"><div><label for="tun_'+key+'">'+esc(label)+'</label><div class="tunable-hint">'+esc(hint)+' · 默认 <b>'+esc(String(def))+'</b></div></div><div><input type="number" step="any" id="tun_'+key+'" value="'+esc(String(t[key]??''))+'" placeholder="未设置"><button class="btn alt sm" onclick="saveTunable(\''+key+'\')">保存</button><button class="btn alt sm" title="回写代码默认值 '+def+'" onclick="resetTunable(\''+key+'\','+def+')">恢复默认</button></div></div>';
@@ -780,6 +786,7 @@ async function loadTunables(){
     ['摩擦片磨损','泄力打滑通道的系数（2026-11-12 拍平：速率不分档位，旧档位键 reel_slip_wear_low/s25~s28/max 已停用不再读取）；改后最多 30 秒生效，只影响后续结算',['reel_slip_wear','reel_slip_calibration_seconds','reel_slip_deadband_ratio']],
     ['受力磨损速率','轮件/竿件/前导按搏鱼受力秒扣磨损的速率；0=关通道',['wear_stress_oil_per_s','wear_stress_gear_per_s','wear_stress_bearing_per_s','wear_stress_spool_per_s','wear_stress_guides_per_s','wear_stress_rodblank_per_s','wear_leader_per_stress_sec']],
     ['负载上报节拍','14/8 负载上报折算受力秒的口径；改后最多 30 秒生效',['reel_load_tick_seconds','reel_load_max_tick_seconds']],
+    ['角色状态条','精力/饱食/生命条的后台开关；改后最多 30 秒生效，正在垂钓的会话下一拍生效',['condition_health_enabled','condition_fishing_pause_enabled']],
   ]},
   {id:'reward',tab:'收益与通知',sub:'经验 · 掉卡 · 礼包 · 档位 · 聊天',groups:[
     ['经验与结算','改后只对新结算的鱼生效，已入护的不重算',['xp_gain','release_xp_ratio']],

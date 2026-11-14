@@ -73,6 +73,25 @@ func TestFishingRegenMultIsTunable(t *testing.T) {
 	}
 }
 
+// 停摆开关关闭（condition_fishing_pause_enabled=0）：竿在水中时照常恢复，
+// 回到 PR449 之前的行为；乘数 tunable 不再生效。
+func TestFishingPauseSwitchOffRestoresRegenDuringFishing(t *testing.T) {
+	t.Parallel()
+	p := testConditionParams()
+	p.EnergyRegenPerHour = defEnergyRegenPerHour
+	p.EnergyRegenFishingMult = defEnergyRegenFishingMult
+	p.FishingPauseEnabled = false
+	p.EnergyRegenFoodCost = 0
+
+	cur := store.PlayerCondition{Primary: 0.50, Secondary: 1.0, Comfort: 1.0, UpdatedTS: 1000}
+	next := advancePlayerCondition(cur, 1000+60, p, conditionEnv{Fishing: true})
+	// 手算同停竿口径：饱食 1.00-0.24*(60/3600)=0.996；因子 0.997；
+	// 恢复 100*0.997*(60/3600)=1.6617，钳到自然封顶 0.85。
+	if math.Abs(next.Primary-p.EnergyRegenCap) > 1e-9 {
+		t.Fatalf("开关关闭后垂钓中应照常恢复到封顶，实得 %.6f", next.Primary)
+	}
+}
+
 // playerFishingActive 只认"已抛投 + 入水 + 未结算"，其余状态一律不算垂钓中。
 func TestPlayerFishingActiveStates(t *testing.T) {
 	t.Parallel()

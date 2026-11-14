@@ -123,6 +123,11 @@ func (s *Server) useAlcoholDrink(ctx *Ctx) ([]byte, bool) {
 		if isConsumable && !cond.Enabled {
 			isConsumable = false
 		}
+		// 健康开关关闭时药品同样旁路：Sorbimax 不扣物也无恢复效果，
+		// 落回通用 handler，避免"吃了白扔"。
+		if isConsumable && restoreKind == "medicine" && !cond.HealthEnabled {
+			isConsumable = false
+		}
 	}
 	if !isDrink && !isConsumable {
 		return nil, false

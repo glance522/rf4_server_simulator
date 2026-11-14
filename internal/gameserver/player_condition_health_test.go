@@ -73,6 +73,24 @@ func TestAdvancePlayerConditionHealthClamps(t *testing.T) {
 	}
 }
 
+// 健康开关关闭（condition_health_enabled=0）：饥寒双压力源也不掉血，
+// f4 恒 0 满血透传，回到 PR317 之前的口径。
+func TestAdvancePlayerConditionHealthDisabledForcesFull(t *testing.T) {
+	p := testConditionParams()
+	p.HealthEnabled = false
+	cur := store.PlayerCondition{Primary: 0.85, Secondary: 0.0, Comfort: 0.0, LuckPenalty: 0.60, UpdatedTS: 1000}
+	next := advancePlayerCondition(cur, 1000+1800, p, conditionEnv{})
+	if next.LuckPenalty != 0 {
+		t.Fatalf("健康开关关闭应恒满血(f4=0): %v", next.LuckPenalty)
+	}
+	// 与开启时对照：同一状态 0.5h，舒适度漂到 0.25 仍是双压力源，应掉 0.10。
+	p.HealthEnabled = true
+	enabled := advancePlayerCondition(cur, 1000+1800, p, conditionEnv{})
+	if math.Abs(enabled.LuckPenalty-0.70) > 1e-9 {
+		t.Fatalf("对照组双压力源 0.5h 应掉 0.10: %v", enabled.LuckPenalty)
+	}
+}
+
 // 时间戳没前进（同一秒内多次读）时不应推进，也不应改写健康。
 func TestAdvancePlayerConditionHealthNotAdvancedOnSameSecond(t *testing.T) {
 	p := testConditionParams()
@@ -169,6 +187,39 @@ func TestMedicineUseHealthFloor(t *testing.T) {
 	}
 	if row.LuckPenalty != 0 {
 		t.Fatalf("健康应被地板钳到满血(f4=0): %v", row.LuckPenalty)
+	}
+}
+
+// 健康开关关闭时药品回到非消耗品：4/8 不处理（落回通用 handler）、
+// 不扣数量、f4 落库值不动——Sorbimax 不白扔。
+func TestMedicineUseNoOpWhenHealthDisabled(t *testing.T) {
+	s := newDrinkUseTestServer(t)
+	ctx0 := t.Context()
+	const uid = int64(1000001)
+	if _, err := s.DB.SQL.Exec(`INSERT INTO item_def(numeric_id,item_id,category,attrs_json)
+		VALUES(900100,'pill_pack',26,'{"fopbhlmkcpe":3,"aekjeoifnkk":1}')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`INSERT INTO tunables(key,value) VALUES('condition_health_enabled','0')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB.UpsertPlayerCondition(ctx0, store.PlayerCondition{
+		UID: uid, Primary: 0.85, Secondary: 0.50, Comfort: 1.0, LuckPenalty: 0.60,
+		UpdatedTS: float64(time.Now().Unix()) + 3600,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pill := drinkUseTestItem(t, s, "pill_pack", 2, 0)
+	if body, handled := s.useAlcoholDrink(drinkUseTestCtx(t, s, 61, pill.GUID, 0)); handled {
+		t.Fatalf("健康开关关闭时药品应落回通用 handler: body=%d", len(body))
+	}
+	drinkUseTestQty(t, s, pill.GUID, 2, 0)
+	row, err := s.DB.EnsurePlayerCondition(ctx0, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.LuckPenalty != 0.60 {
+		t.Fatalf("健康开关关闭时 f4 不应被药品改动: %v", row.LuckPenalty)
 	}
 }
 
