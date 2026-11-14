@@ -824,6 +824,16 @@ func hCastPrepare(ctx *Ctx) ([]byte, bool) {
 		ctx.Log.Warn("抛竿前补饵失败", "err", err)
 		return nil, false
 	}
+	// 路亚抛竿：按补饵后的实际装配取拟饵名义泳层，种子进实时水层——
+	// 落水瞬间饵在设计泳层，之后由 14/7 运动位动态修正并受该值钳制。
+	if rigTypeLureFamily[st.RigType] {
+		if dive := srv.lureDiveForGear(ctx.Sess.pushCtx(), gear); dive > 0 {
+			st.mu.Lock()
+			st.LureDive = dive
+			st.LureLayer = dive
+			st.mu.Unlock()
+		}
+	}
 	// 收敛钓组数据：补齐 f5、rig 行、组件和尖梢。
 	// 尖梢有更新时推送 4/22 全量竿树，因为客户端抛竿前会校验实例 f8。
 	if srv.ensureRig(ctx.Sess.pushCtx(), ctx.Sess.Userid, gear) {
@@ -1161,7 +1171,7 @@ func hFishingStep(ctx *Ctx) ([]byte, bool) {
 			if rigTypeLureFamily[st.RigType] {
 				now := time.Now()
 				if anim != previousMask || st.LureLayerAt.IsZero() || now.Sub(st.LureLayerAt) >= 1500*time.Millisecond {
-					st.LureLayer = lureLayerFromMotion(anim, st.LureLayer)
+					st.LureLayer = lureLayerFromMotion(anim, st.LureLayer, st.LureDive)
 					st.LureLayerAt = now
 				}
 				st.updateLureActionLocked(now, previousMask, anim)
