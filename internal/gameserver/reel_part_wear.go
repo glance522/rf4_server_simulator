@@ -360,10 +360,14 @@ func (s *Server) restoreReelInternalsInFields(ctx context.Context, row *store.It
 			if rated := itemDefF32(def, gearAttrDragMax) * row.Workmanship; rated > 0 &&
 				setWireFloat(child.Fields, child.Class, idx, rated) {
 				changed = true
+				bumpCreatedTicks(child.Fields, child.Class)
 			}
 		}
 		if setReelChildDurability(child, 1) {
 			changed = true
+			// 零件对象也要抬版本戳：客户端按子件自身的 created ticks 决定是否重渲染，
+			// 只改耐久不抬版本，配件面板会继续显示修理前的磨损值。
+			bumpCreatedTicks(child.Fields, child.Class)
 		}
 	}
 	for _, category := range s.reelWearCategoriesInFields(ctx, fields) {
@@ -373,6 +377,7 @@ func (s *Server) restoreReelInternalsInFields(ctx context.Context, row *store.It
 		}
 		if setReelChildDurability(part, 1) {
 			changed = true
+			bumpCreatedTicks(part.Fields, part.Class)
 		}
 	}
 	return changed, nil

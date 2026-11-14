@@ -1563,6 +1563,15 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 			return nil, false
 		}
 	}
+	// 同型号整机修理：轮内零件必须和本体一起恢复到额定状态。
+	// 本体耐久是轮内各零件的加权综合，只把本体那格拉回 1.0、零件还停在高磨损，
+	// 客户端配件面板会继续显示修理前的磨损值，下一次受力也会立刻把本体拖回去。
+	if isReel && wholeItemRepair {
+		if _, ierr := srv.restoreReelInternalsInFields(cctx, row, fields); ierr != nil {
+			ctx.Log.Warn("工坊修理：轮内零件恢复失败", "guid", shortGUID(row.GUID), "err", ierr)
+			return nil, false
+		}
+	}
 	// 版本戳必须严格递增，否则客户端会忽略更新后的物品树，工作坊停在转圈状态。
 	bumpCreatedTicks(fields, row.WireClass)
 	fj, jerr := FieldsToJSON(fields)

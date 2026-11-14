@@ -1,4 +1,4 @@
-package gameserver
+﻿package gameserver
 
 import (
 	"fmt"
@@ -478,4 +478,46 @@ func TestWorkshopReelRepairRejectsLowQuote(t *testing.T) {
 	if profile.Silver != 10000 {
 		t.Fatalf("低报价被拒绝后余额应保持 10000，实得 %d", profile.Silver)
 	}
+}
+
+// 同型号修理必须把轮内零件一起恢复到额定状态。
+// 本体耐久是轮内零件综合出来的：只把本体拉回 1.0、零件仍停在高磨损时，
+// 客户端配件面板会继续显示修理前的磨损值（实测：本体恢复、面板不变）。
+func TestWorkshopReelRepairRestoresInternals(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	reel, gearID := seedWornWorkshopReel(t, srv, db, .3, .2, .5, .5)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 10000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+
+	c := &Ctx{
+		Sess: newProbeSess(srv), Main: 21, Sub: 3,
+		Tree: snapshotWorkshopRequestPart(reel.GUID, uint32(reelPartCatGear), gearID, 0),
+		Log:  logging.Discard(),
+	}
+	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
+		t.Fatal("整机修理失败")
+	}
+
+	fresh := mustItem(t, db, reel.GUID)
+	if fresh.Durability != 1 {
+		t.Fatalf("修理后本体耐久应回 1，实得 %v", fresh.Durability)
+	}
+	fields := snapshotFields(t, fresh.FieldsJSON)
+	for _, cat := range []int64{reelPartCatGear, reelPartCatWasher, reelPartCatBearing} {
+		part, _ := snapshotPart(t, srv, fields, cat)
+		if part == nil {
+			continue
+		}
+		if got := snapshotFloat(part.Fields, part.Class, csDurability); got != 1 {
+			t.Fatalf("修理后零件 cat=%d 耐久应回 1，实得 %v", cat, got)
+		}
+	}
+
 }
