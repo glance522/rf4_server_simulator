@@ -149,16 +149,21 @@ func TestCastCalibrationBands(t *testing.T) {
 	}
 }
 
-// 状态修正器边界：0 值是真实空状态，落到 0.70 下限；不再重置为默认值。
+// 状态修正器边界：只按精力比例，0 值是真实空状态，落到 0.70 下限；
+// 不再重置为默认值；饱食度不参与。
 func TestCastPlayerStateFactorZeroStateUsesFloor(t *testing.T) {
-	if got := castPlayerStateFactor(0, 0); math.Abs(got-0.70) > 1e-9 {
+	if got := castPlayerStateFactor(0); math.Abs(got-0.70) > 1e-9 {
 		t.Fatalf("空状态应落到 0.70 下限: %v", got)
 	}
-	if got := castPlayerStateFactor(defaultPlayerConditionPrimary, defaultPlayerConditionSecondary); math.Abs(got-1.0) > 1e-9 {
-		t.Fatalf("默认状态系数应为 1.0: %v", got)
+	if got := castPlayerStateFactor(defaultPlayerConditionPrimary); math.Abs(got-1.0) > 1e-9 {
+		t.Fatalf("精力满即应满抛距（饱食度不参与）: %v", got)
 	}
-	if got := castPlayerStateFactor(1.0, 1.0); math.Abs(got-1.03) > 1e-9 {
+	if got := castPlayerStateFactor(1.0); math.Abs(got-1.03) > 1e-9 {
 		t.Fatalf("超上限应钳到 1.03: %v", got)
+	}
+	// 精力 0.60/0.85 ≈ 0.7059，仍在下限之上。
+	if got := castPlayerStateFactor(0.60); math.Abs(got-0.60/defaultPlayerConditionPrimary) > 1e-9 {
+		t.Fatalf("精力 0.60 应按比例 0.7059: %v", got)
 	}
 }
 
@@ -170,7 +175,7 @@ func TestCastHighEndGearCanReachFortyFiveMeters(t *testing.T) {
 		SpoolSize: 1, SpoolFill: 1.0, LineDiameterMM: 0.10,
 		LineStretch: 0.001, LineMaterial: 3,
 		PlayerPrimary: defaultPlayerConditionPrimary, PlayerSecondary: defaultPlayerConditionSecondary,
-		SkillMastery: 100, SkillNodeEffect: 10,
+		SkillMastery: 100, SkillCastPct: 10,
 	})
 	if d < 44.9 {
 		t.Fatalf("高阶装备应能进入45米精准抛投区间，实得%0.2f", d)

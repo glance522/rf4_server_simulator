@@ -49,7 +49,7 @@ type CastDistanceContext struct {
 	PlayerSecondary      float64
 	SkillCategory        int64
 	SkillMastery         float64
-	SkillNodeEffect      float64
+	SkillCastPct         float64
 }
 
 // CastDistanceModifier 是可扩展的抛投距离变量接口。Factor 返回乘数；
@@ -115,7 +115,7 @@ var builtInCastModifiers = []CastDistanceModifier{
 		return castMasteryFactor(c.SkillMastery)
 	}},
 	castDistanceModifierFunc{name: "special_skill", fn: func(c CastDistanceContext) float64 {
-		return castSpecialSkillFactor(c.SkillNodeEffect)
+		return castSpecialSkillFactor(c.SkillCastPct)
 	}},
 	castDistanceModifierFunc{name: "line_diameter", fn: func(c CastDistanceContext) float64 {
 		return castLineDiameterFactor(c.LineDiameterMM)
@@ -139,7 +139,7 @@ var builtInCastModifiers = []CastDistanceModifier{
 		return castReelTypeFactor(c.ReelType)
 	}},
 	castDistanceModifierFunc{name: "player_state", fn: func(c CastDistanceContext) float64 {
-		return castPlayerStateFactor(c.PlayerPrimary, c.PlayerSecondary)
+		return castPlayerStateFactor(c.PlayerPrimary)
 	}},
 	castDistanceModifierFunc{name: "reel_friction", fn: func(c CastDistanceContext) float64 {
 		return clampFloat(c.ReelEfficiency, 0.25, 1)
@@ -187,7 +187,7 @@ type castDistanceProfile struct {
 	WeightFactor       float64
 	SkillCategory      int64
 	SkillMastery       float64
-	SkillNodeEffect    float64
+	SkillCastPct       float64
 	SkillFactor        float64
 	SpecialSkillFactor float64
 	LengthFactor       float64
@@ -351,13 +351,12 @@ func castReelTypeFactor(reelType int64) float64 {
 	}
 }
 
-// castPlayerStateFactor 玩家状态修正器：精力/饱食度越低抛得越近。
-// 0 值是真实空状态，按 0 参与加权、落到 0.70 下限；
-// 不再把 <=0 重置为默认值（旧边界会把真·空状态当成满状态）。
-func castPlayerStateFactor(primary, secondary float64) float64 {
-	state := 0.55*(primary/defaultPlayerConditionPrimary) +
-		0.45*(secondary/defaultPlayerConditionSecondary)
-	return clampFloat(state, 0.70, 1.03)
+// castPlayerStateFactor 玩家状态修正器：只按主状态（精力）比例缩放抛距。
+// 饱食度影响恢复与健康，不进抛投（2026-11 用户裁决：抛距由体力决定；
+// 0.55/0.45 加权是本地自造标定，无官服依据）。0 值是真实空状态，
+// 按 0 计、落到 0.70 下限；不再把 <=0 重置为默认值。
+func castPlayerStateFactor(primary float64) float64 {
+	return clampFloat(primary/defaultPlayerConditionPrimary, 0.70, 1.03)
 }
 
 func clampFloat(v, lo, hi float64) float64 {
@@ -456,12 +455,15 @@ func castMasteryFactor(mastery float64) float64 {
 }
 
 // 已学习技能节点作为独立的特殊技能变量，避免与大类熟练度重复计算。
-func castSpecialSkillFactor(nodeEffect float64) float64 {
-	return 1 + clampFloat(nodeEffect*0.002, 0, 0.08)
+// castPct 是官方加成百分比的和（投距类 +5%/级，见
+// docs/cast-skill-official-effects.md），直接换算成乘数；
+// 极端值由 calculateCastDistance 的因子钳位兜底。
+func castSpecialSkillFactor(castPct float64) float64 {
+	return 1 + castPct/100
 }
 
-func castSkillFactor(mastery, nodeEffect float64) float64 {
-	return castMasteryFactor(mastery) * castSpecialSkillFactor(nodeEffect)
+func castSkillFactor(mastery, castPct float64) float64 {
+	return castMasteryFactor(mastery) * castSpecialSkillFactor(castPct)
 }
 
 func castModifiersSnapshot() []CastDistanceModifier {
@@ -519,8 +521,13 @@ func (s *Server) castDistanceForRig(ctx context.Context, uid int64, rodGUID stri
 		return p
 	}
 
+	rodType := int64(0)
 	if rod, rerr := s.DB.GetItemByGUID(ctx, rodGUID); rerr == nil && rod != nil {
 		if def, derr := s.itemDefForRow(ctx, rod); derr == nil {
+			// 竿型（fopbhlmkcpe）是投距技能的竿侧 gate 输入。
+			if v, ok := defAttrF64(def, "fopbhlmkcpe"); ok {
+				rodType = int64(v)
+			}
 			p.RodLengthM = rodLengthM(def)
 			p.RodAction = rodAction(def)
 			p.RodStiffness = rodStiffness(def)
@@ -551,9 +558,10 @@ func (s *Server) castDistanceForRig(ctx context.Context, uid int64, rodGUID stri
 	// “重量饵”是否来自同一个 f5 装配。饵 ID 本身不做距离乘数，真正
 	// 进入物理计算的是上方汇总出的真实重量。
 	p.BaitItemID = s.currentBait(ctx, rodGUID)
-	p.SkillCategory, p.SkillMastery, p.SkillNodeEffect = s.castSkillStats(ctx, uid, rigType, rodGUID)
-	p.PlayerPrimary, p.PlayerSecondary = s.castPlayerCondition(ctx, uid)
+	// 轮型先于技能统计加载：投距技能按竿/轮的 fopbhlmkcpe 匹配 gate。
 	p.ReelType, p.SpoolSize, p.SpoolCapacityM = s.castReelSpoolStats(ctx, reel, ids.Line)
+	p.SkillCategory, p.SkillMastery, p.SkillCastPct = s.castSkillStats(ctx, uid, rigType, rodType, p.ReelType, rodGUID)
+	p.PlayerPrimary, p.PlayerSecondary = s.castPlayerCondition(ctx, uid)
 	if p.SpoolCapacityM > 0 && p.LineLengthM > 0 {
 		// 线长是整盘标称长度；超过杯容量时按容量计，避免 600m 线盘被当成
 		// 25 倍超装。
@@ -572,7 +580,7 @@ func (s *Server) castDistanceForRig(ctx context.Context, uid int64, rodGUID stri
 		LineStretch: p.LineStretch, LineMaterial: p.LineMaterial,
 		LineLinearDensityGPM: p.LineLinearDensityGPM, LineRunningWeightG: p.LineRunningWeightG,
 		PlayerPrimary: p.PlayerPrimary, PlayerSecondary: p.PlayerSecondary,
-		SkillCategory: p.SkillCategory, SkillMastery: p.SkillMastery, SkillNodeEffect: p.SkillNodeEffect,
+		SkillCategory: p.SkillCategory, SkillMastery: p.SkillMastery, SkillCastPct: p.SkillCastPct,
 	}
 	p.BaseM = castNominalDistanceM(rigType)
 	p.Friction = perf.CastFriction

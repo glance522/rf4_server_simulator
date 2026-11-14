@@ -311,7 +311,10 @@ func TestSharedSkillEffectsCountOneGroup(t *testing.T) {
 	srv := sharedSkillTestServer(t, 10)
 	ctx := t.Context()
 	const level = int64(2)
-	for _, node := range []int64{501, 503} {
+	// 515/516（cat1 组 2）共享同一技能身份。501/503 已确认为纯投距技能
+	// （skill_cast_effect_def），其自造鱼侧行在 ensureCastSkillEffects 中删除，
+	// 不能再当鱼侧效果夹具。
+	for _, node := range []int64{515, 516} {
 		if err := srv.DB.SetSkillNode(ctx, sharedSkillUID, node, level); err != nil {
 			t.Fatal(err)
 		}
@@ -320,21 +323,21 @@ func TestSharedSkillEffectsCountOneGroup(t *testing.T) {
 	if err != nil || spent != 2 {
 		t.Fatalf("shared group points=%d err=%v, want 2", spent, err)
 	}
-	// 节点效果来自 skill_fish_effect_def；501/503 共享同一技能身份，只结算一次。
-	_, mastery, effect := srv.castSkillStats(ctx, sharedSkillUID, 1)
+	// 节点效果来自 skill_fish_effect_def；515/516 共享同一技能身份，只结算一次。
+	_, mastery, castPct := srv.castSkillStats(ctx, sharedSkillUID, 1, 0, 0)
 	bonus := srv.fishingBonus(ctx, sharedSkillUID, 1)
 	var perLevel, cap float64
 	if err := srv.DB.SQL.QueryRow(`
 		SELECT per_level,cap FROM skill_fish_effect_def
-		WHERE cat_id=1 AND node_id=501`).Scan(&perLevel, &cap); err != nil {
+		WHERE cat_id=1 AND node_id=515`).Scan(&perLevel, &cap); err != nil {
 		t.Fatal(err)
 	}
 	want := math.Min(cap, float64(level)*perLevel)
 	got := bonus.EcologyInterest + bonus.RareFish + bonus.LureTolerance +
 		bonus.WeatherAdaptation + bonus.LayerAccuracy + bonus.WormBoost +
 		bonus.PredatorBoost + bonus.SalmonidBoost + bonus.BottomBoost + bonus.FloatBoost
-	if mastery != 0 || effect != 0 || math.Abs(got-want) > 1e-9 {
-		t.Fatalf("shared skill effect counted incorrectly: mastery=%v effect=%v got=%v want=%v bonus=%+v",
-			mastery, effect, got, want, bonus)
+	if mastery != 0 || castPct != 0 || math.Abs(got-want) > 1e-9 {
+		t.Fatalf("shared skill effect counted incorrectly: mastery=%v castPct=%v got=%v want=%v bonus=%+v",
+			mastery, castPct, got, want, bonus)
 	}
 }

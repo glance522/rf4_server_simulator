@@ -66,9 +66,11 @@ func TestEffectiveFishingSkillsUseOnlyCurrentOwnedRod(t *testing.T) {
 	if cleared := srv.fishingBonus(ctx, uid, 55, gear); cleared == withRod {
 		t.Fatal("clearing the learned node did not remove its node bonus")
 	}
-	_, mastery, nodes := srv.castSkillStats(ctx, uid, 55, gear)
-	if mastery != 65 || nodes != 0 {
-		t.Fatalf("casting ignored gear mastery or invented node effects: %v %v", mastery, nodes)
+	// castSkillStats 第三返回值现在是官方投距百分比：节点 1004 不是投距节点，
+	// 即使竿型（boatr=16）匹配轮/竿 gate 也不得虚构效果。
+	_, mastery, castPct := srv.castSkillStats(ctx, uid, 55, 16, 0, gear)
+	if mastery != 65 || castPct != 0 {
+		t.Fatalf("casting ignored gear mastery or invented cast effects: %v %v", mastery, castPct)
 	}
 	if pts, _ := srv.DB.GetSkillPoints(ctx, uid, 11); pts != 60 {
 		t.Fatal("temporary mastery was written to permanent proficiency")

@@ -2719,7 +2719,7 @@ func castReady158(ctx *Ctx, gear string, depthCM int64, rigType int64) []byte {
 		"payload_to_test_max", math.Round(payloadTestRatio*1000)/1000,
 		"weight_factor", math.Round(profile.WeightFactor*1000)/1000,
 		"skill_cat", profile.SkillCategory, "skill_mastery", profile.SkillMastery,
-		"skill_node_effect", math.Round(profile.SkillNodeEffect*1000)/1000,
+		"skill_cast_pct", math.Round(profile.SkillCastPct*1000)/1000,
 		"skill_factor", math.Round(profile.SkillFactor*1000)/1000,
 		"special_skill_factor", math.Round(profile.SpecialSkillFactor*1000)/1000,
 		"player_primary", math.Round(profile.PlayerPrimary*1000)/1000,
