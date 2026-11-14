@@ -354,11 +354,31 @@ func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weig
 			if activeGroup != nil && b.matchesAny(activeGroup) {
 				allowed = true
 			}
+			// 食性证据分级（specs/changes/bait-evidence-threshold）：rf4records 实测占比
+			// 优先，companion tier/evidence 兜底；四档放行。阈值 tunables 可调，
+			// bait_share_strong/medium/tail 任一 <=0 时回到旧行为（>0 即满分）。
+			strong := s.tunableF("bait_share_strong", 5)
+			medium := s.tunableF("bait_share_medium", 1)
+			tail := s.tunableF("bait_share_tail", 0.2)
+			grading := strong > 0 && medium > 0 && tail > 0
+			share := s.rf4BaitShare(ctx, key, b.id)
 			score := 0.0
 			variation := fishVariation(fmt.Sprintf("%s/%s/%s/%d", loc, key, b.id, period))
-			if allowed || evidence[j][key] > 0 || localEvidence[j][key] {
+			// evidence[j] 实为 companion tier map（1=在榜 2=热门 3=top 档），非计数。
+			comp := evidence[j][key]
+			full := allowed || comp > 0 || localEvidence[j][key]
+			if grading {
+				// rf4 占比优先；占比缺失（表空/未映射）退回 companion/local 兜底。
+				full = allowed || share >= strong || comp >= 3 ||
+					(share < 0 && comp <= 0 && localEvidence[j][key])
+			}
+			if full {
 				preferred++
 				score = 1.0 + 0.5*variation
+			} else if grading && (share >= medium || (share < 0 && comp >= 1) || localEvidence[j][key]) {
+				score = maxBaitPreference * 0.35
+			} else if grading && share >= tail {
+				score = maxBaitPreference * 0.18
 			} else if b.legalAlternative(r) {
 				score = maxBaitPreference * 0.05
 			}
@@ -537,4 +557,66 @@ func fishingBaitInterest(interest float64, bonus fishingSkillBonus) float64 {
 		limit = .1
 	}
 	return math.Min(limit, interest*multiplier)
+}
+
+// rf4BaitShare 返回饵在 rf4records_catch 里对某鱼的实测渔获占比（百分比 0~100）。
+// 无数据（表空/该鱼无纪录/未映射）返回 -1。缓存异步预热 TTL 30 分钟，
+// 判鱼路径零阻塞；表未迁移或查询失败时保持 -1，分级退回 companion 兜底。
+func (s *Server) rf4BaitShare(ctx context.Context, fishKey, baitID string) float64 {
+	if s.DB == nil || fishKey == "" || baitID == "" {
+		return -1
+	}
+	now := time.Now()
+	s.rf4ShareMu.RLock()
+	ready := s.rf4ShareLoaded && now.Sub(s.rf4ShareAt) <= 30*time.Minute
+	m := s.rf4ShareCache[fishKey]
+	s.rf4ShareMu.RUnlock()
+	if !ready || m == nil {
+		if s.rf4ShareLoading.CompareAndSwap(false, true) {
+			go s.loadRf4Share()
+		}
+		if !ready {
+			return -1
+		}
+	}
+	if v, ok := m[baitID]; ok {
+		return v
+	}
+	return -1
+}
+
+func (s *Server) loadRf4Share() {
+	defer s.rf4ShareLoading.Store(false)
+	rows, err := s.DB.SQL.QueryContext(s.dbCtx(), `
+		SELECT fish_key, bait_id, 100.0*cnt/tot FROM (
+			SELECT fish_key, bait_id, count(*) AS cnt, sum(count(*)) OVER (PARTITION BY fish_key) AS tot
+			FROM rf4records_catch WHERE fish_key<>'' AND bait_id<>'' GROUP BY fish_key, bait_id)`)
+	if err != nil {
+		s.rf4ShareMu.Lock()
+		s.rf4ShareAt = time.Now()
+		s.rf4ShareMu.Unlock()
+		return
+	}
+	cache := map[string]map[string]float64{}
+	for rows.Next() {
+		var fk, bid string
+		var v float64
+		if rows.Scan(&fk, &bid, &v) == nil {
+			if cache[fk] == nil {
+				cache[fk] = map[string]float64{}
+			}
+			cache[fk][bid] = v
+		}
+	}
+	err = rows.Err()
+	_ = rows.Close()
+	s.rf4ShareMu.Lock()
+	defer s.rf4ShareMu.Unlock()
+	if err != nil {
+		s.rf4ShareAt = time.Now()
+		return
+	}
+	s.rf4ShareCache = cache
+	s.rf4ShareLoaded = true
+	s.rf4ShareAt = time.Now()
 }

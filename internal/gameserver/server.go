@@ -9,6 +9,7 @@ import (
 	"net"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -65,6 +66,14 @@ type Server struct {
 	fishEcologyMu          sync.RWMutex
 	fishEcologyCache       map[string]fishEcologyProfile
 	fishEcologyCacheLoaded bool
+
+	// rf4records 饵占比缓存（食性分级提案 bait-evidence-threshold 的占比判据）。
+	// 键 fish_key -> bait_id -> 占比百分比（0~100）；异步预热，TTL 30 分钟。
+	rf4ShareMu       sync.RWMutex
+	rf4ShareCache    map[string]map[string]float64
+	rf4ShareAt       time.Time
+	rf4ShareLoaded   bool
+	rf4ShareLoading  atomic.Bool
 
 	// 运行参数缓存
 	tunMu    sync.Mutex
