@@ -33,7 +33,7 @@ func TestBaitEvidenceThresholdGrading(t *testing.T) {
 	ins := func(bait string) {
 		t.Helper()
 		seq++
-		if _, err := db.SQL.Exec(`INSERT INTO rf4records_catch(fish_name_en,fish_key,bait_name,bait_id,weight_g,waterbody,region,categories,trophy_class,catch_date,fetched_at) VALUES('x','c.roach','n','`+bait+`',`+fmt.Sprintf("%d", seq)+`,'','','','','',1)`); err != nil {
+		if _, err := db.SQL.Exec(`INSERT INTO rf4records_catch(fish_name_en,fish_key,bait_name,bait_id,weight_g,waterbody,region,categories,trophy_class,catch_date,fetched_at) VALUES('x','c.roach','n','` + bait + `',` + fmt.Sprintf("%d", seq) + `,'','','','','',1)`); err != nil {
 			t.Fatal(err)
 		}
 	}
