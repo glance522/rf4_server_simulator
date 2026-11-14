@@ -1,0 +1,75 @@
+name: rf4-simulator
+
+x-rf4: &rf4
+  image: rf4-simulator:local
+  pull_policy: never
+  environment:
+    RF4_TUNNEL_PSK: "${RF4_DOCKER_TUNNEL_PSK:-rf4-local-compose-tunnel}"
+    RF4_GAME_TUNNEL_PSK: "${RF4_DOCKER_TUNNEL_PSK:-rf4-local-compose-tunnel}"
+    RF4_ADMIN_JWT_SECRET: "${RF4_ADMIN_JWT_SECRET:-rf4-local-compose-admin}"
+    RF4_ADMIN_PASSWORD: "${RF4_ADMIN_PASSWORD:-admin123}"
+  volumes:
+    - player-data:/app/data
+
+x-readiness: &readiness
+  interval: 3s
+  timeout: 2s
+  retries: 20
+  start_period: 10s
+
+services:
+  seed:
+    <<: *rf4
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ["seed"]
+
+  gameserver:
+    <<: *rf4
+    command: ["gameserver"]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *readiness
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9502/readyz"]
+    restart: unless-stopped
+
+  gateway:
+    <<: *rf4
+    command: ["gateway"]
+    environment:
+      RF4_TUNNEL_PSK: "${RF4_DOCKER_TUNNEL_PSK:-rf4-local-compose-tunnel}"
+      RF4_GATEWAY_ADVERTISE_HOST: "${RF4_GATEWAY_ADVERTISE_HOST:-127.0.0.1}"
+    volumes:
+      - player-data:/app/data
+      - gateway-certs:/app/certs
+    depends_on:
+      gameserver:
+        condition: service_healthy
+    healthcheck:
+      <<: *readiness
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9501/readyz"]
+    ports:
+      - "${RF4_BIND_IP:-127.0.0.1}:${RF4_HTTPS_PORT:-443}:8443"
+      - "${RF4_BIND_IP:-127.0.0.1}:7515:7515"
+      - "${RF4_BIND_IP:-127.0.0.1}:9341:9341"
+    restart: unless-stopped
+
+  admin:
+    <<: *rf4
+    command: ["admin"]
+    depends_on:
+      gameserver:
+        condition: service_healthy
+    healthcheck:
+      <<: *readiness
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9503/readyz"]
+    ports:
+      - "${RF4_BIND_IP:-127.0.0.1}:${RF4_ADMIN_PORT:-8080}:8080"
+    restart: unless-stopped
+
+volumes:
+  player-data:
+  gateway-certs:
