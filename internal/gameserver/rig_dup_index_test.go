@@ -10,6 +10,27 @@ import (
 	"testing"
 )
 
+// withLegacySharedSlot57 临时把 rig57 换回旧版 {12,17}@252 共用槽模板。
+//
+// 下面两条用例覆盖的是「多个品类共用同一规范索引时如何去重/替换」这条
+// 通用逻辑，不是链斗式钓组的真实槽位表。2026-11-14 实机日志证明客户端
+// 的 rig57 是三组独立槽位，真实模板已改（见 rig_marine_paternoster_test.go），
+// 但共用槽逻辑仍可能被将来的模板用到，因此保留用例、改用临时模板模拟。
+// 修改全局模板表有数据竞争风险，调用方必须是串行测试（不得 t.Parallel）。
+func withLegacySharedSlot57(t *testing.T) {
+	t.Helper()
+	old := rigSlotTemplates[57]
+	rigSlotTemplates[57] = []rigSlotTemplate{
+		{Cats: []int64{13}, Idx: 175},
+		{Cats: []int64{29}, Idx: 200},
+		{Cats: []int64{17}, Idx: 325},
+		{Cats: []int64{17}, Idx: 326},
+		{Cats: []int64{17}, Idx: 327},
+		{Cats: []int64{12, 17}, Idx: 252},
+	}
+	t.Cleanup(func() { rigSlotTemplates[57] = old })
+}
+
 // TestDuplicateRigIndexIsReturnedByProjection 验证历史重复索引在投影重建时收敛。
 func TestDuplicateRigIndexIsReturnedByProjection(t *testing.T) {
 	t.Parallel()
@@ -131,10 +152,10 @@ func TestRigTypeSwitchDedupesSameIndex(t *testing.T) {
 	}
 }
 
-// TestRigDedupeAcrossMutuallyExclusiveCategories 复现审查 P2：rig57 模板把钩(12)
+// TestRigDedupeAcrossMutuallyExclusiveCategories 复现审查 P2：共用槽模板把钩(12)
 // 和拟饵(17)声明为同一槽位 252 的互斥替代项，两者同时挂载应被去重，而不是共存。
 func TestRigDedupeAcrossMutuallyExclusiveCategories(t *testing.T) {
-	t.Parallel()
+	withLegacySharedSlot57(t)
 	srv, db := newDetachTestServer(t)
 	ctx := context.Background()
 	const uid = int64(1000001)
@@ -242,9 +263,10 @@ func TestDedupeRigComponentsKeepsTargetValid(t *testing.T) {
 }
 
 // TestRigMountReplacesCrossCategorySharedSlot 验证正常装配时最后一次装配生效：
-// rig57 的钩(12)与拟饵(17)共用槽位252，先装钩再装拟饵后，应保留拟饵并把钩退回背包。
+// 共用槽模板的钩(12)与拟饵(17)共用槽位252，先装钩再装拟饵后，应保留拟饵
+// 并把钩退回背包，同时上报退回去向供 800 快照刷新。
 func TestRigMountReplacesCrossCategorySharedSlot(t *testing.T) {
-	t.Parallel()
+	withLegacySharedSlot57(t)
 	srv, db := newDetachTestServer(t)
 	ctx := context.Background()
 	const uid = int64(1000001)

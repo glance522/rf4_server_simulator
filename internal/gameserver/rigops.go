@@ -163,7 +163,21 @@ var rigSlotTemplates = map[int64][]rigSlotTemplate{
 	54: {{[]int64{13}, 175}, {[]int64{17}, 300}, {[]int64{17}, 325}, {[]int64{17}, 326}},
 	55: {{[]int64{13}, 175}, {[]int64{29}, 200}, {[]int64{13}, 150}, {[]int64{17}, 325}, {[]int64{12}, 250}, {[]int64{13}, 151}, {[]int64{17}, 326}, {[]int64{12}, 251}}, // 海竿双路亚
 	56: {{[]int64{13}, 175}, {[]int64{29}, 200}, {[]int64{13}, 150}, {[]int64{17}, 325}, {[]int64{12}, 250}, {[]int64{13}, 151}, {[]int64{17}, 326}, {[]int64{12}, 251}},
-	57: {{[]int64{13}, 175}, {[]int64{29}, 200}, {[]int64{17}, 325}, {[]int64{17}, 326}, {[]int64{17}, 327}, {[]int64{12, 17}, 252}},
+	// 57 = rig_MarineBottomPaternoster（海钓链斗式/串钩）。主前导 175 +
+	// 震子线 200 + 三组支线，每组各自占一组独立的引线/拟饵/钩索引。
+	// 2026-11-14 实机日志客户端上报：13/175（减震引线）、13/150~152（海洋引线）、
+	// 12/250~252（海钩）、17/300~302（拟饵）、17/325~327（吸引成分：
+	// Fire stick / Fire tube / Color beads）、29/200（震子线）。
+	// 拟饵族(17)同时承载拟饵与吸引成分，两组索引必须都声明：
+	// 只声明 325~327 时，客户端的拟饵 300 会被 canonicalIndexForOrdinal
+	// 改写到 325~327，既把吸引成分挤回背包（装拟饵掉吸引成分），
+	// 又让三个拟饵挤在同一组槽位里互相顶掉且客户端在自己的 300~302 上看不见。
+	57: {{[]int64{13}, 175}, {[]int64{29}, 200},
+		{[]int64{13}, 150}, {[]int64{12}, 250},
+		{[]int64{13}, 151}, {[]int64{12}, 251},
+		{[]int64{13}, 152}, {[]int64{12}, 252},
+		{[]int64{17}, 300}, {[]int64{17}, 301}, {[]int64{17}, 302},
+		{[]int64{17}, 325}, {[]int64{17}, 326}, {[]int64{17}, 327}},
 	58: {{[]int64{13}, 175}, {[]int64{29}, 200}, {[]int64{13}, 150}, {[]int64{12}, 250}},
 	59: {{[]int64{13}, 175}, {[]int64{29}, 200}, {[]int64{13}, 150}, {[]int64{12}, 250}, {[]int64{12}, 251}, {[]int64{12}, 252}},
 }
@@ -239,8 +253,8 @@ func uniqueIndices(idxs []int64) []int64 {
 // 客户端按规范索引渲染 f5 组件，两个组件落在同一索引上会互相覆盖：
 // 轻则重量/耐久算两份，重则整条钓组被判定无效（海钓前导重复挂载时，
 // 抛竿后客户端立即收回钓组，表现为饵一入水就回到手上）。
-// 一个槽位可声明多个互斥品类（如 rig57 的 {12,17}@252，钩与拟饵互斥），
-// 所以去重键是规范索引本身，而不是 (品类, 索引)。
+// 一个槽位可以声明多个互斥品类，所以去重键是规范索引本身，
+// 而不是 (品类, 索引)。
 // 冲突时优先保留"原始 Extra 已是当前模板合法索引"的组件（target-valid），
 // 其次按 (品类, ordinal) 顺序——换钓组类型后保留的是当前有效组件，
 // 而不是旧类型残留的低 ordinal 组件。
@@ -1706,9 +1720,9 @@ func (s *Server) rigItemMutate(ctx context.Context, rodGUID string, slot *int64,
 				Extra: canonicalIndexForOrdinal(*slot, comp.Extra, curType, rigCompOrdinal(key)),
 			}
 			// 正常装配到共用槽位时，新组件必须替换该规范索引上的旧组件。
-			// 例如 rig57 的 {钩12,拟饵17}@252：先去重兜底会按品类顺序保留
-			// 旧钩并丢弃刚装的拟饵，表现为“装配成功但没换上去”。这里在
-			// 写入新组件前清掉所有同索引占用者，确保最后一次装配生效。
+			// 先去重兜底会按品类顺序保留旧组件并丢弃刚装的新组件，表现为
+			// “装配成功但没换上去”。这里在写入新组件前清掉所有同索引
+			// 占用者，确保最后一次装配生效。
 			for otherKey, other := range comps {
 				if otherKey == key {
 					continue
@@ -2091,13 +2105,25 @@ func (s *Server) retainSharedRigComponents(ctx context.Context, uid int64, paren
 			continue
 		}
 		category, ordinal := rigCompCategory(key), rigCompOrdinal(key)
+		// 倒钓臂展开产生的 1000+ 子槽是旧钓组的运行时状态，不属于任何
+		// 模板声明的槽位。hookSlotIndexNamespace 会让 canonicalIndexForOrdinal
+		// 原样放行它们，rigComponentSharedByTypes 又按品类判为共享，
+		// dedupeRigComponents 也不会清理（每个索引都是独立槽）——于是从
+		// 倒钓臂切换到链斗式后，旧档的 1001/1005/1009 钩和 1002/1006/1010
+		// 拟饵整组残留进新钓组，客户端表现为「第三组海钩未装配却出现」。
+		// 切换钓组类型即重建装配，这些子槽一律退回背包；同一钓组内继续
+		// 装配不经过这里，rig50 的倒钓臂多钩不受影响。
+		if hookSlotIndexNamespace(category, comp.Extra) {
+			delete(comps, key)
+			s.releaseDedupedComponent(ctx, uid, parentGUID, comp.GUID, collect...)
+			continue
+		}
 		if !rigComponentSharedByTypes(fromType, toType, category) {
 			delete(comps, key)
 			s.releaseDedupedComponent(ctx, uid, parentGUID, comp.GUID, collect...)
 			continue
 		}
-		// 共同槽位也必须使用新模板的索引；海钓 1000+ 钩位子槽会由
-		// canonicalIndexForOrdinal 原样保留。
+		// 共同槽位也必须使用新模板的索引。
 		if len(slotIndicesFor(toType, category)) > 0 {
 			comp.Extra = canonicalIndexForOrdinal(category, comp.Extra, toType, ordinal)
 			comps[key] = comp
