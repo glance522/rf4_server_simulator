@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const fishEcologyProfileVersion = 3
+const fishEcologyProfileVersion = 4
 
 //go:embed assets/fish_ecology_defs.json
 var fishEcologyDefsJSON []byte
@@ -244,10 +244,21 @@ func (s *Server) rigWaterLayer(c fishRollContext) float64 {
 		if c.lureLayer > 0 {
 			return normalizeWaterLayer(c.lureLayer)
 		}
+		// 无运动证据时按饵的名义泳层兜底，而不是一律中层 .5——水面系饵
+		// 刚入水还没上报动作时按 .5 判鱼会错过表层掠食鱼。
+		if c.runtime != nil && c.runtime.lureKnown && c.runtime.lure.DiveDepth > 0 {
+			return normalizeWaterLayer(c.runtime.lure.DiveDepth)
+		}
 		return .5
 	}
 	if c.depthCM > 0 {
-		return normalizeWaterLayer(float64(c.depthCM) / 500)
+		// 浮钓水层按落点实际水深归一；没有落点水深时维持旧的 5m 满刻度
+		// （旧口径在 >5m 水域会把中层调漂读成底层）。
+		span := 500.0
+		if c.spotEnv.Known && c.spotEnv.DepthM > 0 {
+			span = c.spotEnv.DepthM * 100
+		}
+		return normalizeWaterLayer(float64(c.depthCM) / span)
 	}
 	return .45
 }
@@ -262,22 +273,22 @@ func (s *Server) fishLayerWeight(ctx context.Context, key string, c fishRollCont
 	return s.fishLayerWeightProfile(p, c)
 }
 
+// fishLayerWeightProfile 按当前钓法水层与鱼种区间计算软匹配权重：
+// 区间（±0.08 容差）内保留 pref 高斯峰（精确命中偏好层 ≈1.0）与 0.75 地板，
+// 区间外对称指数衰减（k=2），下限 0.02 保留杂口。旧版只罚"底钓打表层鱼"
+// 与"路亚比鱼深"两个方向，水面饵打底层鱼只走高斯尾巴（v4 区间收窄后
+// 仍有 ~0.27），是水面系上底鱼的根因之一；对称化后衰减与方向无关。
 func (s *Server) fishLayerWeightProfile(p fishEcologyProfile, c fishRollContext) float64 {
 	target := s.rigWaterLayer(c)
-	mid := p.LayerPref
-	half := math.Max(.08, (p.LayerMax-p.LayerMin)/2)
-	z := (target - mid) / half
-	factor := .12 + .88*math.Exp(-.5*z*z)
-	if target >= p.LayerMin-.08 && target <= p.LayerMax+.08 {
-		factor = math.Max(factor, .75)
+	lo, hi := p.LayerMin, p.LayerMax
+	if target >= lo-.08 && target <= hi+.08 {
+		half := math.Max(.08, (hi-lo)/2)
+		z := (target - p.LayerPref) / half
+		return math.Max(.75, .12+.88*math.Exp(-.5*z*z))
 	}
-	if bottomRigTypes[c.rigType] && p.LayerMax < .55 {
-		factor *= .05
-	}
-	if rigTypeLureFamily[c.rigType] && target > p.LayerMax+.15 {
-		factor *= .2
-	}
-	return math.Max(.005, factor)
+	half := math.Max(.08, (hi-lo)/2)
+	out := math.Max(lo-.08-target, target-hi-.08) / half
+	return math.Max(.02, .75*math.Exp(-2*out))
 }
 
 func (s *Server) fishBiteEnvironmentWeight(ctx context.Context, key string, c fishRollContext) float64 {
@@ -524,36 +535,44 @@ func fishEcologyActionWeight(weights map[string]float64, action string) (float64
 	return 0, false
 }
 
-func lureLayerFromMotion(mask uint32, previous float64) float64 {
+// lureLayerFromMotion 由 14/7 运动位推导实时水层。dive 是当前拟饵的名义泳层
+// （loadLureAttributes 的 DiveDepth），>0 时把结果钳进 dive+0.15 以内：运动位
+// 是玩家操作意图，但饵的物理泳层有上限——水面系饵（dive≈0.10）的匀速收线
+// 旧版会按 +0.03 无界漂到中层甚至底层，深潜铁板的跳底位也会越过物理深度。
+// 水面动作位（0x1000/0x100/0x20）不受钳制：把深潜饵快收到水面是真实操作。
+func lureLayerFromMotion(mask uint32, previous, dive float64) float64 {
 	if previous <= 0 {
 		previous = .5
 	}
 	mask &= lureMotionStatusMask
+	layer := previous
 	switch {
 	case mask&0x1000 != 0:
-		return .08
+		layer = .08
 	// 犬步（WalkDog）是水面系的收线动作：没有这个分支时会落到 default，
 	// 水面拟饵被当成中层（previous≈.5）判鱼，只能抽到中层鱼，客户端
 	// 表现为"鱼来了但不咬"。激溅（0x20）同理，只是可能同时带收线位。
 	case mask&0x100 != 0:
-		return .06
+		layer = .06
 	case mask&0x80000 != 0:
-		return normalizeWaterLayer(previous + .08)
+		layer = normalizeWaterLayer(previous + .08)
 	case mask&0x20 != 0:
 		// 激溅是主动作，可能同时带收线位 0x400 或其它水层位；必须优先于
 		// 收线/静止分支，保持与 classifyLureMotion 一致。
-		return .08
+		layer = .08
 	case mask&0x200000 != 0:
-		return normalizeWaterLayer(previous - .08)
+		layer = normalizeWaterLayer(previous - .08)
 	case mask&0x2000 != 0, mask&0x400000 != 0:
-		return .94
+		layer = .94
 	case mask&0x800 != 0:
-		return .92
+		layer = .92
 	case mask&0x200 != 0:
-		return .55
+		layer = .55
 	case mask&0x400 != 0:
-		return normalizeWaterLayer(previous + .03)
-	default:
-		return normalizeWaterLayer(previous)
+		layer = normalizeWaterLayer(previous + .03)
 	}
+	if dive > 0 {
+		layer = math.Min(layer, dive+.15)
+	}
+	return normalizeWaterLayer(layer)
 }

@@ -2,6 +2,7 @@ package gameserver
 
 import (
 	"context"
+	"math"
 	"path/filepath"
 	"testing"
 	"time"
@@ -101,28 +102,67 @@ func TestEffectiveBaitDepthTracksFloatSinkingAndLureLayer(t *testing.T) {
 	if got := classifyLureMotion(0x800); got != "bottom_motionless" {
 		t.Fatalf("0x800 应识别为在水底无移动，实得 %q", got)
 	}
-	if got := lureLayerFromMotion(0x1000, .5); got != .08 {
+	if got := lureLayerFromMotion(0x1000, .5, 0); got != .08 {
 		t.Fatalf("水面运动应映射到浅层，实得 %f", got)
 	}
 	// 水面系动作：犬步/激溅必须落到水面层，否则水面拟饵按中层判鱼，
 	// 只能抽到中层鱼种，客户端表现为"鱼来了但不咬"。
-	if got := lureLayerFromMotion(0xD1000100, .5); got != .06 {
+	if got := lureLayerFromMotion(0xD1000100, .5, 0); got != .06 {
 		t.Fatalf("犬步(walk_dog)应映射水面层 .06，实得 %f", got)
 	}
 	for _, mask := range []uint32{0x20, 0x420, 0x220, 0x820} {
-		if got := lureLayerFromMotion(mask, .5); got != .08 {
+		if got := lureLayerFromMotion(mask, .5, 0); got != .08 {
 			t.Fatalf("激溅组合 mask=%#x 应映射水面层 .08，实得 %f", mask, got)
 		}
 	}
 	// 犬步与激溅同时出现时，犬步仍是更具体的水面动作，保持 .06。
-	if got := lureLayerFromMotion(0x520, .5); got != .06 {
+	if got := lureLayerFromMotion(0x520, .5, 0); got != .06 {
 		t.Fatalf("犬步+激溅+收线 mask=0x520 应映射 .06，实得 %f", got)
 	}
-	if got := lureLayerFromMotion(0x400, .5); got != .53 {
+	if got := lureLayerFromMotion(0x400, .5, 0); got != .53 {
 		t.Fatalf("普通收线应仍按 +.03 变化，实得 %f", got)
 	}
-	if got := (&Server{}).rigWaterLayer(fishRollContext{rigType: 5, lureLayer: lureLayerFromMotion(0xD1000100, .5)}); got > .2 {
+	if got := (&Server{}).rigWaterLayer(fishRollContext{rigType: 5, lureLayer: lureLayerFromMotion(0xD1000100, .5, 0)}); got > .2 {
 		t.Fatalf("水面拟饵收线时水层应判水面，实得 %f", got)
+	}
+}
+
+func TestLureLayerDiveClampAndRigWaterLayer(t *testing.T) {
+	// dive>0 时运动推导值不得越过饵的物理泳层 dive+0.15：水面系饵匀速收线
+	// 旧版按 +.03 无界漂深，深潜铁板的跳底位也越过物理深度。
+	if got := lureLayerFromMotion(0x400, .30, .10); got != .25 {
+		t.Fatalf("水面系饵（dive=.10）收线应钳在 dive+.15=.25，实得 %f", got)
+	}
+	if got := lureLayerFromMotion(0x400, .90, .10); got != .25 {
+		t.Fatalf("历史漂深的水面饵收线应钳回 .25，实得 %f", got)
+	}
+	if got := lureLayerFromMotion(0x2000, .5, .72); got != .87 {
+		t.Fatalf("深潜饵（dive=.72）跳底位应钳在 .87，实得 %f", got)
+	}
+	// 水面动作位不受钳：把深潜饵快收到水面是真实操作。
+	if got := lureLayerFromMotion(0x1000, .5, .72); got != .08 {
+		t.Fatalf("深潜饵收上水面应映射 .08，实得 %f", got)
+	}
+	// dive=0（未知）保持旧语义不钳。
+	if got := lureLayerFromMotion(0x400, .5, 0); got != .53 {
+		t.Fatalf("无 dive 时保持 +.03 语义，实得 %f", got)
+	}
+	srv := &Server{}
+	// 路亚无运动证据：按饵名义泳层兜底，不再一律中层 .5。
+	if got := srv.rigWaterLayer(fishRollContext{rigType: 5,
+		runtime: &fishRollRuntime{lureKnown: true, lure: lureAttributes{DiveDepth: .10}}}); got > .15 {
+		t.Fatalf("水面系饵无运动证据应判表层，实得 %f", got)
+	}
+	if got := srv.rigWaterLayer(fishRollContext{rigType: 5}); got != .5 {
+		t.Fatalf("无饵证据时保持 .5 兜底，实得 %f", got)
+	}
+	// 浮钓水层按落点实际水深归一；无落点水深时保持 5m 满刻度旧口径。
+	if got := srv.rigWaterLayer(fishRollContext{rigType: 1, depthCM: 300}); got != .6 {
+		t.Fatalf("无落点水深时浮钓保持 5m 满刻度，实得 %f", got)
+	}
+	if got := srv.rigWaterLayer(fishRollContext{rigType: 1, depthCM: 300,
+		spotEnv: fishSpotEnvironment{Known: true, DepthM: 10}}); got != .3 {
+		t.Fatalf("10m 水域调漂 3m 应判 0.3 中层，实得 %f", got)
 	}
 }
 
@@ -162,8 +202,42 @@ func TestClassifyLureMotionUsesClientStatusBits(t *testing.T) {
 			t.Errorf("classifyLureMotion(0x%X)=%q，期望 %q", tc.mask, got, tc.want)
 		}
 	}
-	if got := lureLayerFromMotion(0xD1080000, .1); got != .18 {
+	if got := lureLayerFromMotion(0xD1080000, .1, 0); got != .18 {
 		t.Fatalf("下沉动作应增加水层深度到 .18，实得 %f", got)
+	}
+}
+
+func TestFishLayerWeightProfileSymmetricDecay(t *testing.T) {
+	srv := &Server{}
+	mk := func(lo, pref, hi float64) fishEcologyProfile {
+		return fishEcologyProfile{LayerMin: lo, LayerPref: pref, LayerMax: hi, Enabled: true}
+	}
+	// rigWaterLayer 口径：float 按 depthCM/500，路亚按 lureLayer，底层杆恒 .93。
+	cases := []struct {
+		name string
+		p    fishEcologyProfile
+		c    fishRollContext
+		flo  float64
+		fhi  float64
+	}{
+		{"区间内命中 pref 峰≈1", mk(.50, .70, .90), fishRollContext{rigType: 1, depthCM: 350}, .99, 1.001},
+		{"区间内偏离 pref 落地板 0.75", mk(.50, .70, .90), fishRollContext{rigType: 1, depthCM: 255}, .74, .76},
+		{"水面饵打鲤鱼型（出界对称衰减）", mk(.32, .65, .77), fishRollContext{rigType: 5, lureLayer: .08}, .14, .22},
+		{"底钓打表层鱼（对称，保留杂口）", mk(.08, .20, .30), fishRollContext{rigType: 12}, .015, .04},
+		{"极端出界取 floor 0.02", mk(.52, .78, .96), fishRollContext{rigType: 5, lureLayer: .06}, .015, .03},
+		{"跳底饵打上层滤食鱼", mk(.10, .30, .55), fishRollContext{rigType: 5, lureLayer: .92}, .05, .07},
+	}
+	for _, tc := range cases {
+		got := srv.fishLayerWeightProfile(tc.p, tc.c)
+		if got < tc.flo || got > tc.fhi {
+			t.Errorf("%s: factor=%f，期望 [%f,%f]", tc.name, got, tc.flo, tc.fhi)
+		}
+	}
+	// 对称性：同量级出界距离的因子一致（旧版对"饵比鱼浅"无硬惩罚，只有高斯尾巴）。
+	shallowFish := srv.fishLayerWeightProfile(mk(.08, .20, .30), fishRollContext{rigType: 12})
+	deepFish := srv.fishLayerWeightProfile(mk(.52, .78, .96), fishRollContext{rigType: 5, lureLayer: .06})
+	if math.Abs(shallowFish-deepFish) > .02 {
+		t.Errorf("对称衰减应方向无关: 浅鱼×底钓=%f 深鱼×水面饵=%f", shallowFish, deepFish)
 	}
 }
 
