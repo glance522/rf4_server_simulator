@@ -395,6 +395,7 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 	}
 	var res *settleXpResult
 	var qualCups []*store.Item
+	var stageGifts []*store.Item
 	if hasFish {
 		// 资格事件在结算前用咬钩快照装配；判定与经验/回执在同一事务提交。
 		// 达标当尾的结算响应即带完成（增量下发），重放从回执还原同一增量。
@@ -408,6 +409,8 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 		// 重放不发）；奖杯挂 801.f8 奖励列表并在响应后推 4/22。
 		if !res.replayed && len(qualChanges) > 0 {
 			qualCups = s.ensureQualificationCups(cctx, uid)
+			// 阶段礼物：本尾鱼让某阶段最后一条可见任务达标时按配置发放（kv 幂等）。
+			stageGifts = s.ensureEventStageGifts(cctx, uid)
 		}
 		stats813 = s.buildSettle813(cctx, uid, pending, res)
 		profileTree, _ = s.BuildProfile307W(cctx, uid, worldTotalGameMin(time.Now()))
@@ -450,6 +453,11 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 	}
 	for _, row := range qualCups {
 		if tree, terr := s.awardItemTree(cctx, row); terr == nil {
+			grants.Items = append(grants.Items, tree)
+		}
+	}
+	for _, row := range stageGifts {
+		if tree, terr := s.ItemToTree(cctx, row); terr == nil {
 			grants.Items = append(grants.Items, tree)
 		}
 	}
@@ -516,6 +524,20 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 				giftRows = append811Row(giftRows, line)
 			}
 		}
+		// 阶段礼物：普通商品走正常物品树，不能使用分支奖杯的 f4=14 奖赏投影。
+		if len(stageGifts) > 0 {
+			if line, lerr := s.giftRows811(cctx, []gift811Line{{
+				source: giftSourceGameEvent,
+				param:  1,
+				items:  stageGifts,
+			}}); lerr != nil {
+				ctx.Log.Warn("阶段礼物礼物行构造失败", "err", lerr)
+			} else if line != nil && line.Kind != proto.KindNull {
+				// giftRows811 已经返回 args(173) 容器；合并容器元素，不能
+				// 把整个 args(173) 再作为一个 811 元素嵌进去。
+				giftRows = append811Rows(giftRows, line)
+			}
+		}
 	}
 	obj801, err := wiregen.MakeObj("caagocpofin", map[int]*proto.Value{
 		0:  f0,
@@ -580,6 +602,14 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 		ctx.AfterResponse(func() {
 			for _, row := range cups {
 				s.pushAwardUpdate(uid, row)
+			}
+		})
+	}
+	if len(stageGifts) > 0 {
+		gifts := stageGifts
+		ctx.AfterResponse(func() {
+			for _, row := range gifts {
+				s.pushItemUpdate(uid, row)
 			}
 		})
 	}

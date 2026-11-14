@@ -90,6 +90,7 @@ func NewServer(cfg config.Admin, db *store.DB, log logger, webFS fs.FS) *Server 
 	mux.HandleFunc("POST /api/players/kick", auth(s.handleKick))
 	mux.HandleFunc("POST /api/players/ban", auth(s.handleBan))
 	mux.HandleFunc("GET /api/catalog/items", auth(s.handleCatalogItems))
+	mux.HandleFunc("GET /api/catalog/groups", auth(s.handleCatalogGroups))
 	mux.HandleFunc("GET /api/stores", auth(s.handleStores))
 	mux.HandleFunc("GET /api/stores/items", auth(s.handleStoreItems))
 	mux.HandleFunc("POST /api/stores/items/update", auth(s.handleStoreItemUpdate))
@@ -310,6 +311,46 @@ func validateEventBranches(value string) error {
 	return nil
 }
 
+// validateEventStageGifts 校验活动阶段奖励的 JSON 形状。
+// 分支 9~20 共用客户端活动规则，阶段最多 10 段，数量上限与 gameserver
+// 的运行时钳制一致。空字符串用于清空整份配置。
+func validateEventStageGifts(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	var parsed map[string]map[string][]struct {
+		Item string `json:"item"`
+		Qty  int64  `json:"qty"`
+	}
+	if err := json.Unmarshal([]byte(value), &parsed); err != nil {
+		return fmt.Errorf("阶段奖励必须是有效 JSON")
+	}
+	for branch, stages := range parsed {
+		n, err := strconv.Atoi(branch)
+		if err != nil || n < 9 || n > 20 {
+			return fmt.Errorf("阶段奖励分支只能是 9~20 的 ID")
+		}
+		for stage, gifts := range stages {
+			s, err := strconv.Atoi(stage)
+			if err != nil || s < 1 || s > 10 {
+				return fmt.Errorf("阶段奖励阶段只能是 1~10")
+			}
+			if len(gifts) == 0 {
+				return fmt.Errorf("阶段奖励 %s/%s 至少要有一件物品", branch, stage)
+			}
+			for _, gift := range gifts {
+				if strings.TrimSpace(gift.Item) == "" {
+					return fmt.Errorf("阶段奖励 %s/%s 的物品 ID 不能为空", branch, stage)
+				}
+				if gift.Qty < 1 || gift.Qty > 99 {
+					return fmt.Errorf("阶段奖励 %s/%s 的数量必须在 1~99", branch, stage)
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // tunableRange 是数值型 tunable 的合法区间 [min, max]。
 // 下限不是随手取的：它要保证「这个值在数字层面真的有意义」，而不只是「>0 合法」。
 type tunableRange struct {
@@ -380,6 +421,12 @@ func (s *Server) handleTunableSet(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Key == "event_branches" {
 		if err := validateEventBranches(req.Value); err != nil {
+			httpError(w, 400, err.Error())
+			return
+		}
+	}
+	if req.Key == "event_stage_gifts" {
+		if err := validateEventStageGifts(req.Value); err != nil {
 			httpError(w, 400, err.Error())
 			return
 		}

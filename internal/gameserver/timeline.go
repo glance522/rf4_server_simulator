@@ -240,6 +240,10 @@ func hFog(ctx *Ctx) ([]byte, bool) {
 		for _, cup := range srv.ensureQualificationCups(ctx.Sess.pushCtx(), ctx.Sess.Userid) {
 			srv.pushAwardUpdate(ctx.Sess.Userid, cup)
 		}
+		// 阶段礼物兜底：覆盖发放功能上线前已达标的历史阶段（kv 幂等）。
+		for _, row := range srv.ensureEventStageGifts(ctx.Sess.pushCtx(), ctx.Sess.Userid) {
+			srv.pushItemUpdate(ctx.Sess.Userid, row)
+		}
 		obj = srv.build5003(ctx.Sess.pushCtx(), ctx.Sess.Userid)
 	} else {
 		obj = (*Server)(nil).build5003FromStates(nil, build5012([]uint32{0}, seasonEndFiletime(0)))

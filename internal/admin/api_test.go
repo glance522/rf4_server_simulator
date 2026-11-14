@@ -45,6 +45,27 @@ func TestAdminAPI(t *testing.T) {
 		VALUES('worm_01','Worm','红虫','bait',9001)`); err != nil {
 		t.Fatalf("seed item_catalog: %v", err)
 	}
+	if _, err := db.SQL.Exec(`INSERT OR REPLACE INTO item_def(numeric_id,item_id,category,kind,brand,attrs_json) VALUES
+		(9002,'gift_full_bait',27,'bait','','{}'),
+		(9003,'gift_not_sold',27,'bait','','{}'),
+		(9004,'gift_rod_blank',36,'rod_blank','','{}'),
+		(9005,'gift_reel_spool',8,'reel_part','','{}'),
+		(9006,'gift_reel_gear',52,'reel_part','','{}')`); err != nil {
+		t.Fatalf("seed catalog item_def: %v", err)
+	}
+	if _, err := db.SQL.Exec(`INSERT OR REPLACE INTO item_catalog(item_id,name,name_zh,kind,numeric_id) VALUES
+		('gift_full_bait','Gift Bait','完整奖励饵料','bait',9002),
+		('gift_not_sold','Not Sold','未上架物品','bait',9003),
+		('gift_rod_blank','Rod Blank','竿坯组件','rod_blank',9004),
+		('gift_reel_spool','Reel Spool','线杯组件','reel_part',9005),
+		('gift_reel_gear','Reel Gear','主齿轮组件','reel_part',9006)`); err != nil {
+		t.Fatalf("seed catalog item_catalog: %v", err)
+	}
+	if _, err := db.SQL.Exec(`INSERT OR REPLACE INTO shop_item(store_id,item_id,silver,gold,stock) VALUES
+		('store_test','gift_full_bait',100,0,50),
+		('store_test','gift_rod_blank',100,0,50)`); err != nil {
+		t.Fatalf("seed catalog shop_item: %v", err)
+	}
 
 	cfg := config.Admin{HTTPAddr: "127.0.0.1:0", JWTSecret: "test"}
 	srv := NewServer(cfg, db, logging.Discard(), WebFS())
@@ -92,6 +113,20 @@ func TestAdminAPI(t *testing.T) {
 	}
 	_ = json.Unmarshal([]byte(body), &lr)
 	token := lr.Token
+
+	code, body = call("GET", "/api/catalog/items?q=gift_&shop_only=1&complete_only=1", token, "")
+	if code != 200 || !strings.Contains(body, `"item_id":"gift_full_bait"`) || !strings.Contains(body, `"group":"饵料"`) || strings.Contains(body, "gift_not_sold") || strings.Contains(body, "gift_rod_blank") {
+		t.Fatalf("完整商店商品目录异常: %d %s", code, body)
+	}
+	// 阶段奖励目录按完整静态目录分层读取：未上架的活动专属商品也可选，竿坯仍排除。
+	code, body = call("GET", "/api/catalog/groups?complete_only=1", token, "")
+	if code != 200 || !strings.Contains(body, `"key":"bait"`) {
+		t.Fatalf("完整商品分类异常: %d %s", code, body)
+	}
+	code, body = call("GET", "/api/catalog/items?q=gift_&group=bait&complete_only=1", token, "")
+	if code != 200 || !strings.Contains(body, `"item_id":"gift_full_bait"`) || !strings.Contains(body, `"item_id":"gift_not_sold"`) || strings.Contains(body, "gift_rod_blank") || strings.Contains(body, "gift_reel_spool") || strings.Contains(body, "gift_reel_gear") {
+		t.Fatalf("完整静态目录商品异常: %d %s", code, body)
+	}
 
 	// 内嵌前端可达
 	code, _ = call("GET", "/", token, "")
@@ -296,6 +331,31 @@ func TestValidateEventBranches(t *testing.T) {
 	for _, v := range []string{"8", "21", "abc", "17,abc", "17,,18", "9;10", "-1"} {
 		if err := validateEventBranches(v); err == nil {
 			t.Fatalf("%q 应被拒绝", v)
+		}
+	}
+}
+
+func TestValidateEventStageGifts(t *testing.T) {
+	for _, value := range []string{
+		"",
+		`{"13":{"1":[{"item":"fcb_coffee_can2","qty":1}]}}`,
+		`{"20":{"10":[{"item":"ab_tea_can2","qty":99}]}}`,
+	} {
+		if err := validateEventStageGifts(value); err != nil {
+			t.Fatalf("%q 应合法: %v", value, err)
+		}
+	}
+	for _, value := range []string{
+		"not-json",
+		`{"8":{"1":[{"item":"fcb_coffee_can2","qty":1}]}}`,
+		`{"13":{"11":[{"item":"fcb_coffee_can2","qty":1}]}}`,
+		`{"13":{"1":[]}}`,
+		`{"13":{"1":[{"item":"","qty":1}]}}`,
+		`{"13":{"1":[{"item":"fcb_coffee_can2","qty":0}]}}`,
+		`{"13":{"1":[{"item":"fcb_coffee_can2","qty":100}]}}`,
+	} {
+		if err := validateEventStageGifts(value); err == nil {
+			t.Fatalf("%q 应被拒绝", value)
 		}
 	}
 }

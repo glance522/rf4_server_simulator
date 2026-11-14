@@ -22,7 +22,7 @@ test('params tabs preserve edits and upstream embedded API routing',async()=>{
    await page.locator('button[data-page="gameplay"]').waitFor();
    assert.equal(await page.locator('#paramsBody .tunable-group[data-page="gameplay"]').count(),6);
    assert.equal(await page.locator('#paramsBody .tunable-group[data-page="reward"]').count(),5);
-   assert.equal(await page.locator('#paramsBody .tunable-group[data-page="event"]').count(),1);
+   assert.equal(await page.locator('#paramsBody .tunable-group[data-page="event"]').count(),2);
    assert.equal(await page.locator('#tun_fish_weight_cap').getAttribute('placeholder'),'未设置');
    assert.ok((await page.locator('label[for="tun_fish_weight_cap"]').locator('..').innerText()).includes('默认 0'));
    assert.equal(await page.locator('#tun_electric_locked_multiplier').count(),1);
