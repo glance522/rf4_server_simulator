@@ -202,6 +202,7 @@ func (c *Config) applyEnvOverrides() {
 	envStr("RF4_GAME_TUNNEL_PSK", &c.Game.Tunnel.PSK)
 	envStr("RF4_ADMIN_HTTP_ADDR", &c.Admin.HTTPAddr)
 	envStr("RF4_ADMIN_JWT_SECRET", &c.Admin.JWTSecret)
+	envStr("RF4_ADMIN_PASSWORD", &c.Admin.Password)
 	envStr("RF4_GAME_CLIENT_PATH", &c.Launcher.GamePath)
 	envStr("RF4_GAME_CLIENT_REGION", &c.Launcher.GameRegion)
 	envFloat("RF4_GATEWAY_KEEPALIVE_SEC", &c.Gateway.TransportKeepaliveSec)

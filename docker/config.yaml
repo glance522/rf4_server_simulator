@@ -1,0 +1,10 @@
+# 配置从 Go 默认值继承，以下是容器网络所需的覆盖。
+gateway:
+  login_addr: ":8443"
+  login_compat_addr: ":7515"
+  tunnel:
+    addr: "gameserver:9401"
+
+game:
+  tunnel:
+    addr: ":9401"

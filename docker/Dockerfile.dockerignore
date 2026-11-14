@@ -1,0 +1,14 @@
+**
+!README.md
+!readme.go
+!go.mod
+!go.sum
+!cmd/
+!cmd/**
+!internal/
+!internal/**
+!server_data/
+!server_data/static.sqlite3
+!server_data/compat_parts.json
+!docker/
+!docker/config.yaml
