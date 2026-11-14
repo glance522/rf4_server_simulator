@@ -30,7 +30,7 @@ allow 列表（攻略文本明确认定的食性）同级权重。本服 `loc_ba
 
 ## Evidence（本地库只读统计，2026-11-14）
 
-companion_bait_fish 31231 行（来源见 [fish-water-layer-v4 spec 的 Evidence 段](../fish-water-layer-v4/spec.md)：
+companion_bait_fish 31231 行（来源见 fish-water-layer-v4 spec（PR #478）的 Evidence 段：
 `migrations/00005_companion.sql` 随仓库首个提交 `d51ecb4` 预置，git 历史到此为止、无 provenance；
 代码注释称"companion 周纪录饵效"。**evidence 字段语义是推断**——按量级（1~5371，与
 "统计窗口内该饵×该鱼的捕获记录数"吻合）解读为样本计数，无文档证实）：
