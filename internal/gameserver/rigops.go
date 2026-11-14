@@ -727,6 +727,15 @@ func (s *Server) BackfillRigProjections(ctx context.Context) (int, error) {
 			s.log.Warn("装配投影回填失败", "rod", shortGUID(g), "err", err)
 			continue
 		}
+		// 顺带把多钩钓组的挂饵记录校正一遍。旧记录可能落在拟饵自带的内嵌钩上
+		// （实机 2026-11-13 08:08 额外鱼仍挂在 04047060…，主线钩 250 空置），
+		// 只靠出鱼时按需纠正会让重启后的第一竿继续按错记录分组。
+		if comps := s.storedRigComponents(ctx, g); len(comps) > 0 &&
+			hookPositionsIn(s.rigTypeForWrite(ctx, g), comps) >= 2 {
+			if _, err := s.baitHookAssignments(ctx, g, comps, false); err != nil {
+				s.log.Warn("挂饵记录校正失败", "rod", shortGUID(g), "err", err)
+			}
+		}
 		done++
 	}
 	return done, nil

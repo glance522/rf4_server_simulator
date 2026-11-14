@@ -237,6 +237,23 @@ func (s *Server) buildMountedHookTree(ctx context.Context, gearGUID string) *pro
 	return nil
 }
 
+// buildHookTreeByGUID 返回指定钩实例的物品树（裸钩形状）。
+// 多钩钓组按钩位逐枚挂鱼时用，与 buildMountedHookTree 取“线末端钩”不同。
+func (s *Server) buildHookTreeByGUID(ctx context.Context, hookGUID string) *proto.Value {
+	if s == nil || s.DB == nil || hookGUID == "" {
+		return nil
+	}
+	row, err := s.DB.GetItemByGUID(ctx, hookGUID)
+	if err != nil || row == nil {
+		return nil
+	}
+	tree, terr := s.ItemToTree(ctx, row)
+	if terr != nil {
+		return nil
+	}
+	return tree
+}
+
 // ---- 新玩家初始化 ----
 
 // EnsurePlayer 为首次登录的玩家创建档案、初始物品和快捷栏。

@@ -600,6 +600,26 @@ func (s *Session) Push4_22Hook(mounted bool, gears ...string) {
 	s.Push(4, 22, proto.Args(proto.S("61"), items...))
 }
 
+// Push4_22HookGUID 按钩 GUID 推单钩 4/22，只影响这一枚钩。
+//
+// 多钩钓组里每一枚挂了鱼的钩都需要自己的挂竿位：官方口径下缺这个标志时
+// 客户端钩实体不进搏鱼态（浮漂无咬钩演出、左下角无搏鱼指示），鱼模型也不会
+// 挂到那枚钩上。Push4_22Hook 只取线末端那枚（rigSpec 槽位 12），没法覆盖
+// 倒钓臂上的其余钩位。
+func (s *Session) Push4_22HookGUID(hookGUID string, mounted bool) bool {
+	if s == nil || s.Srv == nil || hookGUID == "" {
+		return false
+	}
+	tree := s.Srv.buildHookTreeByGUID(s.pushCtx(), hookGUID)
+	if tree == nil {
+		return false
+	}
+	if mounted {
+		markHookMounted(tree)
+	}
+	return s.Push(4, 22, proto.Args(proto.S("61"), tree)) != 0
+}
+
 // pushCtx 推送上下文（超时保护）。
 func (s *Session) pushCtx() context.Context {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

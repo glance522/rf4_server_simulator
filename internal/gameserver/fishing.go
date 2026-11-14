@@ -68,19 +68,33 @@ type FishState struct {
 	Hooked          bool
 	Resolved        bool
 	Pending         *RolledFish
-	biteTimer       *time.Timer
-	pendingTimer    *time.Timer
-	castGeneration  uint64
-	biteTicket      uint64
-	pendingTicket   uint64
-	PendingRepush   int           // 14/12 f0=3/5/6 连续拒收鱼实体时的重推次数
-	BiteAt          time.Time     // 原定咬钩绝对时刻；硬重启后据此恢复 timer
-	Keepnet         []*RolledFish // 回退缓存（DB 权威）
-	Bait            string
-	LastSkill       int64       // 本次钓鱼大类（1 浮钓 / 2 纺车）
-	Armed           *RolledFish // GM 武装"下一杆必上"（唯一绕过重量上限的路径）
-	Bonus           fishingSkillBonus
-	persist         fishPersistMeta
+	// Extra 是本杆多钩钓组上已咬钩、等待接管搏斗的额外鱼。
+	// 每条已各自推过 14/14 并绑定自己的钩位（HookGUID），按先后顺序结算。
+	// 仅进程内状态：它们是尚未结算的在途鱼，进程重启即丢，不产生错误渔获。
+	Extra []*RolledFish
+	// HoldMulti 表示本杆主鱼已结算、但 Extra 里还有鱼没处理：
+	// 此时钓组仍视为在水中，下一条由 14/5 / 14/6 提升，玩家不必重新抛竿。
+	HoldMulti bool
+	// Batch 是 14/4 收竿时已一并结算、等玩家同一次 14/5/14/6 决定的其余鱼。
+	//
+	// 客户端把 14/4 当作"本杆结束"：收竿后立刻回到手持状态并开始下一次抛投
+	// （实机 2026-11-13 15:40:29 收竿、15:40:31 就发 14/1 算抛距），所以逐条
+	// 接管搏斗永远接不上。本杆其余鱼只能在收竿时一起结算，入护/放生跟着玩家
+	// 对主鱼的同一次选择走。
+	Batch          []*RolledFish
+	biteTimer      *time.Timer
+	pendingTimer   *time.Timer
+	castGeneration uint64
+	biteTicket     uint64
+	pendingTicket  uint64
+	PendingRepush  int           // 14/12 f0=3/5/6 连续拒收鱼实体时的重推次数
+	BiteAt         time.Time     // 原定咬钩绝对时刻；硬重启后据此恢复 timer
+	Keepnet        []*RolledFish // 回退缓存（DB 权威）
+	Bait           string
+	LastSkill      int64       // 本次钓鱼大类（1 浮钓 / 2 纺车）
+	Armed          *RolledFish // GM 武装"下一杆必上"（唯一绕过重量上限的路径）
+	Bonus          fishingSkillBonus
+	persist        fishPersistMeta
 
 	hookedChatFishGUID string // 仅进程内：同一尾鱼的确认与拒收重推共用播报标记。
 	// 仅进程内：耐力播报的节流时间与鱼标识，不进持久化快照。
@@ -290,6 +304,9 @@ type RolledFish struct {
 	// ModelVariant 这尾鱼在客户端用的 FishFamily 族名（a_salmon_f2 等）；
 	// 空=用鱼种默认族。溜鱼 / 结算弹窗 / 渔护 / 鱼卡共用这一个值。
 	ModelVariant string
+	// NoEntity 表示客户端明确拒收过这尾鱼的实体（14/12 f0=3/5）。鱼确实咬了钩，
+	// 只是客户端画不出来：不再重派，但 14/4 照常结算，不能把渔获一起丢掉。
+	NoEntity bool
 }
 
 // stateFor 按 uid 取/建状态。
@@ -2131,6 +2148,12 @@ func (s *Server) scheduleBiteState(sess *Session, st *FishState, preserveHooked,
 	st.CastActive = true
 	st.Resolved = false
 	st.Pending = nil
+	// 新一杆/重排都会清掉多钩队列：额外鱼属于上一杆的在途鱼，
+	// 留着会在下一杆凭旧钩位凭空出现。Batch 同理——上一杆的渔获若没等到
+	// 14/5/14/6 就被新抛投顶掉，说明玩家放弃了入护/放生，不能留到下一杆。
+	st.Extra = nil
+	st.Batch = nil
+	st.HoldMulti = false
 	st.hookedChatFishGUID = ""
 	st.PendingRepush = 0
 	if !preserveHooked {
@@ -2296,12 +2319,13 @@ func (s *Server) onRodBiteTimerTicket(uid int64, st *FishState, ticket fishingTi
 	lureLayer, lureAction, lureMask := st.LureLayer, st.LureAction, st.LureMotionMask
 	lureSpeed := st.ReelSetting
 	boatOn, boatKnown := st.onBoatLocked(now.Unix())
-	f := s.rollFishForRig(s.dbCtx(), uid, st.GearGuid, st.Loc, st.Bait, st.Bonus, fishRollContext{
+	rollCtx := fishRollContext{
 		x: x, z: z, hasPos: hasPos, spot: st.Spot, depthCM: baitDepthCM,
 		lureLayer: lureLayer, lureAction: lureAction, lureMask: lureMask, lureSpeed: lureSpeed, rigType: rigType,
 		onBoat: boatOn, boatKnown: boatKnown,
 		now: now, weather: sess.weatherAt(st.Loc, now), happyBite: sess.currentHappyHour().BiteBonus,
-	})
+	}
+	f := s.rollFishForRig(s.dbCtx(), uid, st.GearGuid, st.Loc, st.Bait, st.Bonus, rollCtx)
 	if f == nil {
 		s.log.Info("本轮无符合条件的鱼，继续等待", "rod", shortGUID(st.GearGuid), "rig_type", st.RigType)
 		s.emptyWeatherBiteLocked(sess, st, now)
@@ -2324,12 +2348,42 @@ func (s *Server) onRodBiteTimerTicket(uid int64, st *FishState, ticket fishingTi
 	f.CastM = st.CastM
 	f.IsNight = worldIsNight(now.Unix())
 	f.QualBait = s.qualificationMountedBait(s.dbCtx(), f.BaitGUIDs)
+	// 多钩钓组：主鱼定下来后，其余已挂饵的钩位各自掷骰。
+	// 闸门在 rollExtraFishForRig 内部完成，返回的鱼已经绑定各自钩位。
+	cfg := s.multiHookConfig()
+	extras := s.rollExtraFishForRig(s.dbCtx(), uid, st.GearGuid, st.Loc, st.Bait, st.Bonus, rollCtx, f, cfg)
+	if len(extras) > 0 {
+		s.applyMultiHookPullBudget(append([]*RolledFish{f}, extras...),
+			s.multiHookStrengthKg(s.dbCtx(), uid, st.GearGuid), cfg.PullK)
+		s.log.Info("多钩同杆出鱼", "rod", shortGUID(st.GearGuid), "主鱼_g", f.WeightG,
+			"额外", len(extras), "额外_g", extraWeights(extras))
+	}
+	st.Extra = extras
+	st.HoldMulti = false
 	st.Pending = f
 	st.PendingRepush = 0
 	gear, generation := st.GearGuid, st.castGeneration
 	st.mu.Unlock()
 
 	s.pushPendingBite(sess, st, f, gear, generation)
+	if !s.extraEntityPushEnabled() || s.extraPushDeferredOnStrike() {
+		// 额外鱼实体默认不派（见 extraEntityPushEnabled：客户端只有一条鱼模型，
+		// 派了也看不见，还会把主鱼挤出搏鱼态）；需要派时也等刺鱼确认后再补。
+		s.deferExtrasUntilStrike(st, gear)
+	} else {
+		s.pushExtraFish(sess, st, gear, rigType)
+	}
+}
+
+// extraWeights 汇总额外鱼重量，仅用于日志。
+func extraWeights(fish []*RolledFish) []int64 {
+	out := make([]int64, 0, len(fish))
+	for _, f := range fish {
+		if f != nil {
+			out = append(out, f.WeightG)
+		}
+	}
+	return out
 }
 
 // repushPending14_14 在 14/12 f0=3 时于 6 秒后重推同一尾 pending 鱼，

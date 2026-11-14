@@ -421,6 +421,17 @@ func (s *Server) fishingEndSettle(ctx *Ctx) ([]byte, bool) {
 		}
 	}
 
+	// 多钩：客户端把 14/4 当成"本杆结束"（收竿后立刻重新抛投），所以本杆
+	// 其余的鱼不能在收竿之后再接管，必须在这里一并结算；入护/放生跟着玩家
+	// 对主鱼的同一个 14/5/14/6 选择走（见 FishState.Batch）。
+	if hasFish {
+		s.settleExtraOnReelIn(cctx, uid, st, rigType)
+	} else if dropped := dropExtraFish(st); dropped > 0 {
+		// 主鱼咬钩未刺中就收竿：本杆没有有效渔获，额外鱼同样按脱落处理，
+		// 不能留到 14/5 被当成"入护"结掉。
+		ctx.Log.Info("14/4 未刺中收竿：额外鱼一并脱落", "rod", shortGUID(gearGUID), "条数", dropped)
+	}
+
 	// 801 即使空竿也返回完整对象，f0/f6/f7 为 null。
 	f0 := proto.Null()
 	if hasFish {
