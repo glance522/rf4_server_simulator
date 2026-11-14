@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"rf4server/internal/proto"
 )
 
 const gearAssistantUID int64 = 2147483646
@@ -23,9 +25,9 @@ func readOverloadProtection(ctx context.Context, db overloadProtectionReader, ui
 	return readKVFlag(ctx, db, overloadProtectionKey(uid))
 }
 
-// 钓具助手采用两级菜单交互：
+// 钓具助手支持完整功能指令，并保留两级数字菜单：
 //
-//	一级：1 【满红不爆】 / 2 【耐力播报】
+//	直接发送功能名称及开/关；保留原有数字菜单和耐力播报。
 //	二级（发功能序号后进入）：只响应 开(y) 关(n) 说明(h) 返回(b)；
 //	                        未知输入重复二级菜单；b 退回一级。
 type gearFeature struct {
@@ -39,6 +41,7 @@ type gearFeature struct {
 const gearSep = "─────────────────────"
 
 var gearFeatures = map[string]gearFeature{
+	"shoes":    {"【五速鞋】", "已开启，跑步速度变为原来的 3 倍。", "已关闭，恢复正常跑步速度。", "【五速鞋】：跑步速度为原来的 3 倍，走路速度不变；沿用游戏的跑步按键设置。需要配套客户端模块。"},
 	"overload": {"【满红不爆】", "已开启，对你的所有鱼竿生效。", "已关闭，恢复正常装备损坏规则。", "【满红不爆】：防止断件与锁轮过载烧毁；普通磨损、自然脱钩及主动剪线不变，不修复已有损伤。"},
 	"stamina":  {"【耐力播报】", "已开启：搏鱼期间每 5 秒在聊天框显示当前鱼的耐力与超载。", "已关闭。", "【耐力播报】：搏鱼期间每 5 秒在聊天框显示当前鱼的耐力与超载。耐力是这尾鱼还剩多少体力，会一路掉到 0；超载是这尾鱼此刻的拉力超出整根钓组最大拉力的百分比，0% 表示拉得动（小鱼恒为 0%），数字越大越拉不动，鱼乏了它会自己降下来。仅在当前手持竿进入搏鱼时播报。"},
 }
@@ -46,7 +49,7 @@ var gearFeatures = map[string]gearFeature{
 // gearCommand 是一级解析结果：mode 为 help/unknown/cmd。
 type gearCommand struct {
 	mode    string // "help" | "unknown" | "cmd"
-	feature string // "overload" | "stamina"
+	feature string // "overload" | "stamina" | "shoes"
 	action  string // ""=进入二级看状态 | "on" | "off" | "desc" | "back"
 }
 
@@ -61,8 +64,10 @@ func parseGearCommand(text string) gearCommand {
 		return gearCommand{mode: "help"}
 	case "1", "过载", "满红", "满红不爆", "overload", "Overload", "OVERLOAD":
 		head = "overload"
-	case "2", "耐力", "stamina", "Stamina", "STAMINA":
+	case "2", "耐力", "耐力播报", "stamina", "Stamina", "STAMINA":
 		head = "stamina"
+	case "3", "鞋", "五速鞋":
+		head = "shoes"
 	case "开", "开启", "关", "关闭", "状态":
 		// 两级菜单之前的单字指令，语义是满红不爆。保留成一级快捷别名：
 		// 老玩家不必先记序号，也不会因为菜单化而失去「开关」这个动作。
@@ -137,7 +142,7 @@ func gearReply(f gearFeature, action string, enabled bool) (next bool, reply str
 }
 
 func gearAssistantHelp() string {
-	items := []string{"1  【满红不爆】", "2  【耐力播报】"}
+	items := []string{"1  【满红不爆】", "2  【耐力播报】", "3  【五速鞋】"}
 	// 每行下面都跟一条分隔线（含最后一行），形成下划线效果。
 	return strings.Join(items, "\n"+gearSep+"\n") + "\n" + gearSep
 }
@@ -171,7 +176,7 @@ func (s *Server) gearMenuClear(uid int64) {
 }
 
 // gearAssistantReplyText 只回一条消息、不改任何设置，用于帮助、未知与二级菜单显示。
-func (s *Server) gearAssistantReplyText(ctx *Ctx, uid int64, reply string) ([]byte, bool) {
+func (s *Server) gearAssistantReplyText(ctx *Ctx, uid int64, reply string, silent ...bool) ([]byte, bool) {
 	c := ctx.Sess.pushCtx()
 	tx, err := beginEconomyTx(c, s.DB)
 	if err != nil {
@@ -180,7 +185,16 @@ func (s *Server) gearAssistantReplyText(ctx *Ctx, uid int64, reply string) ([]by
 	}
 	defer func() { _ = tx.Rollback() }()
 	var mailID int64
-	mailID, err = insertContactReply(c, tx, uid, gearAssistantUID, reply)
+	quiet := len(silent) > 0 && silent[0]
+	if quiet {
+		reply, err = gearClientSnapshot(c, tx, uid, reply)
+	}
+	if err == nil {
+		mailID, err = insertContactReply(c, tx, uid, gearAssistantUID, reply)
+	}
+	if err == nil && quiet {
+		_, err = tx.ExecContext(c, `UPDATE mail SET read=1 WHERE uid=? AND id=?`, uid, mailID)
+	}
 	if err == nil {
 		err = tx.Commit()
 	}
@@ -188,11 +202,25 @@ func (s *Server) gearAssistantReplyText(ctx *Ctx, uid int64, reply string) ([]by
 		ctx.ReplyFailure("System.IO.IOException", "钓具设置保存失败")
 		return nil, true
 	}
-	ctx.AfterResponse(func() { s.notifyMail(ctx.Sess.pushCtx(), uid, mailID) })
+	ctx.AfterResponse(func() {
+		if !quiet {
+			s.notifyMail(ctx.Sess.pushCtx(), uid, mailID)
+			return
+		}
+		// Deliver the existing snapshot to the bridge without creating unread mail.
+		mail, err := s.DB.MailGet(ctx.Sess.pushCtx(), uid, mailID)
+		if err != nil || mail == nil {
+			s.log.Warn("钓具设置同步读取失败", "uid", uid, "mail_id", mailID, "err", err)
+			return
+		}
+		for _, sess := range s.sessionsForUID(uid) {
+			sess.Push(19, 10, proto.Args524(buildMail11062(mail)))
+		}
+	})
 	return []byte{0}, true
 }
 
-// receiveGearAssistant 路由两级菜单：先判断是否在二级，否则处理一级。
+// receiveGearAssistant 优先处理完整功能指令，其余输入沿用两级菜单。
 func (s *Server) receiveGearAssistant(ctx *Ctx, text string) ([]byte, bool) {
 	if !ctx.ExpectResponse {
 		return nil, true
@@ -202,14 +230,30 @@ func (s *Server) receiveGearAssistant(ctx *Ctx, text string) ([]byte, bool) {
 		ctx.ReplyFailure("System.InvalidOperationException", "请先登录")
 		return nil, true
 	}
-
-	// 二级菜单：只响应 y/n/h/b，未知重显，b 返回一级。
-	if state := s.gearMenuGet(uid); state != "" {
-		return s.gearSubMenu(ctx, uid, state, text)
+	// The optional local bridge asks once after its contact model is created.
+	// This is a read, and must not change the player's current submenu.
+	if text == "同步设置" {
+		return s.gearAssistantReplyText(ctx, uid, "钓具设置已同步。", true)
+	}
+	// 完整功能名称可从任意子菜单切换，后续仍走原有菜单处理。
+	cmd := parseGearCommand(text)
+	fields := strings.Fields(text)
+	named := false
+	if len(fields) > 0 {
+		switch strings.ToLower(fields[0]) {
+		case "满红不爆", "过载", "满红", "鞋", "五速鞋", "耐力", "耐力播报", "stamina", "overload":
+			named = true
+		}
+	}
+	if named && len(fields) > 2 {
+		return s.gearAssistantReplyText(ctx, uid, gearAssistantHelp())
+	}
+	if !named {
+		if state := s.gearMenuGet(uid); state != "" {
+			return s.gearSubMenu(ctx, uid, state, text)
+		}
 	}
 
-	// 一级
-	cmd := parseGearCommand(text)
 	switch cmd.mode {
 	case "help":
 		return s.gearAssistantReplyText(ctx, uid, gearAssistantHelp())
@@ -248,16 +292,12 @@ func (s *Server) gearSubMenu(ctx *Ctx, uid int64, feature, text string) ([]byte,
 
 // gearReadFlag 在独立短事务中读取开关，事务在返回前结束，避免与后续回信事务重叠。
 func (s *Server) gearReadFlag(c context.Context, uid int64, feature string) (bool, error) {
-	key := overloadProtectionKey(uid)
-	if feature == "stamina" {
-		key = staminaReportKey(uid)
-	}
 	tx, err := beginEconomyTx(c, s.DB)
 	if err != nil {
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	return readKVFlag(c, tx, key)
+	return readGearFeatureFlag(c, tx, uid, feature)
 }
 
 // gearSubShow 显示二级菜单（可选先显示说明），不改设置。
@@ -291,11 +331,8 @@ func (s *Server) gearSubAction(ctx *Ctx, uid int64, feature, action string) ([]b
 		return nil, true
 	}
 	defer func() { _ = tx.Rollback() }()
-	key := overloadProtectionKey(uid)
-	if feature == "stamina" {
-		key = staminaReportKey(uid)
-	}
-	enabled, err := readKVFlag(c, tx, key)
+	key := gearFeatureKey(uid, feature)
+	enabled, err := readGearFeatureFlag(c, tx, uid, feature)
 	if err != nil {
 		ctx.ReplyFailure("System.IO.IOException", "钓具设置读取失败，设置未改变")
 		return nil, true
