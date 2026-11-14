@@ -1,7 +1,7 @@
 package gameserver
 
 // 玩家状态条测试：推进函数手算样例、懒计算读写、开关旁路、
-// 进食行为（3/13 → 饱食度恢复 → 2/2 推送 f1=1.0）与精力闸门/扣减。
+// 进食行为（3/13 → 饱食度恢复 → 2/2 推送 f1=1.0）与抛投/精力扣减。
 // 期望值来自手算与官服抓包观察，不用同一份代码回算。
 
 import (
@@ -28,7 +28,6 @@ func testConditionParams() conditionParams {
 		HungerRegenFloor:   0.25,
 		CastEnergyCost:     0.01,
 		PullEnergyCost:     0.005,
-		LowEnergyThreshold: 0.05,
 		MaxBackfillHours:   12,
 
 		ComfortRainPenalty:   0.35,
@@ -244,28 +243,63 @@ func f32Field(obj *proto.Value, idx int) float32 {
 	return math.Float32frombits(uint32(u64Of(f.Num)))
 }
 
-// 精力闸门：低于阈值拒绝；高于阈值放行。
-func TestConditionAllowsCastThreshold(t *testing.T) {
-	t.Parallel()
-	srv, db := newRigTestServer(t)
-	ctx := context.Background()
-	const uid = int64(1000001)
-	low := float64(time.Now().Unix()) + 3600
-	if err := db.UpsertPlayerCondition(ctx, store.PlayerCondition{
-		UID: uid, Primary: 0.01, Secondary: 1.0, UpdatedTS: low,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if srv.conditionAllowsCast(ctx, uid) {
-		t.Fatal("精力 0.01 应低于阈值，抛投闸门应拒绝")
-	}
-	if err := db.UpsertPlayerCondition(ctx, store.PlayerCondition{
-		UID: uid, Primary: 0.85, Secondary: 1.0, UpdatedTS: low,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if !srv.conditionAllowsCast(ctx, uid) {
-		t.Fatal("精力 0.85 应放行抛投")
+// 零精力、旧门槛两侧均受理抛投并排咬钩；抛投仍扣精力，最低为零。
+func TestCastStartsBiteAtAnyEnergy(t *testing.T) {
+	for _, energy := range []float64{0, 0.01, 0.05, 0.85} {
+		t.Run(fmt.Sprintf("energy_%g", energy), func(t *testing.T) {
+			srv, db := newRigTestServer(t)
+			ctx := context.Background()
+			const uid = int64(1000001)
+			if _, err := db.EnsureProfile(ctx, uid); err != nil {
+				t.Fatal(err)
+			}
+			rod, err := srv.CreateItem(ctx, uid, "tele_10012_tl16", "backpack", 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// 冻结自然恢复，防止低精力在进入 handler 前涨回旧门槛之上。
+			if err := db.UpsertPlayerCondition(ctx, store.PlayerCondition{
+				UID: uid, Primary: energy, Secondary: 1, UpdatedTS: float64(time.Now().Unix()) + 3600,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			sess := newProbeSess(srv)
+			st := srv.selectFishingRod(uid, rod.GUID)
+			t.Cleanup(func() {
+				st.mu.Lock()
+				defer st.mu.Unlock()
+				st.cancelBiteTimerLocked()
+				st.cancelPendingTimerLocked()
+			})
+			body, handled := hCast(&Ctx{Sess: sess, Main: 14, Sub: 2,
+				Tree: rigRequestTree(t, proto.Guid(rod.GUID)), DecodeOK: true,
+				ExpectResponse: true, Log: logging.Discard()})
+			if !handled || len(body) == 0 {
+				t.Fatalf("14/2 未受理: handled=%v len=%d", handled, len(body))
+			}
+			response, _, err := proto.DecodeValue(body, 0, srv.Table())
+			if err != nil || response.Class != "dlbahppbdad" {
+				t.Fatalf("14/2 应回 800: response=%v err=%v", response, err)
+			}
+			items := rigSeg(response, 0)
+			if items == nil || items.Kind != proto.KindArgs || items.ArgCount() != 1 ||
+				items.ArgItem(0).Class != "cnolibojkao" {
+				t.Fatalf("14/2 应返回钓组快照: %v", items)
+			}
+			st.mu.Lock()
+			active := st.CastActive && !st.Resolved && !st.BiteAt.IsZero()
+			st.mu.Unlock()
+			if !active {
+				t.Fatal("已受理抛竿必须启动咬钩计时")
+			}
+			condition, err := db.EnsurePlayerCondition(ctx, uid)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := math.Max(0, energy-0.01); math.Abs(condition.Primary-want) > 1e-9 {
+				t.Fatalf("抛投扣精力: got=%g want=%g", condition.Primary, want)
+			}
+		})
 	}
 }
 

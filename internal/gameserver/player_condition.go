@@ -32,7 +32,6 @@ const (
 	tunableHungerRegenFloor       = "condition_hunger_regen_floor"
 	tunableCastEnergyCost         = "condition_cast_energy_cost"
 	tunablePullEnergyCost         = "condition_pull_energy_cost"
-	tunableLowEnergyThreshold     = "condition_low_energy_threshold"
 	tunableMaxBackfillHours       = "condition_max_backfill_hours"
 	tunableFoodHungerRestore      = "condition_food_hunger_restore"
 	tunableCoffeeEnergyRestore    = "condition_coffee_energy_restore"
@@ -76,13 +75,12 @@ const (
 	// 官服抓包 f0 静止恒 0.85 是"自然恢复封顶"，不是上限——动作掉下去后
 	// 15 秒内只回升到 0.85 就停住。最后那 15% 要靠咖啡/可可这类消耗品补满，
 	// 把硬上限设成 0.85 会让所有回精力消耗品恒为零效果。
-	defEnergyMax          = 1.0
-	defEnergyRegenCap     = 0.85
-	defHungerRegenFloor   = 0.25
-	defCastEnergyCost     = 0.01
-	defPullEnergyCost     = 0.005
-	defLowEnergyThreshold = 0.05
-	defMaxBackfillHours   = 12
+	defEnergyMax        = 1.0
+	defEnergyRegenCap   = 0.85
+	defHungerRegenFloor = 0.25
+	defCastEnergyCost   = 0.01
+	defPullEnergyCost   = 0.005
+	defMaxBackfillHours = 12
 
 	// 消耗品恢复量（饮用/食用一次的即时恢复，全部为标定值）。
 	defFoodHungerRestore   = 0.25
@@ -120,10 +118,6 @@ const (
 // float32 在 0.85 量级的显示噪声。
 const conditionWriteBackDelta = 0.0005
 
-// operationResultLowEnergyLevel 官服操作结果码 84：精力不足
-// （kOperationResult_LowEnergyLevel），客户端弹对应文案。
-const operationResultLowEnergyLevel = 84
-
 type conditionParams struct {
 	Enabled                bool
 	HungerDecayPerHour     float64
@@ -134,7 +128,6 @@ type conditionParams struct {
 	HungerRegenFloor       float64
 	CastEnergyCost         float64
 	PullEnergyCost         float64
-	LowEnergyThreshold     float64
 	MaxBackfillHours       float64
 	FoodHungerRestore      float64
 	CoffeeEnergyRestore    float64
@@ -171,7 +164,6 @@ func (s *Server) conditionParams() conditionParams {
 		HungerRegenFloor:       s.tunableF(tunableHungerRegenFloor, defHungerRegenFloor),
 		CastEnergyCost:         s.tunableF(tunableCastEnergyCost, defCastEnergyCost),
 		PullEnergyCost:         s.tunableF(tunablePullEnergyCost, defPullEnergyCost),
-		LowEnergyThreshold:     s.tunableF(tunableLowEnergyThreshold, defLowEnergyThreshold),
 		MaxBackfillHours:       s.tunableF(tunableMaxBackfillHours, defMaxBackfillHours),
 		FoodHungerRestore:      s.tunableF(tunableFoodHungerRestore, defFoodHungerRestore),
 		CoffeeEnergyRestore:    s.tunableF(tunableCoffeeEnergyRestore, defCoffeeEnergyRestore),
@@ -408,15 +400,6 @@ func (s *Server) peekPlayerCondition(ctx context.Context, uid int64) store.Playe
 	out.Comfort = clampFloat(out.Comfort, 0, 1)
 	out.LuckPenalty = clampFloat(out.LuckPenalty, 0, 1)
 	return out
-}
-
-// conditionAllowsCast 抛投精力闸门：低于阈值时 14/2 以结果码 84 拒绝。
-func (s *Server) conditionAllowsCast(ctx context.Context, uid int64) bool {
-	p := s.conditionParams()
-	if !p.Enabled {
-		return true
-	}
-	return s.currentPlayerCondition(ctx, uid).Primary > p.LowEnergyThreshold
 }
 
 // spendEnergy 立即扣减精力并写回。动作写入总是落库（不受读路径阈值约束）。

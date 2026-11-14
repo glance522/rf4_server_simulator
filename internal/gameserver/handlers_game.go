@@ -951,15 +951,8 @@ func hCast(ctx *Ctx) ([]byte, bool) {
 		ctx.ReplyFailure("System.InvalidOperationException", "渔线轮已损坏，请先修理")
 		return nil, true
 	}
-	// 精力闸门：低于阈值拒绝抛投。官服结果码 84 = kOperationResult_LowEnergyLevel，
-	// 形状与上面 136 WrongRegion 拒绝一致，客户端弹 kOperationResult_* 文案。
-	if !srv.conditionAllowsCast(ctx.Sess.pushCtx(), ctx.Sess.Userid) {
-		ctx.Log.Info("14/2 被拒：精力不足")
-		ctx.ReplyOperationResult(operationResultLowEnergyLevel)
-		return nil, true
-	}
-	// 补饵/ensureRig 会写库并推送背包状态，必须在精力闸门放行后执行；
-	// 否则一次低精力拒绝也会产生可见的钓组/背包副作用。
+	// 低精力通过抛投距离修正体现，不在实际抛投请求中硬拒绝，避免
+	// 客户端已将钓组抛入水中、服务端却未启动本竿的咬钩计时。
 	if err := ctx.Sess.prepareBaitForCast(st, gear); err != nil {
 		ctx.Log.Warn("抛竿前补饵失败", "err", err)
 		return nil, false
@@ -1256,7 +1249,7 @@ func hFishingPull(ctx *Ctx) ([]byte, bool) {
 	// 保持默认关闭。
 	srv := ctx.Sess.Srv
 	// 搏鱼抬杆/小刺扣精力：14/9 无官服拒绝样本，只扣不拒（搏鱼中拒绝会破坏
-	// 鱼战状态一致性）；精力闸门只在 14/2 抛投入口生效。
+	// 鱼战状态一致性）。
 	srv.spendEnergy(ctx.Sess.pushCtx(), ctx.Sess.Userid, srv.conditionParams().PullEnergyCost)
 	st := srv.fishingStateForRequest(ctx)
 	st.mu.Lock()
