@@ -201,6 +201,10 @@ func main() {
 		app.log.Warn("清理上次 hosts 遗留状态失败: " + err.Error())
 	}
 
+	// 后台周期刷新子进程自报的构建身份。必须早于 StartAll 启动：
+	// 进程一起观测端口就可用，晚一步面板会先闪一段「未知」。
+	go app.trackBuildIdentity()
+
 	// ---- 按序拉起游戏服务 ----
 	go func() {
 		if err := app.sup.StartAll(); err != nil {
@@ -360,6 +364,7 @@ func (a *app) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, map[string]any{
 		"procs":           procs,
 		"last_error":      lastErr,
+		"launcher_build":  launcherBuild(),
 		"admin":           "/admin/",
 		"admin_ready":     adminReady,
 		"admin_error":     adminErr,
@@ -525,6 +530,61 @@ func (a *app) handleAdminRetry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// launcherBuild 返回 launcher 自身的构建身份。
+//
+// /api/status 原有的 current_version 也是 launcher 的版本，但它不带
+// commit/buildts/source，排查时容易被误读成「子进程的版本」。这里单独
+// 开一组字段，与 procs[].running_build（子进程自报）并排，一眼能分清谁是谁。
+func launcherBuild() map[string]string {
+	version, buildts, commit, source := buildinfo.MetricLabels()
+	return map[string]string{
+		"version": version,
+		"buildts": buildts,
+		"commit":  commit,
+		"source":  source,
+	}
+}
+
+// trackBuildIdentity 周期刷新子进程自报的构建身份，并在发现磁盘上的
+// 可执行文件被替换时记一条警告。
+//
+// 为什么需要它：bin/ 被别的构建覆盖后，运行中的进程仍是旧代码，而所有
+// 可见信息（/healthz、日志里的启动版本行、面板的「当前运行版本」）都看不出
+// 异常。让进程自己吐版本，才可能发现「跑的不是你以为的那份」。
+func (a *app) trackBuildIdentity() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	warned := map[string]bool{}
+	for {
+		select {
+		case <-a.ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		if a.sup == nil {
+			continue
+		}
+		a.sup.RefreshBuilds()
+		for _, p := range a.sup.Status() {
+			if p.ExeChanged && !warned[p.Name] {
+				a.log.Warn(fmt.Sprintf(
+					"%s.exe 已被替换，但当前运行的仍是启动时那份（pid=%d，自报版本 %s）；重启后才会切到新构建",
+					p.Name, p.PID, buildVersionOf(p.RunningBuild)))
+			}
+			warned[p.Name] = p.ExeChanged
+		}
+	}
+}
+
+// buildVersionOf 取子进程自报版本；读不到时返回「未知」而不是空串——
+// 「读不到」本身就是要暴露的信息。
+func buildVersionOf(b *supervisor.BuildInfo) string {
+	if b == nil || b.Version == "" {
+		return "未知"
+	}
+	return b.Version
 }
 
 func (a *app) trackAdminSessions(ctx context.Context, db *store.DB, srv *admin.Server) {

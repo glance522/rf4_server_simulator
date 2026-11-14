@@ -92,6 +92,41 @@ bin\gateway.exe -config config.yaml
 
 默认本地开发凭据为 `admin` / `admin123`。对于任何未与本地计算机隔离的环境，请在 `config.yaml` 中替换这些凭据。
 
+## 部署后自证版本
+
+`bin/` 下的可执行文件会被任何一次 `build.ps1` / `tools/build.ps1` / `make build` 覆盖，而这几个脚本都按**执行时的检出目录**编译。本仓常同时存在多个 worktree，覆盖之后进程还在跑旧代码，从 `/healthz`、托盘、启动日志都看不出来，于是「明明部署了却没生效」。
+
+部署完必须核对「运行中的进程」而不是「磁盘上的文件」：
+
+```powershell
+# 直接问进程：这是哪个构建、从哪个目录构建的
+curl.exe -s http://127.0.0.1:9502/metrics | Select-String rf4_build_info
+
+# 经 launcher 看：running_build 是子进程自报，exe_changed 表示磁盘已被替换
+curl.exe -s http://127.0.0.1:9500/api/status
+```
+
+正常输出形如：
+
+```text
+rf4_build_info{process="gameserver",version="20260101090000",buildts="20260101010000",commit="abc1234",source="<检出目录>"} 1
+```
+
+要点：
+
+- `source` 是构建时的**检出目录**（正斜杠），`commit` 是对应提交的短 SHA，`buildts` 是 UTC 构建时间。`bin/gameserver.exe` 的 `source` 必须是你期望的那个 worktree——不一致说明被别的检出覆盖过。五个构建入口（`build.ps1` / `tools/build.ps1` / `make build` / `.github/scripts/build-preview.sh` / `build-release.sh`）都会自动注入这四个标签，不需要手填；CI 制品的 `commit` 取触发构建的 `$GITHUB_SHA` 短码。
+- `procs[].running_build` 缺失或面板显示「未知」表示观测端口不通或跑的是不带这些标签的老构建，不能当成「版本正常」。
+- `procs[].exe_changed` 为真表示磁盘上的 exe 已换但进程没重启（面板同时显示提示条，launcher 日志出现 `WARN ... 已被替换`）。此时新构建**尚未生效**，重启对应进程才会切换。
+- `/api/status` 的 `current_version` 是 **launcher 自己**的版本；子进程版本看 `procs[].running_build.version`，两者混读会得出错误结论。
+
+手工做验证性部署时请显式带语义化版本号，便于事后追溯：
+
+```powershell
+go build -trimpath -ldflags "-s -w -X 'rf4server/internal/buildinfo.Version=<语义化标签>' -X 'rf4server/internal/buildinfo.BuildTs=<UTC 时间戳>' -X 'rf4server/internal/buildinfo.GitCommit=<提交短 SHA>' -X 'rf4server/internal/buildinfo.SourceDir=<检出目录>'".Replace('\','/') -o .deploy/gameserver.exe ./cmd/gameserver
+```
+
+设计与取舍见 [deploy-self-verify](../specs/changes/deploy-self-verify/spec.md)。
+
 ## 客户端接入
 
 客户端必须将登录主机名解析到网关，并信任生成的 HTTPS 证书。对于使用默认登录主机的客户端，请在 hosts 文件中添加以下条目：

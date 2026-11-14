@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -16,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"rf4server/internal/buildinfo"
 )
 
 // ProcState 进程状态。
@@ -46,6 +49,15 @@ type Spec struct {
 	Critical bool // true：该进程退出则全组停机
 }
 
+// BuildInfo 是子进程自报的构建身份（从观测端口的 rf4_build_info 读到）。
+// 没跑起来或观测端口不通时为 nil——"读不到"必须与"版本是 dev"区分开。
+type BuildInfo struct {
+	Version string `json:"version"`
+	BuildTS string `json:"buildts"`
+	Commit  string `json:"commit"`
+	Source  string `json:"source"`
+}
+
 // ProcInfo 面板展示的进程快照。
 type ProcInfo struct {
 	Name     string    `json:"name"`
@@ -53,6 +65,13 @@ type ProcInfo struct {
 	PID      int       `json:"pid"`
 	Restarts int       `json:"restarts"`
 	UptimeS  float64   `json:"uptime_s"`
+	// RunningBuild 是进程内存里真正在跑的构建；仅 StateRunning 时对外暴露。
+	// nil = 还没起来、端口不通、或进程已停止/失败/退避（停了就不能再叫 running）。
+	RunningBuild *BuildInfo `json:"running_build,omitempty"`
+	// ExeChanged 为真表示磁盘上的可执行文件已被替换，与正在跑的这份不同
+	// （重启后才会生效）。不比对的话，面板只显示 launcher 自己的版本，
+	// 看不出子进程已经换了人。
+	ExeChanged bool `json:"exe_changed"`
 }
 
 type proc struct {
@@ -70,6 +89,17 @@ type proc struct {
 
 	stopReq bool // 用户显式停止
 	logFile *os.File
+
+	// exeSize/exeMod 是 launch 时刻可执行文件的指纹。磁盘上的文件
+	// 之后被替换（另一个构建覆盖 bin/），两者就不再相等——重启前
+	// 跑的还是旧代码，这个状态从外部看不见。
+	exeSize int64
+	exeMod  time.Time
+
+	// buildMu 保护下面两个字段：从观测端口读到的构建身份与读取时刻。
+	buildMu   sync.Mutex
+	build     *BuildInfo
+	buildRead time.Time
 }
 
 // Supervisor 全组监督器。
@@ -208,7 +238,8 @@ func (s *Supervisor) StartOne(name string) error {
 // launch 实际拉起子进程（日志管道 + 落盘）。
 func (s *Supervisor) launch(p *proc) error {
 	exe := filepath.Join(s.dir, p.spec.ExeName)
-	if _, err := os.Stat(exe); err != nil {
+	fi, err := os.Stat(exe)
+	if err != nil {
 		return fmt.Errorf("找不到 %s（请确认与 launcher 同目录）", p.spec.ExeName)
 	}
 	if s.logDir != "" && p.logFile == nil {
@@ -234,6 +265,12 @@ func (s *Supervisor) launch(p *proc) error {
 	p.pid = cmd.Process.Pid
 	p.state = StateRunning
 	p.startedAt = time.Now()
+	p.exeSize = fi.Size()
+	p.exeMod = fi.ModTime()
+	p.buildMu.Lock()
+	p.build = nil // 新进程，旧的身份作废
+	p.buildRead = time.Time{}
+	p.buildMu.Unlock()
 	p.logf("[%s] 已启动 pid=%d", p.spec.Name, p.pid)
 
 	go func() {
@@ -255,6 +292,7 @@ func (s *Supervisor) supervise(p *proc) {
 		if s.stopping || p.stopReq {
 			p.state = StateStopped
 			p.pid = 0
+			s.clearBuild(p)
 			s.mu.Unlock()
 			p.logf("[%s] 已停止", p.spec.Name)
 			s.notify()
@@ -265,6 +303,7 @@ func (s *Supervisor) supervise(p *proc) {
 		consec := p.fails
 		if consec > maxConsecFails {
 			p.state = StateFailed
+			s.clearBuild(p)
 			s.mu.Unlock()
 			p.logf("[%s] 意外退出（%v）；连续失败超过 %d 次，放弃重启",
 				p.spec.Name, err, maxConsecFails)
@@ -272,6 +311,7 @@ func (s *Supervisor) supervise(p *proc) {
 			return
 		}
 		p.state = StateBackoff
+		s.clearBuild(p)
 		s.mu.Unlock()
 		p.logf("[%s] 意外退出（%v），第 %d 次重启（连续失败 %d）",
 			p.spec.Name, err, p.restarts, consec)
@@ -284,6 +324,7 @@ func (s *Supervisor) supervise(p *proc) {
 		if s.stopping || p.stopReq {
 			p.state = StateStopped
 			p.pid = 0
+			s.clearBuild(p)
 			s.mu.Unlock()
 			s.notify()
 			return
@@ -309,6 +350,7 @@ func (s *Supervisor) StopOne(name string) {
 		return
 	}
 	p.stopReq = true
+	s.clearBuild(p) // 停止指令已下达，不再对外报旧身份
 	s.mu.Unlock()
 	if p.cmd != nil && p.cmd.Process != nil {
 		p.logf("[%s] 收到停止指令", name)
@@ -371,12 +413,142 @@ func (s *Supervisor) Status() []ProcInfo {
 		if p.state == StateRunning && !p.startedAt.IsZero() {
 			uptime = time.Since(p.startedAt).Seconds()
 		}
+		// 只有真正在跑的进程才配叫 running_build：停掉/退避/失败后，
+		// 即使缓存里还留着上一次自报的身份，也不能再对外暴露，
+		// 否则面板会在进程停止后继续显示旧版本（且端口可能已被复用）。
+		p.buildMu.Lock()
+		var bi *BuildInfo
+		if p.state == StateRunning && p.build != nil {
+			cp := *p.build
+			bi = &cp
+		}
+		p.buildMu.Unlock()
 		out = append(out, ProcInfo{
 			Name: name, State: p.state, PID: p.pid,
 			Restarts: p.restarts, UptimeS: uptime,
+			RunningBuild: bi,
+			ExeChanged:   s.exeChanged(p),
 		})
 	}
 	return out
+}
+
+// exeChanged 磁盘上的可执行文件是否已不同于启动这份进程时的文件。
+//
+// 覆盖 bin/ 不会影响正在跑的进程（Windows 允许替换运行中可执行文件的目录项），
+// 但重启就会换人。若不比对，唯一的变化是下次重启后日志里多一行 version，
+// 没有任何「你部署的那份已经不在了」的提示。
+func (s *Supervisor) exeChanged(p *proc) bool {
+	if p.exeSize == 0 || p.state != StateRunning {
+		return false
+	}
+	fi, err := os.Stat(filepath.Join(s.dir, p.spec.ExeName))
+	if err != nil {
+		return false
+	}
+	return fi.Size() != p.exeSize || !fi.ModTime().Equal(p.exeMod)
+}
+
+// clearBuild 作废进程自报身份。停止/退出路径把 state 改成非 running 时一起调用，
+// 避免旧身份留在缓存里。只取 p.buildMu；与 state 变更一起用时调用方应已持有 s.mu，
+// 锁顺序恒为 s.mu → p.buildMu，与 Status 一致（绝不反过来，避免 AB-BA 死锁）。
+func (s *Supervisor) clearBuild(p *proc) {
+	p.buildMu.Lock()
+	p.build = nil
+	p.buildRead = time.Time{}
+	p.buildMu.Unlock()
+}
+
+// procRunning 读权威状态（p.state 由 s.mu 保护）。readBuild 在读端口前先查一次，
+// 避免给停掉的进程访问可能已被复用的端口。
+func (s *Supervisor) procRunning(p *proc) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return p.state == StateRunning
+}
+
+// setBuildIfRunning 在 fetch 返回后写回身份。fetch 最长 2 秒，期间进程可能
+// 已退出/被停止，所以必须在 s.mu 内二次确认仍为 running 才写；把状态检查与
+// 写入绑在同一把 s.mu 下，和 clearBuild/Status 的锁顺序一致（s.mu → p.buildMu），
+// 杜绝「刚作废的身份又被并发写回来」的复活窗口。
+func (s *Supervisor) setBuildIfRunning(p *proc, bi *BuildInfo) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p.state != StateRunning {
+		return
+	}
+	p.buildMu.Lock()
+	p.buildRead = time.Now()
+	p.build = bi
+	p.buildMu.Unlock()
+}
+
+// readBuild 从观测端口的 /metrics 读子进程自报的构建身份。
+// 缓存 10 秒：面板每 2 秒刷新一次，不必每次都打端口。
+func (s *Supervisor) readBuild(p *proc) {
+	if p.spec.ObsPort == "" {
+		return
+	}
+	// 非 running 不读：停掉的进程端口可能被系统/别的进程复用，
+	// 读回来的身份不属于它，running_build 这个名字也不该给没在跑的进程。
+	if !s.procRunning(p) {
+		return
+	}
+	p.buildMu.Lock()
+	fresh := time.Since(p.buildRead) < 10*time.Second
+	p.buildMu.Unlock()
+	if fresh {
+		return
+	}
+	bi := fetchBuild(normalizeObs(p.spec.ObsPort))
+	// 写回时二次确认状态，且状态检查与写入在同一把 s.mu 下完成。
+	s.setBuildIfRunning(p, bi)
+}
+
+// fetchBuild 取一次 /metrics 并解析 rf4_build_info。失败返回 nil——
+// 「读不到」和「版本是 dev」是两件事，不能都当成空字符串。
+func fetchBuild(addr string) *BuildInfo {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://" + addr + "/metrics")
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != 200 {
+		return nil
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil
+	}
+	version, buildts, commit, source, ok := buildinfo.ParseMetric(string(body))
+	if !ok || version == "" {
+		// 没有这条指标，或指标在但缺 version 标签（本次改动之前的老构建）：
+		// 两种都是「无法自证」，必须返回 nil 让上层显示「未知」，
+		// 不能返回一个空身份被误读成「版本正常」。
+		return nil
+	}
+	return &BuildInfo{Version: version, BuildTS: buildts, Commit: commit, Source: source}
+}
+
+// RefreshBuilds 并发刷新全部进程自报的构建身份。
+// 由 launcher 的后台循环每 10 秒调一次；面板请求只读缓存，不会阻塞。
+func (s *Supervisor) RefreshBuilds() {
+	s.mu.Lock()
+	procs := make([]*proc, 0, len(s.order))
+	for _, name := range s.order {
+		procs = append(procs, s.procs[name])
+	}
+	s.mu.Unlock()
+	var wg sync.WaitGroup
+	for _, p := range procs {
+		wg.Add(1)
+		go func(p *proc) {
+			defer wg.Done()
+			s.readBuild(p)
+		}(p)
+	}
+	wg.Wait()
 }
 
 // AllRunning 全部处于 running。

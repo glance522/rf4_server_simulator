@@ -20,6 +20,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"rf4server/internal/buildinfo"
 )
 
 type Server struct {
@@ -38,10 +40,19 @@ func NewServer(addr, name string) *Server {
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 
+	// 版本号必须出现在指标标签里：只有 process 标签时，/metrics 无法回答
+	// 「现在跑的到底是哪个构建」——bin/ 被别的构建覆盖后进程仍是旧代码，
+	// 从外部看不出任何异常。
 	buildInfo := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:        "rf4_build_info",
-		Help:        "构建信息",
-		ConstLabels: prometheus.Labels{"process": name},
+		Name: "rf4_build_info",
+		Help: "构建信息",
+		ConstLabels: prometheus.Labels{
+			"process": name,
+			"version": buildinfo.Version,
+			"buildts": buildinfo.BuildTs,
+			"commit":  buildinfo.GitCommit,
+			"source":  buildinfo.SourceDir,
+		},
 	})
 	buildInfo.Set(1)
 	reg.MustRegister(buildInfo)
