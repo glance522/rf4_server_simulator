@@ -86,65 +86,64 @@ const (
 	rodTypeMarine    = 16
 )
 
-// qualificationRodTypesFor 返回任务允许的竿型（celffbjpmma）；空=任意。
+// qualificationRodTypesFor 返回任务文案明确限定的竿型（celffbjpmma）；空=任意。
 // 同一份表同时用于服务端过滤与 5007.Idx5 下发，保证「鱼竿」文案与判定一致。
+//
+// 竿型条件只来自任务文案（客户端 qlfctn_t_<id>），分支名只是分组：文案没写
+// 竿型就不下发、不拦。按分支兜底（如把 1xxx 全限成纺车竿）会两头出错：
+//   - 客户端「鱼竿」行显示文案里没有的竿型（例：1402 抽停硬饵显示「纺车竿」）；
+//   - 把唯一可行的钓法挡在门外（1402 抽停钓组只能配抽停竿 12，
+//     1501 水表路亚常用枪柄竿 2），任务因此永远无法完成。
 func qualificationRodTypesFor(ruleID int64) []int64 {
 	if ruleID/1000 >= 9 {
 		return eventRodTypes[ruleID]
 	}
-	switch ruleID / 1000 {
-	case 1:
+	switch ruleID {
+	// 分支 3：「轻型/超轻纺车竿」。
+	case 3302, 3501, 3601:
 		return []int64{rodTypeSpinning}
-	case 2:
-		return []int64{rodTypeSpinning, rodTypeCasting}
-	case 3:
-		switch ruleID {
-		case 3302, 3501, 3601: // 明确写「纺车竿」
-			return []int64{rodTypeSpinning}
-		default:
-			return []int64{rodTypeSpinning, rodTypeCasting}
-		}
-	case 4:
-		return []int64{rodTypeTelescope}
-	case 5:
-		switch ruleID {
-		case 5001, 5002, 5003, 5101, 5102, 5103, 5201, 5202, 5203, 5401:
-			return []int64{rodTypeBolognese}
-		case 5301, 5302, 5303, 5601, 5602:
-			return []int64{rodTypeBolognese, rodTypeMatch}
-		default: // 5402/5403/5501/5502/5503/5603 竞赛竿/竞赛钓组
-			return []int64{rodTypeMatch}
-		}
-	case 6:
-		switch ruleID {
-		case 6001, 6002, 6003, 6101, 6103:
-			return []int64{rodTypeFeeder}
-		case 6202, 6303, 6402, 6501:
-			return []int64{rodTypePicker}
-		default:
-			return []int64{rodTypePicker, rodTypeFeeder}
-		}
-	case 7:
-		return []int64{rodTypeCarp}
-	case 8:
-		return []int64{rodTypePilker, rodTypeMarine}
+	// 分支 5：「博洛尼亚钓竿」。
+	case 5101, 5103, 5201, 5202, 5203, 5401:
+		return []int64{rodTypeBolognese}
+	// 分支 5：「博洛尼亚或竞赛竿」。
+	case 5301, 5302, 5303, 5601, 5602:
+		return []int64{rodTypeBolognese, rodTypeMatch}
+	// 分支 5：「竞赛竿」。
+	case 5402, 5403, 5501, 5503:
+		return []int64{rodTypeMatch}
+	// 分支 6：「飞德竿」。
+	case 6001, 6002, 6003, 6101, 6103:
+		return []int64{rodTypeFeeder}
+	// 分支 6：「Picker 竿」。
+	case 6202, 6303, 6402, 6501:
+		return []int64{rodTypePicker}
+	// 分支 6：「飞德竿或 Picker 竿」。
+	case 6102, 6201, 6203, 6301, 6302, 6401, 6403, 6503, 6601, 6602, 6603:
+		return []int64{rodTypePicker, rodTypeFeeder}
 	default:
+		// 分支 1/2/4/7/8 的文案不写竿型（只写钓组/硬度/鱼种/水域），
+		// 5001/5002/5102/5502/5603/6502 文案只写钓组，竿型由钓组装配矩阵约束。
 		return nil
 	}
 }
 
 // qualificationRodPowerFor 返回任务的竿硬度档限制（befnkekakei：1=UL 2=L）。
+// 与 Idx5 同源：只取任务文案写出的档位，并与判定侧的 qUltralight/qLight 对齐——
+// 「超轻/超轻型」→ UL；「轻型渔具」「轻型或超轻型」→ UL+L（判定侧 qLight）。
 func qualificationRodPowerFor(ruleID int64) []int64 {
 	if ruleID/1000 >= 9 {
 		return eventRodPowers[ruleID]
 	}
-	if ruleID/1000 == 3 {
-		return []int64{1, 2}
-	}
-	if ruleID == 4303 || ruleID == 4502 {
+	switch ruleID {
+	case 3003, 3202, 3203, 3301, 3303, 3401, 3402, 3403,
+		3502, 3503, 3601, 3602, 3603, // 分支 3：文案只写「超轻/超轻型」
+		4303, 4502: // 分支 4：文案只写「超轻钓具」
 		return []int64{1}
+	case 3001, 3002, 3101, 3102, 3103, 3201, 3302, 3501: // 「轻型渔具」/「轻型或超轻型」
+		return []int64{1, 2}
+	default:
+		return nil
 	}
-	return nil
 }
 
 // qualificationRigClassFor 返回任务的钓组大类（efgbdocjcan：1 浮钓 2 路亚 3 底钓）。

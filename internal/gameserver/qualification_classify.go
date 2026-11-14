@@ -358,13 +358,20 @@ func qCountBaitItem(filters ...qFilter) func(qualificationEvent) string {
 	}
 }
 
-// qCountBaitFlavor 过滤通过则按味型去重计数（「N 种不同味道的颗粒」）。
+// qCountBaitFlavor 过滤通过则按饵的味道去重计数（「N 种不同味道的颗粒」）。
+// 味道不能取 item_def.acclagajcdn：颗粒/煮饵整族都是同一档位（实测 25），
+// 按它数永远到不了文案要求的种数。可区分味道的是饵本身——
+// plt_cb_pch14/18/24 是同一味道的不同尺寸，去掉尾部尺寸数字后同键。
 func qCountBaitFlavor(filters ...qFilter) func(qualificationEvent) string {
 	return func(ev qualificationEvent) string {
-		if !qPassAll(ev, filters) || ev.BaitFlavor <= 0 {
+		if !qPassAll(ev, filters) || ev.Bait == "" {
 			return ""
 		}
-		return "flavor:" + strconv.FormatInt(ev.BaitFlavor, 10)
+		key := strings.TrimRightFunc(ev.Bait, func(r rune) bool { return r >= '0' && r <= '9' })
+		if key == "" {
+			return ""
+		}
+		return "flavor:" + key
 	}
 }
 
