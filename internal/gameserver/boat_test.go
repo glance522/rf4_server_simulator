@@ -108,6 +108,64 @@ func TestOnBoatStateNeedsBoardingEvidence(t *testing.T) {
 	}
 }
 
+// TestCheckTicketRejectsCrossLevelTicket 验证船票只能在其购买地图的码头使用。
+//
+// 票定义里 algmimlfbdj（站点枚举）在地图之间会重复：站点 1 在 11 张图上都有，
+// 站点 2 在 7 张图上都有。只比站点会让"在阿赫图巴买的票到通古斯卡照样上船"，
+// 所以必须同时校验 dhaenhabecc（购买地图）。
+func TestCheckTicketRejectsCrossLevelTicket(t *testing.T) {
+	srv, sess, ctx := newMiscProbe(t)
+
+	// 阿赫图巴快票：站点 2，地图 level_009_ahtuba。
+	it, err := srv.CreateItem(ctx, 1000001, "ticket_boat_ahtuba_fast_24", "backpack", 1)
+	if err != nil || it == nil {
+		t.Fatalf("创建船票失败: %v", err)
+	}
+
+	// 玩家在出生图（克马羚诺也湖）上，跨图票必须被拒。
+	srv.setLevel(sess.Userid, spawnLevelKey)
+	req := proto.Args524(proto.U32(2), proto.GuidArr([]string{it.GUID}))
+	body, ok := hCheckTicket(miscCtx(sess, 3, 7, req))
+	if !ok {
+		t.Fatal("3/7 未处理")
+	}
+	if len(body) != 1 || body[0] != 0x00 {
+		t.Fatalf("跨地图票应回 null(0x00) 让客户端弹选票框，实得 %x", body)
+	}
+
+	// 被拒的票不能留下租用状态，否则切图后会被当成"已在租用"。
+	row, err := srv.DB.GetItemByGUID(ctx, it.GUID)
+	if err != nil || row == nil {
+		t.Fatalf("读取船票失败: %v", err)
+	}
+	fields, err := FieldsFromJSON(row.FieldsJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	activeIdx := fieldIdxByCS(row.WireClass, "knpoijanngk")
+	if activeIdx < 0 || activeIdx >= len(fields) {
+		t.Fatal("船票缺少激活字段")
+	}
+	if got := u64Of(fields[activeIdx].Num); got != 0 {
+		t.Fatalf("跨地图票不应被激活，激活字段=%d", got)
+	}
+
+	// 走到该票所属地图后，同一张票必须放行。
+	srv.setLevel(sess.Userid, "level_009_ahtuba")
+	body2, ok2 := hCheckTicket(miscCtx(sess, 3, 7, req))
+	if !ok2 || len(body2) == 0 {
+		t.Fatal("3/7 同图票未处理")
+	}
+	dec, _, err := proto.DecodeValue(body2, 0, srv.Table())
+	if err != nil {
+		t.Fatalf("3/7 同图票响应不可解码: %v", err)
+	}
+	if dec.Kind != proto.KindObj || dec.TypeID != boatTicketTypeID {
+		t.Fatalf("同图票应回 type_id=%d 的票，实得 kind=%s type=%d",
+			boatTicketTypeID, dec.Kind, dec.TypeID)
+	}
+}
+
 func TestActiveRentalTicketRepairsLegacyWorldAnchor(t *testing.T) {
 	srv, sess, ctx := newMiscProbe(t)
 	it, err := srv.CreateItem(ctx, 1000001, "ticket_boat_komar_24", "backpack", 1)

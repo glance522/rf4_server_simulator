@@ -30,9 +30,41 @@ const (
 	boatTicketInUseFlag = 1048576
 	// boatTicketStationAttr 是船票定义里的站点枚举（0..5）。
 	boatTicketStationAttr = "algmimlfbdj"
+	// boatTicketLocationAttr 是船票定义里的购买地图 key（如 level_009_ahtuba）。
+	// 站点枚举在地图之间会重复（站点 1 在 11 张地图上都有），只比站点会让
+	// 同一张票在任意地图通用，所以必须同时校验这张图。
+	boatTicketLocationAttr = "dhaenhabecc"
 	// boatTicketDurationAttr 是船票定义里的租用时长（分钟）。
 	boatTicketDurationAttr = "gloegohmand"
 )
+
+// ticketLevelOf 读取船票定义里的购买地图；没有该字段时返回空串。
+func ticketLevelOf(def *store.ItemDef) string {
+	if def == nil {
+		return ""
+	}
+	v, ok := defAttrStr(def, boatTicketLocationAttr)
+	if !ok {
+		return ""
+	}
+	return v
+}
+
+// ticketLevelOK 判断船票是否属于玩家当前所在地图。
+//
+// 票只在购买地图的码头可用：跨地图时应视为"没有可用票"，由客户端弹选票框，
+// 而不是放行上船。缺地图字段（旧数据/异常定义）时保持放行，避免误拒。
+func (s *Server) ticketLevelOK(ctx *Ctx, def *store.ItemDef) bool {
+	want := ticketLevelOf(def)
+	if want == "" || ctx == nil || ctx.Sess == nil {
+		return true
+	}
+	cur := s.currentLevel(ctx.Sess.Userid)
+	if cur == "" {
+		return true
+	}
+	return want == cur
+}
 
 func init() { RegisterExtra(registerBoatHandlers) }
 
@@ -112,9 +144,16 @@ func hCheckTicket(ctx *Ctx) ([]byte, bool) {
 		}
 		if def != nil {
 			if st, ok := defAttrU64(def, boatTicketStationAttr); ok && station > 0 && st != station {
-				ctx.Log.Warn("3/7 票站点与请求站点不一致，仍然放行",
+				ctx.Log.Warn("3/7 票站点与请求站点不一致，拒绝上船",
 					"ticket_station", st, "request_station", station, "guid", guidShort(g))
+				continue
 			}
+		}
+		if !srv.ticketLevelOK(ctx, def) {
+			ctx.Log.Warn("3/7 票不属于当前地图，拒绝上船",
+				"guid", guidShort(g), "item", row.ItemID,
+				"ticket_level", ticketLevelOf(def), "current_level", srv.currentLevel(ctx.Sess.Userid))
+			continue
 		}
 		// 选中票即开始租用：写入 knpoijanngk / 租期 / 时效对象并落库。
 		if srv.startTicketRent(ctx, row, def) {
@@ -192,6 +231,10 @@ func (s *Server) pickStationTicket(ctx *Ctx, station uint64) *proto.Value {
 			if st, ok := defAttrU64(def, boatTicketStationAttr); ok && st != station {
 				continue
 			}
+		}
+		// 票只能在其购买地图使用，跨地图时视为没有可用票。
+		if !s.ticketLevelOK(ctx, def) {
+			continue
 		}
 		// 必须在这里就写入租用状态：客户端构造租用记录时读的是票对象里的
 		// knpoijanngk，等它选完再写已经来不及（那时记录已失败）。
@@ -346,10 +389,18 @@ func (s *Server) activeRentalTicket(ctx *Ctx, station uint64) *proto.Value {
 			}
 		}
 		fields = s.repairActiveTicketAnchor(ctx, row, fields)
-		if def, derr := s.DB.GetItemDef(cctx, row.NumericID); derr == nil && def != nil && station > 0 {
+		def, derr := s.DB.GetItemDef(cctx, row.NumericID)
+		if derr != nil {
+			def = nil
+		}
+		if def != nil && station > 0 {
 			if st, ok := defAttrU64(def, boatTicketStationAttr); ok && st != station {
 				continue
 			}
+		}
+		// 有效期内的票也要校验地图：在 A 图买的票切到 B 图后不能被复用。
+		if !s.ticketLevelOK(ctx, def) {
+			continue
 		}
 		tree, terr := s.ItemToTree(cctx, row)
 		if terr == nil {
