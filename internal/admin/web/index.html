@@ -313,8 +313,11 @@ const TUNABLE_DEFS=[
   ['bite_delay_scale','咬钩延迟倍率',1,'整体加快或放慢咬钩：0.5=快一倍，2=慢一倍'],
   ['bite_delay_max','咬钩上限秒',20,'等待超过这个秒数必定咬钩（路亚除外）'],
   ['bite_delay_lure_max','路亚上限秒',6,'路亚钓法等待的秒数上限'],
-  ['bait_pref_scale','饵效强度',1,'0=鱼不看饵；1=标准效果，按饵料偏好筛鱼'],
+  ['bait_pref_scale','饵效强度',1,'饵效证据的加权强度：0=中性（不放大也不封鱼）；1=标准；2=加倍。开着「鱼类吃饵偏好」且严格档位>0 时调节对口饵的鱼口快慢，关掉吃饵规则时走 tier3×8 / tier2×4 软加权层。范围 0~2，最多 30 秒生效'],
   ['bait_pref_weight_shift','饵效偏大体型',1,'越大越偏向个体大的鱼咬钩'],
+  ['fish_bait_strictness','严格吃饵档位',0,'0=现状（规则允许与实证证据都能放行，鱼会乱吃饵）；1=偏好优先（只有规则允许的饵有正常鱼口，规则外搭配仅极低杂口）；2=硬白名单（只认规则允许）。默认 0，改后最多 30 秒生效'],
+  ['fish_bait_alt_bite','规则外杂口强度',0.05,'仅档位 1 生效：规则没写「吃」但实证有记录的搭配，权重 = 1.725 × 该值。0=完全关掉杂口；范围 0~0.5'],
+  ['cast_player_state_penalty_scale','抛投状态惩罚强度',0.35,'精力/饱食度对抛投距离的影响力度：0=完全不影响；1=旧口径（状态掉一半约少抛25%）；默认0.35，同样情形只少抛约7%。范围 0~1，改后最多 30 秒生效'],
   ['fish_weight_scale','鱼体重倍率',1,'全地图鱼重整体缩放，2=两倍重'],
   ['fish_weight_cap','鱼重受钓具上限',0,'1=超出钓具负重的鱼按上限截断；0=不限制'],
   ['electric_locked_multiplier','电轮锁轮倍率',3,'电轮锁轮有效承力=当前机械承力与电机承力较小者的该倍率；默认3'],
@@ -775,6 +778,8 @@ async function loadTunables(){
  const PAGES=[
   {id:'gameplay',tab:'玩法与钓组',sub:'咬钩 · 手感 · 电轮 · 摩擦片磨损',groups:[
     ['玩法手感','咬钩快慢、饵料偏好、鱼的大小与挣扎力度',['bite_probability','bite_delay_fixed','bite_delay_scale','bite_delay_max','bite_delay_lure_max','bait_pref_scale','bait_pref_weight_shift','fish_weight_scale','fish_weight_cap','fight_power_scale','fish_pull_ln_slope','fish_pull_fallback_k','fish_initial_stamina_ratio']],
+    ['抛投状态','精力/饱食度对抛投距离的惩罚强度；改后最多 30 秒生效，只影响后续抛投',['cast_player_state_penalty_scale']],
+    ['吃饵偏好','鱼是否只按规则表与偏好数据吃饵；档位 0 不改手感，改后最多 30 秒生效',['fish_bait_strictness','fish_bait_alt_bite']],
     ['钩型与咬口','嘬饵总开关与发鱼软匹配；后台钩型倍率仍独立生效',['hook_nibble_enabled','hook_spawn_match_strength']],
     ['电轮参数','电轮锁轮倍率与电机功率折算；改后最多 30 秒生效',['electric_locked_multiplier','electric_motor_kg_per_power']],
     ['摩擦片磨损','泄力打滑通道的系数（2026-11-12 拍平：速率不分档位，旧档位键 reel_slip_wear_low/s25~s28/max 已停用不再读取）；改后最多 30 秒生效，只影响后续结算',['reel_slip_wear','reel_slip_calibration_seconds','reel_slip_deadband_ratio']],

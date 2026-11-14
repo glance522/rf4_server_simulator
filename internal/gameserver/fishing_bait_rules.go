@@ -37,6 +37,91 @@ var fishBaitRules = parseFishBaitRules(fishBaitRuleText)
 
 const maxBaitPreference = 1.5 * 1.15
 
+// 严格吃饵档位。0 保持「规则允许 ∪ 实证证据」的并集放行（改动前手感）；
+// 1 只让规则允许的饵拿正常鱼口，规则外搭配降为低概率杂口；
+// 2 完全只认规则允许。默认 0：能力契约要求开关默认关闭时不得静默改变手感。
+const (
+	tunableFishBaitStrictness = "fish_bait_strictness"
+	tunableFishBaitAltBite    = "fish_bait_alt_bite"
+	defFishBaitAltBite        = 0.05
+	maxFishBaitAltBite        = 0.5
+	maxBaitPrefScale          = 2.0
+)
+
+// baitPreferenceCoef 把 companion 实证档位换算成温和的偏好系数，
+// 强度由 bait_pref_scale 控制：0 = 中性（不改鱼口），1 = 标准，2 = 加倍。
+// 严格档位下饵效证据只调节「规则已允许」的鱼口快慢，不再独立放行鱼种。
+func baitPreferenceCoef(tier int64, scale float64) float64 {
+	if scale <= 0 {
+		return 1
+	}
+	base := 1.0
+	switch tier {
+	case 3:
+		base = 1.5
+	case 2:
+		base = 1.25
+	case 1:
+		base = 1.10
+	}
+	if scale > maxBaitPrefScale {
+		scale = maxBaitPrefScale
+	}
+	return 1 + scale*(base-1)
+}
+
+// finiteTunable 挡住后台脏值：NaN/Inf 会让比较恒假或恒真，静默把档位推到
+// 意料之外的一侧。入口校验已拦一层，这里再兜一层数据库直写的情形。
+func finiteTunable(s *Server, key string, def, lo, hi float64) float64 {
+	v := s.tunableF(key, def)
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return def
+	}
+	return clampFloat(v, lo, hi)
+}
+
+func baitStrictness(s *Server) int {
+	v := finiteTunable(s, tunableFishBaitStrictness, 0, 0, 2)
+	switch {
+	case v >= 2:
+		return 2
+	case v >= 1:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// strictAllowTerms 在严格档位下收窄「各类饵」：拟饵族仍然通吃，天然饵必须
+// 命中该鱼在 fish_bait_pref 里的偏好项。没有偏好数据的鱼保持原规则，避免
+// 旧库缺表或新鱼种被整条封死。matches 拿不到鱼种上下文，所以在这里替换。
+func (s *Server) strictAllowTerms(ctx context.Context, c fishRollContext, fishKey string, allow []string) []string {
+	wildcard := false
+	for _, term := range allow {
+		if ruleName(term) == "各类饵" {
+			wildcard = true
+			break
+		}
+	}
+	if !wildcard {
+		return allow
+	}
+	prefs := s.cachedFishBaitPrefs(ctx, c, fishKey)
+	if len(prefs) == 0 {
+		return allow
+	}
+	out := make([]string, 0, len(allow)+len(prefs)+1)
+	for _, term := range allow {
+		if ruleName(term) == "各类饵" {
+			out = append(out, "拟饵")
+			out = append(out, prefs...)
+			continue
+		}
+		out = append(out, term)
+	}
+	return out
+}
+
 func ruleName(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch r {
@@ -312,11 +397,19 @@ func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weig
 	outKeys := make([]string, 0, len(keys))
 	outWeights := make([]float64, 0, len(keys))
 	period := (now.Unix() - worldDayEpochUnix) / (4 * realSecPerGameHour)
+	// 一次判鱼只读一次运行参数，避免逐鱼重复进锁。
+	strictness := baitStrictness(s)
+	altBite := finiteTunable(s, tunableFishBaitAltBite, defFishBaitAltBite, 0, maxFishBaitAltBite)
+	prefScale := finiteTunable(s, "bait_pref_scale", 1, 0, maxBaitPrefScale)
 	for i, key := range keys {
 		if weights[i] <= 0 {
 			continue
 		}
 		r, rot := s.resolveBaitRule(ctx, names[key])
+		allowTerms := r.allow
+		if strictness > 0 {
+			allowTerms = s.strictAllowTerms(ctx, c, key, r.allow)
+		}
 		// 轮换：按时间桶取当前组；strict 只认当前组，soft 组外降权但仍可咬。
 		activeGroup := activeBaitGroup(rot, now)
 		strictRotation := activeGroup != nil && rot.mode == "strict"
@@ -344,7 +437,7 @@ func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weig
 				break
 			}
 			allowed := false
-			for _, term := range r.allow {
+			for _, term := range allowTerms {
 				if b.matches(term) {
 					allowed = true
 					break
@@ -356,11 +449,24 @@ func (s *Server) filterFishBaitSet(loc string, ids []string, keys []string, weig
 			}
 			score := 0.0
 			variation := fishVariation(fmt.Sprintf("%s/%s/%s/%d", loc, key, b.id, period))
-			if allowed || evidence[j][key] > 0 || localEvidence[j][key] {
+			if strictness == 0 {
+				// 旧口径：规则允许、companion 实证、本地渔获三者任一命中都是满权重。
+				if allowed || evidence[j][key] > 0 || localEvidence[j][key] {
+					preferred++
+					score = 1.0 + 0.5*variation
+				} else if b.legalAlternative(r) {
+					score = maxBaitPreference * 0.05
+				}
+			} else if allowed {
 				preferred++
-				score = 1.0 + 0.5*variation
-			} else if b.legalAlternative(r) {
-				score = maxBaitPreference * 0.05
+				score = (1.0 + 0.5*variation) * baitPreferenceCoef(evidence[j][key], prefScale)
+				if localEvidence[j][key] && evidence[j][key] == 0 {
+					score *= 1.1
+				}
+			} else if strictness == 1 && altBite > 0 &&
+				(evidence[j][key] > 0 || localEvidence[j][key] || b.legalAlternative(r)) {
+				// 规则没写「吃」但确有实证：只留极低杂口，不当成正常鱼口。
+				score = maxBaitPreference * altBite
 			}
 			if activeGroup != nil {
 				score *= rotationScoreMultiplier(activeGroup, b)

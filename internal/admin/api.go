@@ -396,6 +396,32 @@ func (s *Server) handleTunableSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// 抛投状态惩罚强度：0=状态不影响抛投，1=旧口径。越界值会被 gameserver
+	// 静默钳到 [0,1]，先在入口拦住，避免后台显示与实际手感对不上。
+	// 见 specs/changes/cast-player-state-penalty-scale。
+	if req.Key == "cast_player_state_penalty_scale" {
+		v, err := strconv.ParseFloat(strings.TrimSpace(req.Value), 64)
+		if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > 1 {
+			httpError(w, 400, "抛投状态惩罚强度必须在 0~1（0=状态不影响抛投，1=旧口径）")
+			return
+		}
+	}
+	// 严格吃饵档位只认 0/1/2；杂口强度上限 0.5，避免被调成第二个满权重通道。
+	// 见 specs/changes/bait-strict-preference。
+	if req.Key == "fish_bait_strictness" {
+		v, err := strconv.ParseFloat(strings.TrimSpace(req.Value), 64)
+		if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || (v != 0 && v != 1 && v != 2) {
+			httpError(w, 400, "严格吃饵档位只能是 0 / 1 / 2（0=现状，1=偏好优先，2=硬白名单）")
+			return
+		}
+	}
+	if req.Key == "fish_bait_alt_bite" {
+		v, err := strconv.ParseFloat(strings.TrimSpace(req.Value), 64)
+		if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > 0.5 {
+			httpError(w, 400, "规则外杂口强度必须在 0~0.5（0=完全关掉杂口）")
+			return
+		}
+	}
 	if err := s.db.TunableSet(r.Context(), req.Key, req.Value, adminOf(r)); err != nil {
 		httpError(w, 500, err.Error())
 		return

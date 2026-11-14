@@ -211,6 +211,34 @@ func (d *DB) BaitTiers(ctx context.Context, baitID string) map[string]int64 {
 	return out
 }
 
+// FishBaitPrefs 某鱼种在 wiki 偏好表里的饵名/系列名列表。
+// 表缺失、查询失败或无记录都返回 nil；判鱼侧据此保留内置规则，旧档升级不受影响。
+func (d *DB) FishBaitPrefs(ctx context.Context, fishKey string) []string {
+	if fishKey == "" {
+		return nil
+	}
+	rows, err := d.SQL.QueryContext(ctx,
+		`SELECT bait_zh FROM fish_bait_pref WHERE fish_key=?`, fishKey)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var bait string
+		if err := rows.Scan(&bait); err != nil {
+			return nil
+		}
+		if bait = strings.TrimSpace(bait); bait != "" {
+			out = append(out, bait)
+		}
+	}
+	if err := rows.Err(); err != nil || len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // CompanionEvidence fish_key → 该鱼 companion 数据覆盖度（total_evidence）。
 // 缺表返回 nil（覆盖率按 0 处理）。
 func (d *DB) CompanionEvidence(ctx context.Context) map[string]int64 {
