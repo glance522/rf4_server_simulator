@@ -14,8 +14,23 @@ import (
 // （spinnerbaits/crankbaits/jerkbaits/poppers）。
 
 // lureFamily 返回拟饵 item_id 所属的拟饵族；非上述硬饵/亮片族返回空串。
+// 自制拟饵（hm_*）按子类型前缀归族：它们的 item_id 不带商店货的族前缀
+// （hm_walker/hm_popper、hm_jerk、hm_spoon、hm_spinner、hm_pl/hm_crank/
+// hm_shad/hm_minnow），不补映射会让「使用某类拟饵」的任务在手工饵上永不计数。
 func lureFamily(bait string) string {
 	switch {
+	case strings.HasPrefix(bait, "hm_spinner"):
+		return "spinner"
+	case strings.HasPrefix(bait, "hm_spoon"):
+		return "spoon"
+	case strings.HasPrefix(bait, "hm_walker"), strings.HasPrefix(bait, "hm_popper"):
+		return "topwater"
+	case strings.HasPrefix(bait, "hm_jerk"):
+		return "jerkbait"
+	case strings.HasPrefix(bait, "hm_pl"), strings.HasPrefix(bait, "hm_crank"),
+		strings.HasPrefix(bait, "hm_shad"), strings.HasPrefix(bait, "hm_minnow"),
+		strings.HasPrefix(bait, "hm_j_minnow"):
+		return "wobbler"
 	case strings.HasPrefix(bait, "spinner"):
 		return "spinner"
 	case strings.HasPrefix(bait, "spoon"):

@@ -1160,6 +1160,15 @@ func TestLureFamilyPrefixes(t *testing.T) {
 		"topwater_a": "topwater", "popper_a": "topwater", "poppers_a": "topwater",
 		"jerkbait_a": "jerkbait", "jerkbaits_a": "jerkbait",
 		"crank_a": "wobbler", "crankbaits_a": "wobbler", "plug_a": "wobbler", "shad_a": "wobbler",
+		// 自制拟饵（hm_*）按子类型前缀归族；缺失会让所有「使用某类拟饵」的任务
+		// 在玩家用手工饵时永远不计数。
+		"hm_spinner_n1_bl_hq":  "spinner",
+		"hm_spoon_mos_hq":      "spoon",
+		"hm_walker_65f_001_hq": "topwater", "hm_popper_65f_001_hq": "topwater",
+		"hm_jerk_f_100f_001_hq": "jerkbait",
+		"hm_crank_130f_001_hq":  "wobbler", "hm_shad_140f_001_hq": "wobbler",
+		"hm_pl_join_140s_001_hq": "wobbler", "hm_minnow_100s_hq": "wobbler",
+		"hm_j_minnow_90s_hq": "wobbler", "hm_foamr_80black_hq": "",
 		"softplastic_a": "", "worm_a": "",
 	}
 	for bait, want := range cases {
