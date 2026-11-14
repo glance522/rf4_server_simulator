@@ -337,15 +337,84 @@ func formatCastWeightParts(parts []castWeightPart, lineRunningG float64) string 
 	return b.String()
 }
 
-// castSkillStats 合成当前钓法熟练度；未知节点不按通用投距加成计算。
-func (s *Server) castSkillStats(ctx context.Context, uid, rigType int64, gears ...string) (category int64, mastery, nodeEffect float64) {
+// castSkillStats 合成当前钓法熟练度与已学投距技能百分比。
+// 投距百分比来自 skill_cast_effect_def（官方文案逐字提取，见
+// docs/cast-skill-official-effects.md），按当前竿/轮的 fopbhlmkcpe 匹配 gate；
+// 不匹配的节点一律不计入（castPct=0）。
+func (s *Server) castSkillStats(ctx context.Context, uid, rigType, rodType, reelType int64, gears ...string) (category int64, mastery, castPct float64) {
 	category = fishingSkillCatForRig(rigType)
 	effects, err := s.effectiveFishingSkills(ctx, uid, gears...)
 	if err != nil {
 		return category, 0, 0
 	}
-	return category, effects.mastery(category), 0
+	return category, effects.mastery(category), s.learnedCastSkillPct(ctx, effects, rodType, reelType)
+}
 
+// castSkillGate 是一个 gate 槽位（竿或轮 × fopbhlmkcpe 类型）。
+type castSkillGate struct {
+	Kind string
+	Type int64
+}
+
+// learnedCastSkillPct 按装备类型汇总已学投距技能的官方加成百分比。
+// 轮侧行跨钓法大类生效（官方「只需学一次」，等级共享由 skill_link 投影处理）。
+// 同一 gate 槽位只取最高一行的贡献：轻型/重型传统轮（718/721）这类兄弟行在
+// fopbhlmkcpe 里同型不可区分，官服同时只会激活与当前轮对应的那一行。
+func (s *Server) learnedCastSkillPct(ctx context.Context, effects effectiveFishingEffects, rodType, reelType int64) float64 {
+	if s == nil || s.DB == nil {
+		return 0
+	}
+	ident, err := s.DB.LoadSkillIdentity(ctx)
+	if err != nil {
+		return 0
+	}
+	learned := ident.Project(effects.Learned)
+	gear := ident.Project(effects.GearNodes)
+	rows, err := s.DB.SQL.QueryContext(ctx, `
+		SELECT d.node_id, d.per_level_pct, d.gate_kind, d.gate_type,
+		       COALESCE(sd.max_level, 0)
+		FROM skill_cast_effect_def d
+		LEFT JOIN skill_def sd ON sd.cat_id = d.cat_id AND sd.node_id = d.node_id`)
+	if err != nil {
+		return 0
+	}
+	defer rows.Close()
+	best := map[castSkillGate]float64{}
+	for rows.Next() {
+		var nodeID, gateType, maxLevel int64
+		var perLevelPct float64
+		var gateKind string
+		if err := rows.Scan(&nodeID, &perLevelPct, &gateKind, &gateType, &maxLevel); err != nil {
+			return 0
+		}
+		switch gateKind {
+		case "rod":
+			if rodType != gateType {
+				continue
+			}
+		case "reel":
+			if reelType != gateType {
+				continue
+			}
+		default:
+			continue
+		}
+		level := max64(0, learned[nodeID]+gear[nodeID])
+		if maxLevel > 0 && level > maxLevel {
+			level = maxLevel
+		}
+		if contribution := perLevelPct * float64(level); contribution > best[castSkillGate{gateKind, gateType}] {
+			best[castSkillGate{gateKind, gateType}] = contribution
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0
+	}
+	total := 0.0
+	for _, contribution := range best {
+		total += contribution
+	}
+	return total
 }
 
 // castReelSpoolStats 从当前轮子实例优先读取工作坊安装的线杯；老轮子没有内嵌

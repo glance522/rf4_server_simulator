@@ -26,6 +26,8 @@
 - [钓鱼状态恢复](fishing-state-recovery.md)：快照、重连与未结算鱼的恢复路径。
 - [护网与钓获记录同步](keepnet-synchronization.md)：入护、记录与库存一致性。
 - [当前装备的技能加成](equipped-fishing-skills.md)：装备加成如何进入判定。
+- [官方投距技能效果对照表](cast-skill-official-effects.md)：skill_cast_effect_def
+  的官方文案提取方法与逐节点对照。
 - [欢乐时光](happy-hour.md)：计时口径、加成数值与资格持久化。
 - [战利品箱](loot-box.md)：开箱产出与发放口径。
 - [弹弓投掷视觉](slingshot-throw-visual.md)：投掷外观与服务端校验的边界。

@@ -981,11 +981,21 @@ func hCast(ctx *Ctx) ([]byte, bool) {
 		"power_ratio", math.Round(powerRatio*1000)/1000)
 	// 主线版本会无条件记录当前饵，供路亚咬钩规则和持久化状态使用。
 	bait := srv.currentBait(ctx.Sess.pushCtx(), gear)
-	st.mu.Lock()
-	st.Bait = bait
 	// 实际落点距离供后续咬钩快照给资格判定；不能用 castProf.DistanceM
 	//（钓具理论最大距离），否则 5m 短抛也会满足「抛投 ≥30m」。
-	st.CastM = requestedM
+	// 客户端功率条满格红区可把 requested 推到上限的 ~1.25 倍（2026-11-13
+	// 实测 51m / 上限 40.85m），官服拉满就是上限本身；带轮装配按满竿
+	// 收口，红区白赚距离消失。无轮手竿走旧协议基线（不是真实上限），
+	// 继续采信 requested（手竿距离对齐见 PR #457）。
+	castM := requestedM
+	if profile.ReelGUID != "" && actionMaxM > 0 && requestedM > actionMaxM {
+		ctx.Log.Info("抛投请求超满竿上限，按上限收口",
+			"requested_m", math.Round(requestedM*100)/100, "capped_m", math.Round(actionMaxM*100)/100)
+		castM = actionMaxM
+	}
+	st.mu.Lock()
+	st.Bait = bait
+	st.CastM = castM
 	st.mu.Unlock()
 	// 水体距离闸门：玩家离水体太远（抛投够不到）时不派鱼。
 	// 只有该地点有水体矩形数据时才判定；没有数据一律放行，避免误伤。

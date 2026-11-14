@@ -42,6 +42,12 @@ func (s *Server) attachDB(db *store.DB, log *slog.Logger) {
 	} else if n > 0 {
 		s.log.Info("鱼口技能效果初始化", "inserted", n)
 	}
+	// 必须在 ensureFishSkillEffects 之后：先种鱼侧行再删，DELETE 才能站稳。
+	if n, err := s.ensureCastSkillEffects(context.Background()); err != nil {
+		s.log.Warn("抛投技能效果初始化失败", "err", err)
+	} else if n > 0 {
+		s.log.Info("抛投技能效果初始化", "inserted", n)
+	}
 	if err := s.reloadHookBiteProfiles(context.Background()); err != nil {
 		s.log.Warn("鱼钩型号咬口缓存加载失败", "err", err)
 	}

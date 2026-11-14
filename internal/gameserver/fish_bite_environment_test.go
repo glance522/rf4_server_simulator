@@ -241,11 +241,50 @@ func TestSkillFishEffectsAreTableDrivenAndSharedGroupsCountOnce(t *testing.T) {
 		t.Fatalf("鱼口技能效果只生成 %d 条", inserted)
 	}
 
+	// 生产顺序：鱼口 ensure 之后跑抛投 ensure（attachDB 同处调用），
+	// 已确认纯投距的节点（docs/cast-skill-official-effects.md）其自造鱼侧行
+	// 被删除。鱼口 ensure 会把行回插，所以这里完整重放一遍生产顺序：
+	// 回插后再跑抛投 ensure，必须再次删干净（幂等）。
+	if _, err := srv.ensureCastSkillEffects(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.ensureFishSkillEffects(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.ensureCastSkillEffects(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var castSeeds int
+	if err := db.SQL.QueryRow(`SELECT COUNT(*) FROM skill_cast_effect_def`).Scan(&castSeeds); err != nil {
+		t.Fatal(err)
+	}
+	if castSeeds < 25 {
+		t.Fatalf("抛投技能效果只种下 %d 条", castSeeds)
+	}
+
+	// 纯投距共享组：鱼侧行不得存在。
 	for _, nodes := range [][]int64{
 		{514, 701, 313, 1002},
+		{718, 1008, 721, 1020},
+	} {
+		var rows int
+		query := `SELECT COUNT(*) FROM skill_fish_effect_def WHERE node_id IN (` +
+			strings.TrimSuffix(strings.Repeat("?,", len(nodes)), ",") + `)`
+		args := make([]any, len(nodes))
+		for i, node := range nodes {
+			args[i] = node
+		}
+		if err := db.SQL.QueryRow(query, args...).Scan(&rows); err != nil {
+			t.Fatal(err)
+		}
+		if rows != 0 {
+			t.Fatalf("纯投距技能 %v 仍残留鱼侧效果行: %d", nodes, rows)
+		}
+	}
+
+	// 仍是鱼侧语义的共享组：效果签名保持一致。
+	for _, nodes := range [][]int64{
 		{515, 516},
-		{718, 1008},
-		{721, 1020},
 	} {
 		var signatures int
 		query := `SELECT COUNT(DISTINCT effect_key||'/'||per_level||'/'||cap)
@@ -263,20 +302,21 @@ func TestSkillFishEffectsAreTableDrivenAndSharedGroupsCountOnce(t *testing.T) {
 		}
 	}
 	defs := []skillNodeDef{
-		{NodeID: 701, CatID: 2, MaxLevel: 5, Enabled: true},
+		{NodeID: 515, CatID: 1, MaxLevel: 3, Enabled: true},
+		{NodeID: 516, CatID: 1, MaxLevel: 3, Enabled: true},
 	}
 	effects := effectiveFishingEffects{
-		Learned:   map[int64]int64{514: 2, 701: 2, 313: 2, 1002: 2},
-		GearNodes: map[int64]int64{701: 1},
+		Learned:   map[int64]int64{515: 2, 516: 2},
+		GearNodes: map[int64]int64{516: 1},
 	}
 	bonus := neutralFishingSkillBonus()
-	srv.applyFishingNodeBonuses(t.Context(), 2, &bonus, effects, defs)
+	srv.applyFishingNodeBonuses(t.Context(), 1, &bonus, effects, defs)
 	total := bonus.EcologyInterest + bonus.RareFish + bonus.LureTolerance +
 		bonus.WeatherAdaptation + bonus.LayerAccuracy + bonus.WormBoost +
 		bonus.PredatorBoost + bonus.SalmonidBoost + bonus.BottomBoost + bonus.FloatBoost
 	var perLevel, cap float64
 	if err := db.SQL.QueryRow(`SELECT per_level,cap FROM skill_fish_effect_def
-		WHERE cat_id=2 AND node_id=701`).Scan(&perLevel, &cap); err != nil {
+		WHERE cat_id=1 AND node_id=515`).Scan(&perLevel, &cap); err != nil {
 		t.Fatal(err)
 	}
 	want := math.Min(cap, 3*perLevel) // 学习 2 级 + 鱼竿赠 1 级
