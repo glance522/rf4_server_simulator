@@ -14,8 +14,10 @@ const (
 	castBaseLureM    float32 = 7.1598907
 	castBaseDefaultM float32 = castBaseFloatM
 
+	// 路亚族名义基准与底钓齐平：实机满力落点持续高于旧 45 米基准推出的
+	// 14/1 理论上限（约 1.27 倍），先对齐基准观察 158.f1 是否参与客户端落点。
 	castNominalDefaultM = 60.0
-	castNominalLureM    = 45.0
+	castNominalLureM    = 60.0
 	castMinPoweredM     = 8.0
 )
 

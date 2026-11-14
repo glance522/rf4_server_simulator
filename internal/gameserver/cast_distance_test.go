@@ -134,14 +134,17 @@ func castCalibrationDistance(payloadG float64, spoolSize int64) float64 {
 }
 
 func TestCastCalibrationBands(t *testing.T) {
+	// 标定带随路亚名义基准等比平移（旧基准 45 米时为 28～31 / 32～36.5）。
+	// 用比值表达可让基准回滚时期望值自动复原，不必再回滚测试文件。
+	scale := castNominalLureM / 45.0
 	for _, payload := range []float64{8, 10} {
 		largeSpool := castCalibrationDistance(payload, 5) // 6000
 		smallSpool := castCalibrationDistance(payload, 2) // 2000
-		if largeSpool < 28 || largeSpool > 31 {
-			t.Fatalf("6000线杯 %.0fg 距离=%0.2f，期望28～30米区间", payload, largeSpool)
+		if largeSpool < 28*scale || largeSpool > 31*scale {
+			t.Fatalf("6000线杯 %.0fg 距离=%0.2f，期望%.2f～%.2f米区间", payload, largeSpool, 28*scale, 31*scale)
 		}
-		if smallSpool < 32 || smallSpool > 36.5 {
-			t.Fatalf("2000线杯 %.0fg 距离=%0.2f，期望32～36米区间", payload, smallSpool)
+		if smallSpool < 32*scale || smallSpool > 36.5*scale {
+			t.Fatalf("2000线杯 %.0fg 距离=%0.2f，期望%.2f～%.2f米区间", payload, smallSpool, 32*scale, 36.5*scale)
 		}
 		if smallSpool <= largeSpool+2 {
 			t.Fatalf("小线杯应比6000线杯远至少2米: 小杯=%0.2f 大杯=%0.2f", smallSpool, largeSpool)
