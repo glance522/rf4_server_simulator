@@ -1,4 +1,4 @@
-package gameserver
+﻿package gameserver
 
 import (
 	"context"
@@ -1505,6 +1505,16 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 		silver += int64(math.Round(bodyWear * 500))
 		gold = 0
 	}
+	// 整机修理的价按“本体磨损”算，零件残留的微量磨损（0.1%~1.4%）会被取整成 0 元：
+	// 结果是点修理既不扣钱也不改状态，玩家反复点还是原样。这里在零价分支之前
+	// 按子件实际磨损补一个最低价，保证「有磨损就一定修得上」。
+	if wholeItemRepair {
+		if w := childMaxWear(fields); w > 0 {
+			if cand := int64(math.Round(w * 500)); cand > silver {
+				silver = cand
+			}
+		}
+	}
 	costSilver, costGold := silver, gold
 	// 修理（同型号）分支只累加银币，没有金币价；而界面的「即时」档是同一笔
 	// 工单按金价结算。金价与银价的换算从客户端界面反推：316.68↔2.88、
@@ -1563,9 +1573,14 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 			return nil, false
 		}
 	}
-	// 同型号整机修理：轮内零件必须和本体一起恢复到额定状态。
-	// 本体耐久是轮内各零件的加权综合，只把本体那格拉回 1.0、零件还停在高磨损，
-	// 客户端配件面板会继续显示修理前的磨损值，下一次受力也会立刻把本体拖回去。
+	// 同型号整机修理：物品树里所有子件（竿坯/导环/手柄、齿轮/轴承/线杯/油…）
+	// 的耐久都要一起拉回额定值，并各自抬高版本戳。
+	// 只写本体耐久的话，详情页的零件列表仍显示修理前的损耗，工作坊还会因为
+	// 按磨损算价算成 0 而弹「零件没有磨损」——本体与子件必须同一次事务里一起修。
+	if wholeItemRepair {
+		restoreChildPartDurability(fields)
+	}
+	// 渔轮另外要修「摩擦片制动力」这类非耐久字段。
 	if isReel && wholeItemRepair {
 		if _, ierr := srv.restoreReelInternalsInFields(cctx, row, fields); ierr != nil {
 			ctx.Log.Warn("工坊修理：轮内零件恢复失败", "guid", shortGUID(row.GUID), "err", ierr)
@@ -1654,10 +1669,11 @@ func hWorkshopOrder(ctx *Ctx) ([]byte, bool) {
 	if berr != nil {
 		return nil, false
 	}
-	// 官方顺序是先回 21/3，再用 4/22 刷新客户端物品缓存。
-	ctx.AfterResponse(func() {
-		ctx.Sess.Push(4, 22, proto.Args(proto.S("61"), out))
-	})
+	// 官方顺序是先回 21/3，再刷新客户端物品缓存。
+	// 客户端对零件子树按 GUID 缓存、只认「新增/移除」，单纯 4/22 同 guid 覆盖
+	// 会被忽略（表现为本体已修好、零件列表仍显示旧损耗）。queueStackRefresh
+	// 走的就是「4/21 移除 + 4/22 重加」，强制客户端重建整棵物品树。
+	srv.queueStackRefresh(ctx, []string{row.GUID}, []*proto.Value{out})
 	ctx.Log.Info("21/3 工坊换件完成", "item", row.ItemID, "guid", shortGUID(row.GUID),
 		"parts", len(orders), "silver", costSilver, "gold", costGold)
 	return bodyOut, true
@@ -1675,6 +1691,10 @@ func workshopItemTreeBody(ctx *Ctx, srv *Server, cctx context.Context, row *stor
 	if berr != nil {
 		return nil, false
 	}
+	// 与正常成单路径保持一致：回包后再推 4/22 覆盖客户端物品缓存。
+	// 零价/幂等分支如果只回包不推送，客户端配件面板会继续显示修理前的磨损值，
+	// 玩家再点一次维修时服务端算出的价格已是 0，界面就弹「错误」。
+	srv.queueStackRefresh(ctx, []string{row.GUID}, []*proto.Value{tree})
 	return body, true
 }
 
@@ -2313,4 +2333,69 @@ func (s *Server) insertNamedFish(ctx context.Context, uid int64, f *RolledFish, 
 		return false, fmt.Sprintf("存储失败：%v", err)
 	}
 	return true, ""
+}
+
+// restoreChildPartDurability 把物品树里所有子件（竿坯/导环/手柄、齿轮/轴承/线杯/油…）
+// 的耐久拉回 1.0，并逐个抬高版本戳让客户端重新渲染。
+// 子件是挂在物品字段里的嵌套对象，客户端按子件自身的 created ticks 决定是否刷新，
+// 只改耐久不抬版本时详情页会继续显示旧损耗。
+func restoreChildPartDurability(fields []proto.Field) bool {
+	changed := false
+	for i := range fields {
+		child := fields[i].Val
+		if child == nil || child.Kind != proto.KindObj {
+			continue
+		}
+		idx := fieldIdxByCS(child.Class, csDurability)
+		if idx < 0 || idx >= child.FieldCount() {
+			continue
+		}
+		if cur, ok := wireFloatAt(child, csDurability); ok && cur >= 1 {
+			continue
+		}
+		if !setWireFloat(child.Fields, child.Class, idx, 1) {
+			continue
+		}
+		bumpCreatedTicks(child.Fields, child.Class)
+		changed = true
+	}
+	return changed
+}
+
+// childPartsHaveWear 判断物品树里是否有子件耐久未满。
+func childPartsHaveWear(fields []proto.Field) bool {
+	for i := range fields {
+		child := fields[i].Val
+		if child == nil || child.Kind != proto.KindObj {
+			continue
+		}
+		idx := fieldIdxByCS(child.Class, csDurability)
+		if idx < 0 {
+			continue
+		}
+		if v, ok := wireFloatAt(child, csDurability); ok && v < 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// childMaxWear 返回物品树中子件的最坏磨损（0~1），无子件时返回 0。
+func childMaxWear(fields []proto.Field) float64 {
+	worst := 0.0
+	for i := range fields {
+		child := fields[i].Val
+		if child == nil || child.Kind != proto.KindObj {
+			continue
+		}
+		if fieldIdxByCS(child.Class, csDurability) < 0 {
+			continue
+		}
+		if v, ok := wireFloatAt(child, csDurability); ok {
+			if w := 1 - v; w > worst {
+				worst = w
+			}
+		}
+	}
+	return worst
 }

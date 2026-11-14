@@ -521,3 +521,53 @@ func TestWorkshopReelRepairRestoresInternals(t *testing.T) {
 	}
 
 }
+
+// 整机修理必须把所有子件一起修回额定耐久：只修本体时，详情页零件列表仍显示旧损耗，
+// 工作坊再点一次会因为按磨损算价算成 0 而弹「零件没有磨损」。
+func TestWorkshopRodRepairRestoresAllParts(t *testing.T) {
+	srv, db := newStaticRigTestServer(t)
+	rod, partID := seedWornWorkshopRod(t, srv, db, .4, .3)
+	ctx := t.Context()
+	const uid = int64(1000001)
+	if _, err := db.EnsureProfile(ctx, uid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateBalance(ctx, uid, 10000, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	c := &Ctx{
+		Sess: newProbeSess(srv), Main: 21, Sub: 3,
+		Tree: snapshotWorkshopRequestPart(rod.GUID, 4, partID, 0),
+		Log:  logging.Discard(),
+	}
+	if body, ok := hWorkshopOrder(c); !ok || len(body) == 0 {
+		t.Fatal("整机修理失败")
+	}
+	fresh := mustItem(t, db, rod.GUID)
+	if fresh.Durability != 1 {
+		t.Fatalf("修理后本体耐久应回 1，实得 %v", fresh.Durability)
+	}
+	fields := snapshotFields(t, fresh.FieldsJSON)
+	checked := 0
+	for i := range fields {
+		child := fields[i].Val
+		if child == nil || child.Kind != proto.KindObj {
+			continue
+		}
+		if idx := fieldIdxByCS(child.Class, csDurability); idx < 0 {
+			continue
+		}
+		v, ok := wireFloatAt(child, csDurability)
+		if !ok {
+			continue
+		}
+		checked++
+		if v != 1 {
+			t.Fatalf("修理后子件 class=%s 耐久应回 1，实得 %v", child.Class, v)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("未找到任何子件，用例无效")
+	}
+}
