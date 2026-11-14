@@ -2724,6 +2724,8 @@ func castReady158(ctx *Ctx, gear string, depthCM int64, rigType int64) []byte {
 		"special_skill_factor", math.Round(profile.SpecialSkillFactor*1000)/1000,
 		"player_primary", math.Round(profile.PlayerPrimary*1000)/1000,
 		"player_secondary", math.Round(profile.PlayerSecondary*1000)/1000,
+		"state_penalty_scale", math.Round(profile.StatePenaltyScale*1000)/1000,
+		"state_factor", math.Round(profile.StateFactor*1000)/1000,
 		"friction", math.Round(profile.Friction*1000)/1000,
 		"efficiency", math.Round(profile.Efficiency*1000)/1000,
 		"bearing_quality", profile.BearingQuality, "oil_quality", profile.OilQuality,

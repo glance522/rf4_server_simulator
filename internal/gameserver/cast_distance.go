@@ -49,6 +49,7 @@ type CastDistanceContext struct {
 	LineRunningWeightG   float64
 	PlayerPrimary        float64
 	PlayerSecondary      float64
+	StatePenaltyScale    float64
 	SkillCategory        int64
 	SkillMastery         float64
 	SkillNodeEffect      float64
@@ -141,7 +142,7 @@ var builtInCastModifiers = []CastDistanceModifier{
 		return castReelTypeFactor(c.ReelType)
 	}},
 	castDistanceModifierFunc{name: "player_state", fn: func(c CastDistanceContext) float64 {
-		return castPlayerStateFactor(c.PlayerPrimary, c.PlayerSecondary)
+		return castPlayerStateFactorScaled(c.PlayerPrimary, c.PlayerSecondary, c.StatePenaltyScale)
 	}},
 	castDistanceModifierFunc{name: "reel_friction", fn: func(c CastDistanceContext) float64 {
 		return clampFloat(c.ReelEfficiency, 0.25, 1)
@@ -172,6 +173,8 @@ type castDistanceProfile struct {
 	LineRunningWeightG   float64
 	PlayerPrimary        float64
 	PlayerSecondary      float64
+	StatePenaltyScale    float64
+	StateFactor          float64
 
 	RodLengthM         float64
 	RodAction          int64
@@ -353,13 +356,52 @@ func castReelTypeFactor(reelType int64) float64 {
 	}
 }
 
-// castPlayerStateFactor 玩家状态修正器：精力/饱食度越低抛得越近。
-// 0 值是真实空状态，按 0 参与加权、落到 0.70 下限；
-// 不再把 <=0 重置为默认值（旧边界会把真·空状态当成满状态）。
+// 玩家状态对抛投距离的惩罚强度。旧口径把 0.55/0.45 加权状态直接当距离乘数、
+// 钳到 [0.70,1.03]：精力/饱食掉一半就能少抛约三成，反过来盖过竿长、线杯、
+// 线径等装配差异，玩家换装备时几乎看不出区别。
+//
+// 现在只把"状态缺口"按 scale 缩放：1 = 完全回到旧口径，0 = 状态不影响抛投，
+// 缺省 0.35。有效状态下限沿用旧口径的 0.70（低于它不再继续恶化），奖励侧
+// 保持 1.03 上限，因此满状态、超满状态和全部既有标定带都不变。
+const (
+	tunableCastPlayerStatePenaltyScale = "cast_player_state_penalty_scale"
+	defCastPlayerStatePenaltyScale     = 0.35
+	castPlayerStateEffectiveFloor      = 0.70
+	castPlayerStateBonusCap            = 1.03
+)
+
+// castPlayerStateFactor 用缺省惩罚强度计算状态系数，供既有调用方与单测使用。
 func castPlayerStateFactor(primary, secondary float64) float64 {
+	return castPlayerStateFactorScaled(primary, secondary, defCastPlayerStatePenaltyScale)
+}
+
+// castPlayerStateFactorScaled 把状态缺口 (1-effective) 按 scale 折成距离乘数。
+// state >= 1 走原奖励分支，不惩罚；state < 0.70 一律按 0.70 计，避免空状态
+// 把抛投变成惩罚。NaN 状态回中性 1，交给 calculateCastDistance 的既有兜底。
+func castPlayerStateFactorScaled(primary, secondary, scale float64) float64 {
 	state := 0.55*(primary/defaultPlayerConditionPrimary) +
 		0.45*(secondary/defaultPlayerConditionSecondary)
-	return clampFloat(state, 0.70, 1.03)
+	if math.IsNaN(state) {
+		return 1
+	}
+	if state >= 1 {
+		return clampFloat(state, 1, castPlayerStateBonusCap)
+	}
+	effective := math.Max(state, castPlayerStateEffectiveFloor)
+	return 1 - clampFloat(scale, 0, 1)*(1-effective)
+}
+
+// castPlayerStatePenaltyScale 读取热更参数并钳到 [0,1]。tunableF 自带 30 秒
+// 缓存且有 2 秒查询超时，只在抛投计算路径调用，不在事务内调用。
+func (s *Server) castPlayerStatePenaltyScale() float64 {
+	if s == nil {
+		return defCastPlayerStatePenaltyScale
+	}
+	v := s.tunableF(tunableCastPlayerStatePenaltyScale, defCastPlayerStatePenaltyScale)
+	if math.IsNaN(v) {
+		return defCastPlayerStatePenaltyScale
+	}
+	return clampFloat(v, 0, 1)
 }
 
 func clampFloat(v, lo, hi float64) float64 {
@@ -504,6 +546,9 @@ func (s *Server) castDistanceForRig(ctx context.Context, uid int64, rodGUID stri
 		CastAction: 1, CastPower: 1,
 		PlayerPrimary:   defaultPlayerConditionPrimary,
 		PlayerSecondary: defaultPlayerConditionSecondary}
+	// 无轮手竿等旧协议路径不进修正器管线，但仍把缺省强度写进 profile，
+	// 让日志里的 state_penalty_scale 不出现"0 = 参数被关掉"的误读。
+	p.StatePenaltyScale = defCastPlayerStatePenaltyScale
 	if s == nil || s.DB == nil || rodGUID == "" {
 		return p
 	}
@@ -555,6 +600,7 @@ func (s *Server) castDistanceForRig(ctx context.Context, uid int64, rodGUID stri
 	p.BaitItemID = s.currentBait(ctx, rodGUID)
 	p.SkillCategory, p.SkillMastery, p.SkillNodeEffect = s.castSkillStats(ctx, uid, rigType, rodGUID)
 	p.PlayerPrimary, p.PlayerSecondary = s.castPlayerCondition(ctx, uid)
+	p.StatePenaltyScale = s.castPlayerStatePenaltyScale()
 	p.ReelType, p.SpoolSize, p.SpoolCapacityM = s.castReelSpoolStats(ctx, reel, ids.Line)
 	if p.SpoolCapacityM > 0 && p.LineLengthM > 0 {
 		// 线长是整盘标称长度；超过杯容量时按容量计，避免 600m 线盘被当成
@@ -573,7 +619,7 @@ func (s *Server) castDistanceForRig(ctx context.Context, uid int64, rodGUID stri
 		SpoolFill: p.SpoolFill, LineDiameterMM: p.LineDiameterMM, LineLengthM: p.LineLengthM,
 		LineStretch: p.LineStretch, LineMaterial: p.LineMaterial,
 		LineLinearDensityGPM: p.LineLinearDensityGPM, LineRunningWeightG: p.LineRunningWeightG,
-		PlayerPrimary: p.PlayerPrimary, PlayerSecondary: p.PlayerSecondary,
+		PlayerPrimary: p.PlayerPrimary, PlayerSecondary: p.PlayerSecondary, StatePenaltyScale: p.StatePenaltyScale,
 		SkillCategory: p.SkillCategory, SkillMastery: p.SkillMastery, SkillNodeEffect: p.SkillNodeEffect,
 	}
 	p.BaseM = castNominalDistanceM(rigType)
@@ -587,6 +633,7 @@ func (s *Server) castDistanceForRig(ctx context.Context, uid int64, rodGUID stri
 	p.WeightFactor = p.Factors["rod_test_payload"]
 	p.SkillFactor = p.Factors["fishing_skill"]
 	p.SpecialSkillFactor = p.Factors["special_skill"]
+	p.StateFactor = p.Factors["player_state"]
 
 	if p.LineLengthM > 0 {
 		// 线杯只能容纳 SpoolCapacityM；整盘线长可能只是商品标称长度。

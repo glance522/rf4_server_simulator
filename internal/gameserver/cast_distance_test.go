@@ -113,6 +113,8 @@ func TestCastOverTestPayloadShortensDistance(t *testing.T) {
 		d, factors := calculateCastDistance(CastDistanceContext{
 			RigType: 5, CastAction: 1, CastPower: 1,
 			RodTestMinG: 2, RodTestMaxG: 10, PayloadWeightG: payload,
+			PlayerPrimary: defaultPlayerConditionPrimary, PlayerSecondary: defaultPlayerConditionSecondary,
+			StatePenaltyScale: defCastPlayerStatePenaltyScale,
 		})
 		if math.IsNaN(d) || math.IsInf(d, 0) || d < castMinPoweredM {
 			t.Fatalf("载荷 %.0fg 计算异常: distance=%f factors=%+v", payload, d, factors)
@@ -127,7 +129,7 @@ func castCalibrationDistance(payloadG float64, spoolSize int64) float64 {
 		PayloadWeightG: payloadG, ReelEfficiency: 0.95, ReelType: 1,
 		SpoolSize: spoolSize, SpoolFill: 0.8, LineDiameterMM: 0.20,
 		LineStretch: 0.001, LineMaterial: 3,
-		PlayerPrimary: defaultPlayerConditionPrimary, PlayerSecondary: defaultPlayerConditionSecondary,
+		PlayerPrimary: defaultPlayerConditionPrimary, PlayerSecondary: defaultPlayerConditionSecondary, StatePenaltyScale: defCastPlayerStatePenaltyScale,
 		SkillMastery: 50,
 	})
 	return d
@@ -152,16 +154,88 @@ func TestCastCalibrationBands(t *testing.T) {
 	}
 }
 
-// 状态修正器边界：0 值是真实空状态，落到 0.70 下限；不再重置为默认值。
+// 状态修正器边界：0 值仍是真实空状态，沿用旧的 0.70 有效下限，
+// 但惩罚按缺省强度缩放；满状态与超满状态和旧口径完全一致。
 func TestCastPlayerStateFactorZeroStateUsesFloor(t *testing.T) {
-	if got := castPlayerStateFactor(0, 0); math.Abs(got-0.70) > 1e-9 {
-		t.Fatalf("空状态应落到 0.70 下限: %v", got)
+	if got := castPlayerStateFactor(0, 0); math.Abs(got-0.895) > 1e-9 {
+		t.Fatalf("空状态应为 1-0.35*(1-0.70)=0.895: %v", got)
 	}
 	if got := castPlayerStateFactor(defaultPlayerConditionPrimary, defaultPlayerConditionSecondary); math.Abs(got-1.0) > 1e-9 {
 		t.Fatalf("默认状态系数应为 1.0: %v", got)
 	}
 	if got := castPlayerStateFactor(1.0, 1.0); math.Abs(got-1.03) > 1e-9 {
 		t.Fatalf("超上限应钳到 1.03: %v", got)
+	}
+}
+
+// 惩罚强度是唯一旋钮：scale=1 逐点回到旧口径，scale=0 完全关闭状态影响，
+// 缺省 0.35 只把状态缺口折三成半。期望值来自手算，不用同一段代码回算。
+func TestCastPlayerStatePenaltyScale(t *testing.T) {
+	// 这样构造后加权 state 恰好等于 ratio；0.70 是有效状态下限，1.0 中性。
+	atState := func(ratio float64) (float64, float64) {
+		return defaultPlayerConditionPrimary * ratio, defaultPlayerConditionSecondary * ratio
+	}
+	for _, tc := range []struct {
+		ratio float64
+		old   float64
+		off   float64
+		light float64
+	}{
+		{0.0, 0.70, 1.0, 0.895},
+		{0.5, 0.70, 1.0, 0.895},
+		{0.8, 0.80, 1.0, 0.930},
+		{1.0, 1.00, 1.0, 1.000},
+		{1.2, 1.03, 1.03, 1.030},
+	} {
+		p, s := atState(tc.ratio)
+		if got := castPlayerStateFactorScaled(p, s, 1); math.Abs(got-tc.old) > 1e-9 {
+			t.Fatalf("state=%.2f scale=1 应回到旧口径 %.4f，实得 %.4f", tc.ratio, tc.old, got)
+		}
+		if got := castPlayerStateFactorScaled(p, s, 0); math.Abs(got-tc.off) > 1e-9 {
+			t.Fatalf("state=%.2f scale=0 应为 %.4f，实得 %.4f", tc.ratio, tc.off, got)
+		}
+		if got := castPlayerStateFactor(p, s); math.Abs(got-tc.light) > 1e-9 {
+			t.Fatalf("state=%.2f 缺省强度应为 %.4f，实得 %.4f", tc.ratio, tc.light, got)
+		}
+	}
+	// 越界钳制：>1 按旧口径、<0 按关闭处理，不让脏参数把距离放大。
+	if got := castPlayerStateFactorScaled(0, 0, 5); math.Abs(got-0.70) > 1e-9 {
+		t.Fatalf("scale>1 应钳到旧口径 0.70: %v", got)
+	}
+	if got := castPlayerStateFactorScaled(0, 0, -3); math.Abs(got-1.0) > 1e-9 {
+		t.Fatalf("scale<0 应钳到关闭 1.0: %v", got)
+	}
+}
+
+// context 里的强度必须真正进入修正器管线；满状态距离不因调参而漂移。
+func TestCastDistancePlayerStatePenaltyScale(t *testing.T) {
+	distance := func(ratio, scale float64) float64 {
+		d, factors := calculateCastDistance(CastDistanceContext{
+			RigType: 5, CastAction: 1, CastPower: 1,
+			RodLengthM: 3.0, RodTestMinG: 5, RodTestMaxG: 30, PayloadWeightG: 8,
+			ReelEfficiency: 0.95, ReelType: 1, SpoolSize: 5, SpoolFill: 0.8,
+			LineDiameterMM: 0.20, LineStretch: 0.001, LineMaterial: 3,
+			PlayerPrimary:     defaultPlayerConditionPrimary * ratio,
+			PlayerSecondary:   defaultPlayerConditionSecondary * ratio,
+			StatePenaltyScale: scale, SkillMastery: 50,
+		})
+		if factors["player_state"] <= 0 {
+			t.Fatalf("player_state 修正器未生效: %+v", factors)
+		}
+		return d
+	}
+	full := distance(1.0, 1)
+	if d := distance(1.0, defCastPlayerStatePenaltyScale); math.Abs(d-full) > 1e-9 {
+		t.Fatalf("满状态不应受惩罚强度影响: %.4f vs %.4f", d, full)
+	}
+	lowLight := distance(0.8, defCastPlayerStatePenaltyScale)
+	lowOld := distance(0.8, 1)
+	// 1/0.93-1 = 7.527%；旧口径 1/0.80-1 = 25%。
+	if spread := full/lowLight - 1; math.Abs(spread-0.07527) > 0.001 {
+		t.Fatalf("0.8 状态落差应收窄到约 7.53%%，实得 %.4f", spread)
+	}
+	if spread := full/lowOld - 1; math.Abs(spread-0.25) > 0.001 {
+		t.Fatalf("scale=1 应保持旧口径 25%% 落差，实得 %.4f", spread)
 	}
 }
 
@@ -172,7 +246,7 @@ func TestCastHighEndGearCanReachFortyFiveMeters(t *testing.T) {
 		PayloadWeightG: 8, ReelEfficiency: 0.95, ReelType: 1,
 		SpoolSize: 1, SpoolFill: 1.0, LineDiameterMM: 0.10,
 		LineStretch: 0.001, LineMaterial: 3,
-		PlayerPrimary: defaultPlayerConditionPrimary, PlayerSecondary: defaultPlayerConditionSecondary,
+		PlayerPrimary: defaultPlayerConditionPrimary, PlayerSecondary: defaultPlayerConditionSecondary, StatePenaltyScale: defCastPlayerStatePenaltyScale,
 		SkillMastery: 100, SkillNodeEffect: 10,
 	})
 	if d < 44.9 {
