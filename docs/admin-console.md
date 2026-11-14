@@ -69,6 +69,7 @@ POST /api/players/skills/update
 POST /api/players/kick
 POST /api/players/ban
 GET  /api/catalog/items
+GET  /api/catalog/groups
 GET  /api/stores
 GET  /api/stores/items
 POST /api/stores/items/update
@@ -81,3 +82,5 @@ GET  /api/fish/pool
 POST /api/mail/send
 GET  /api/audit
 ```
+
+阶段奖励选择器先调用 `/api/catalog/groups?complete_only=1` 读取商品分类，再调用 `/api/catalog/items?complete_only=1&group=<key>` 读取当前分类。商品来自完整静态目录，因此活动专属商品即使没有 `shop_item` 货架记录也可以选择；竿坯、手柄、线轴和渔轮内部零件会被排除。普通目录调用不受这些筛选参数影响。

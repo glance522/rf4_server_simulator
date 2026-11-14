@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,128 @@ type catalogItem struct {
 	Category  int64  `json:"category"`
 	Kind      string `json:"kind"`
 	Brand     string `json:"brand"`
+	Group     string `json:"group"`
+	GroupKey  string `json:"group_key"`
+}
+
+type catalogGroup struct {
+	Key   string `json:"key"`
+	Name  string `json:"name"`
+	Count int64  `json:"count"`
+	Order int    `json:"-"`
+}
+
+const catalogKindExpr = `COALESCE(NULLIF(c.kind,''),NULLIF(d.kind,''),'')`
+
+func catalogGroupFor(kind string, category int64) (key, name string, order int) {
+	switch {
+	case category == 6 || kind == "reel":
+		return "reel", "完整渔轮", 10
+	case category == 27 || kind == "bait" || kind == "bait_boil":
+		return "bait", "饵料", 20
+	case category == 26:
+		return "food", "食物与饮料", 30
+	case kind == "rod" || kind == "rod_casting" || kind == "rod_match" ||
+		kind == "rod_spinning" || kind == "rod_telescopic" || kind == "feeder":
+		return "rod", "鱼竿", 40
+	case strings.HasPrefix(kind, "lure_"):
+		return "lure", "拟饵", 50
+	case kind == "float":
+		return "float", "浮漂", 60
+	case kind == "container":
+		return "container", "套装与容器", 70
+	default:
+		return "other", "其他商品", 100
+	}
+}
+
+func completeCatalogCondition() string {
+	return catalogKindExpr + ` <> 'rod_blank'
+		AND COALESCE(d.category,0) NOT IN (4,5,7,8,9,10,34,36,48,49,50,51,52,53,54,57)`
+}
+
+func catalogGroupCondition(key string) (string, bool) {
+	switch key {
+	case "reel":
+		return `(COALESCE(d.category,0)=6 OR ` + catalogKindExpr + `='reel')`, true
+	case "bait":
+		return `(COALESCE(d.category,0)=27 OR ` + catalogKindExpr + ` IN ('bait','bait_boil'))`, true
+	case "food":
+		return `COALESCE(d.category,0)=26`, true
+	case "rod":
+		return catalogKindExpr + ` IN ('rod','rod_casting','rod_match','rod_spinning','rod_telescopic','feeder')`, true
+	case "lure":
+		return catalogKindExpr + ` LIKE 'lure_%'`, true
+	case "float":
+		return catalogKindExpr + `='float'`, true
+	case "container":
+		return catalogKindExpr + `='container'`, true
+	case "other":
+		return `NOT (` + strings.Join([]string{
+			`COALESCE(d.category,0)=6`,
+			`COALESCE(d.category,0)=27`,
+			`COALESCE(d.category,0)=26`,
+			catalogKindExpr + ` IN ('reel','rod','rod_casting','rod_match','rod_spinning','rod_telescopic','feeder','float','container')`,
+			catalogKindExpr + ` LIKE 'lure_%'`,
+		}, " OR ") + `)`, true
+	default:
+		return "", false
+	}
+}
+
+func catalogJoins(r *http.Request) string {
+	if r.URL.Query().Get("shop_only") == "1" {
+		return ` JOIN shop_item s ON s.item_id=d.item_id`
+	}
+	return ""
+}
+
+func (s *Server) handleCatalogGroups(w http.ResponseWriter, r *http.Request) {
+	conditions := []string{completeCatalogCondition()}
+	args := make([]any, 0)
+	if group := strings.TrimSpace(r.URL.Query().Get("group")); group != "" {
+		where, ok := catalogGroupCondition(group)
+		if !ok {
+			httpError(w, 400, "未知商品分类")
+			return
+		}
+		conditions = append(conditions, where)
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	rows, err := s.db.SQL.QueryContext(ctx, `
+		SELECT COALESCE(d.category,0), `+catalogKindExpr+`, COUNT(DISTINCT d.item_id)
+		FROM item_def d
+		LEFT JOIN item_catalog c ON c.item_id=d.item_id`+catalogJoins(r)+`
+		WHERE `+strings.Join(conditions, " AND ")+`
+		GROUP BY d.category,c.kind,d.kind`, args...)
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	defer rows.Close()
+	groups := make(map[string]*catalogGroup)
+	for rows.Next() {
+		var category, count int64
+		var kind string
+		if err := rows.Scan(&category, &kind, &count); err != nil {
+			httpError(w, 500, err.Error())
+			return
+		}
+		key, name, order := catalogGroupFor(kind, category)
+		g := groups[key]
+		if g == nil {
+			g = &catalogGroup{Key: key, Name: name, Order: order}
+			groups[key] = g
+		}
+		g.Count += count
+	}
+	out := make([]catalogGroup, 0, len(groups))
+	for _, group := range groups {
+		out = append(out, *group)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Order < out[j].Order })
+	writeJSON(w, out)
 }
 
 func (s *Server) handleCatalogItems(w http.ResponseWriter, r *http.Request) {
@@ -28,17 +151,31 @@ func (s *Server) handleCatalogItems(w http.ResponseWriter, r *http.Request) {
 		limit = 80
 	}
 	like := "%" + q + "%"
+	conditions := []string{"(d.item_id LIKE ? OR COALESCE(c.name_zh,c.name,'') LIKE ?)"}
+	args := []any{like, like}
+	if r.URL.Query().Get("complete_only") == "1" {
+		conditions = append(conditions, completeCatalogCondition())
+	}
+	if group := strings.TrimSpace(r.URL.Query().Get("group")); group != "" {
+		where, ok := catalogGroupCondition(group)
+		if !ok {
+			httpError(w, 400, "未知商品分类")
+			return
+		}
+		conditions = append(conditions, where)
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	rows, err := s.db.SQL.QueryContext(ctx, `
+	query := `
 		SELECT d.item_id, d.numeric_id, COALESCE(c.name_zh,c.name,''), COALESCE(d.category,0),
-		       COALESCE(d.kind,''), COALESCE(d.brand,'')
+		       COALESCE(d.kind,''), COALESCE(d.brand,''), COALESCE(c.kind,'')
 		FROM item_def d
-		LEFT JOIN item_catalog c ON c.item_id=d.item_id
-		WHERE d.item_id LIKE ? OR COALESCE(c.name_zh,c.name,'') LIKE ?
+		LEFT JOIN item_catalog c ON c.item_id=d.item_id` + catalogJoins(r) + `
+		WHERE ` + strings.Join(conditions, " AND ") + `
 		GROUP BY d.item_id,d.numeric_id
-		ORDER BY CASE WHEN d.item_id=? THEN 0 ELSE 1 END, d.item_id LIMIT ?`,
-		like, like, q, limit)
+		ORDER BY CASE WHEN d.item_id=? THEN 0 ELSE 1 END, d.item_id LIMIT ?`
+	args = append(args, q, limit)
+	rows, err := s.db.SQL.QueryContext(ctx, query, args...)
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return
@@ -47,10 +184,15 @@ func (s *Server) handleCatalogItems(w http.ResponseWriter, r *http.Request) {
 	out := make([]catalogItem, 0)
 	for rows.Next() {
 		var v catalogItem
-		if err := rows.Scan(&v.ItemID, &v.NumericID, &v.Name, &v.Category, &v.Kind, &v.Brand); err != nil {
+		var catalogKind string
+		if err := rows.Scan(&v.ItemID, &v.NumericID, &v.Name, &v.Category, &v.Kind, &v.Brand, &catalogKind); err != nil {
 			httpError(w, 500, err.Error())
 			return
 		}
+		if catalogKind == "" {
+			catalogKind = v.Kind
+		}
+		v.GroupKey, v.Group, _ = catalogGroupFor(catalogKind, v.Category)
 		out = append(out, v)
 	}
 	writeJSON(w, out)

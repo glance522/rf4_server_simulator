@@ -93,6 +93,8 @@ body.notice-on #view-fish.on{height:max(600px,calc(100vh - 204px))}
 
 /* 参数行式布局：左标签+说明，右数值+操作，双列排布 */
 .params-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 14px;padding-bottom:12px;border-bottom:1px solid var(--line)}.params-tab{padding:8px 16px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:8px;cursor:pointer;font:inherit;font-size:13px;line-height:1.3;transition:background .12s,color .12s,border-color .12s}.params-tab:hover{color:var(--text);border-color:var(--accent)}.params-tab.on{background:rgba(66,184,255,.14);border-color:var(--accent);color:var(--accent);font-weight:600}.params-tab small{display:block;font-weight:400;font-size:11px;opacity:.75;margin-top:1px}.tunable-group+.tunable-group{margin-top:18px}.tunable-group h3{font-size:14px;margin:0 0 2px}.tunable-fields{display:grid;grid-template-columns:1fr 1fr;gap:0 34px}.tunable-field{display:flex;gap:14px;align-items:center;justify-content:space-between;min-width:0;padding:9px 0;border-bottom:1px solid var(--line)}.tunable-field.tunable-wide{grid-column:1/-1}.tunable-field>div:first-child{flex:1;min-width:0}.tunable-field label{display:block;color:var(--text);margin:0;font-weight:600;overflow-wrap:anywhere}.tunable-field .tunable-hint{margin-top:2px}.tunable-field>div:last-child{display:flex;gap:8px;align-items:center;flex:none}.tunable-field.tunable-wide>div:last-child{flex-wrap:wrap;justify-content:flex-end}.tunable-field input{width:132px;min-width:0;flex:none;padding:7px 9px}.tunable-field input[type=number]{-moz-appearance:textfield}.tunable-field input[type=number]::-webkit-outer-spin-button,.tunable-field input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}.tunable-field button{flex:none}.section-head{flex-wrap:wrap}
+.event-gift-card{padding:14px 16px;background:linear-gradient(150deg,#132a3b,#0d1b29);border-color:#2a526c}.event-gift-intro{display:flex;gap:12px;align-items:flex-start;margin:8px 0 14px;padding:11px 12px;border:1px solid #28516a;border-radius:11px;background:#0b1b2a;color:#b7cada;font-size:12px}.event-gift-intro .mark{flex:none;width:23px;height:23px;border-radius:8px;background:#1d688c;color:#c9f1ff;display:grid;place-items:center;font-weight:800}.event-gift-selector{display:grid;grid-template-columns:minmax(0,1fr) 180px auto;gap:10px;align-items:end;padding:12px;border:1px solid #31536b;border-radius:12px;background:#0c1927}.event-gift-selector label{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}.event-gift-selector select{width:100%}.event-gift-selector .state{font-size:12px;color:var(--muted);padding-bottom:10px;white-space:nowrap}.event-gift-plans{display:grid;gap:10px;margin-top:10px}.event-gift-plan{padding:12px;border:1px solid var(--line);border-radius:12px;background:#0c1927}.event-gift-plan-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}.event-gift-plan-head .event-gift-index{color:var(--muted);font-size:12px;margin-right:auto}.event-gift-items{display:grid;gap:8px}.event-gift-item{display:grid;grid-template-columns:minmax(0,1fr) 100px auto;gap:8px;align-items:center}.event-gift-item .picked{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:10px;background:#09131f}.event-gift-item .picked b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.event-gift-item .picked span{color:var(--muted);font:11px Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.event-gift-item .qty{width:100px}.event-gift-item button{white-space:nowrap}.event-gift-preview{margin-top:12px;padding:10px 12px;border:1px dashed #31536b;border-radius:10px;background:#091521}.event-gift-preview summary{cursor:pointer;color:#b9d4e8;font-size:12px}.event-gift-preview pre{margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;color:#8fb1c8;font:11px/1.5 Consolas,monospace}.event-gift-empty{padding:24px 12px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);text-align:center}.event-gift-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}.event-gift-actions .hint{color:var(--muted);font-size:11px;margin-left:auto}.event-gift-card .tunable-hint{max-width:900px}.event-gift-picker-groups{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.event-gift-picker-groups button{border:1px solid var(--line);border-radius:8px;background:#0c1927;color:var(--muted);padding:6px 9px;font-size:12px}.event-gift-picker-groups button.on{border-color:var(--accent);background:#12324b;color:#d9f1ff}.event-gift-picker-results{max-height:360px;overflow:auto}.event-gift-picker-results .result button{width:100%;border:0;background:transparent;color:inherit;text-align:left;padding:0;display:flex;justify-content:space-between;gap:12px;align-items:center}
+@media(max-width:720px){.event-gift-selector{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.event-gift-selector .state{grid-column:1/-1;padding-bottom:0}.event-gift-item{grid-template-columns:minmax(0,1fr) 84px auto}.event-gift-item button{font-size:11px;padding:6px 8px}.event-gift-actions .hint{width:100%;margin-left:0}}
 .params-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 14px;padding-bottom:12px;border-bottom:1px solid var(--line)}.params-tab{padding:8px 16px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:8px;cursor:pointer;font:inherit;font-size:13px;line-height:1.3;transition:background .12s,color .12s,border-color .12s}.params-tab:hover{color:var(--text);border-color:var(--accent)}.params-tab.on{background:rgba(66,184,255,.14);border-color:var(--accent);color:var(--accent);font-weight:600}.params-tab small{display:block;font-weight:400;font-size:11px;opacity:.75;margin-top:1px}.tunable-group+.tunable-group{margin-top:18px}.tunable-group h3{font-size:14px;margin:0 0 2px}.tunable-fields{display:grid;grid-template-columns:1fr 1fr;gap:0 34px}.tunable-field{display:flex;gap:14px;align-items:center;justify-content:space-between;min-width:0;padding:9px 0;border-bottom:1px solid var(--line)}.tunable-field.tunable-wide{grid-column:1/-1}.tunable-field>div:first-child{flex:1;min-width:0}.tunable-field label{display:block;color:var(--text);margin:0;font-weight:600;overflow-wrap:anywhere}.tunable-field .tunable-hint{margin-top:2px}.tunable-field>div:last-child{display:flex;gap:8px;align-items:center;flex:none}.tunable-field.tunable-wide>div:last-child{flex-wrap:wrap;justify-content:flex-end}.tunable-field input{width:132px;min-width:0;flex:none;padding:7px 9px}.tunable-field input[type=number]{-moz-appearance:textfield}.tunable-field input[type=number]::-webkit-outer-spin-button,.tunable-field input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}.tunable-field button{flex:none}.section-head{flex-wrap:wrap}
 .grade-ratio-card{grid-column:1/-1;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:#0b1724}.grade-ratio-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.grade-ratio-head b{font-size:13px}.grade-ratio-summary{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.grade-ratio-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:#08111b;margin:10px 0 14px}.grade-ratio-bar i{display:block;min-width:0;transition:width .16s}.grade-ratio-row{display:grid;grid-template-columns:78px minmax(120px,1fr) 58px;align-items:center;gap:10px;margin:8px 0}.grade-ratio-row input[type=range]{width:100%;padding:0;border:0;box-shadow:none;accent-color:var(--accent)}.grade-ratio-row .share{font-family:Consolas,monospace;font-size:12px;text-align:right;color:var(--text)}.grade-ratio-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}@media(max-width:720px){.grade-ratio-row{grid-template-columns:64px minmax(90px,1fr) 52px}.grade-ratio-head{display:block}.grade-ratio-summary{margin-top:6px}}
 #storeSummary{max-width:100%;overflow-wrap:anywhere}
@@ -172,7 +174,7 @@ body.notice-on #view-fish.on{height:max(600px,calc(100vh - 204px))}
     <section class="view" id="view-hooks"><div class="card"><div class="section-head"><div><h2>真实钩子型号档案</h2><small>物理数据来自 item_def；倍率和兜底值只影响咬口，不改钩子拉力</small></div></div><div class="toolbar"><input class="grow" id="hookSearch" placeholder="搜索 item_id / 厂牌，如 triple_20686、simmons" onkeydown="if(event.key==='Enter')loadHookProfiles()"><select id="hookSize"><option value="">全部尺寸</option></select><select id="hookFamily"><option value="">全部钩型族</option><option value="classic">Classic</option><option value="carp">Carp</option><option value="treble">Treble</option><option value="jighead">Jighead</option><option value="offset">Offset</option><option value="marine">Marine</option><option value="other">Other</option></select><button class="btn" onclick="loadHookProfiles()">查询</button></div><p class="muted" style="margin:10px 0">默认倍率 1.0、兜底值 0；修改后写入审计，最多 30 秒由主服热加载。入口容量按真实钩体长度计算。</p><div class="table-wrap" id="hookProfilesTable"><div class="empty">读取中…</div></div></div></section>
     <section class="view" id="view-bait"><div class="card"><div class="section-head"><div><h2>鱼饵偏好</h2><small id="baitSummary" class="muted">正在读取…</small></div></div><div class="toolbar"><input class="grow" id="baitSearch" placeholder="搜索鱼种 key / 中文名，如 pike、狗鱼" onkeydown="if(event.key==='Enter')loadBaitPrefs()"><input id="baitLoc" placeholder="水域（可选）" onkeydown="if(event.key==='Enter')loadBaitPrefs()"><select id="baitFilter" onchange="loadBaitPrefs()"><option value="">全部鱼种</option><option value="tier3">有 tier3 饵</option><option value="norule">规则表无条目</option><option value="rule">规则表有条目</option></select><button class="btn" onclick="loadBaitPrefs()">查询</button></div><p class="muted" style="margin:10px 0">规则来自编译进服务端的 fishing_bait_rules.txt（严格模式生效）；tier 来自 companion_bait_fish 实证（tier3 权重×8 / tier2 ×4 / 在列 ×2）；「证据」是实证条数。点击行展开全部饵；点右侧「编辑」可改吃/不吃/底钓只吃并配置多组轮换。</p><div class="table-wrap" id="baitTable"></div></div></section>
     <section class="view" id="view-mail"><div class="mail-box"><div class="card"><div class="section-head"><h2>撰写邮件</h2><small>队列约 2 秒内由主服投递</small></div><div class="form-grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>收件人 UID</label><input id="mailUid" type="number"></div><div class="field"><label>快捷载入玩家</label><input id="mailPlayerSearch" placeholder="搜索并回车" onkeydown="if(event.key==='Enter')findMailPlayer()"></div></div><div class="field" style="margin-top:12px"><label>邮件正文</label><textarea id="mailText" placeholder="写给玩家的消息…"></textarea></div><div class="section-head" style="margin-top:14px"><h2>附件</h2><button class="btn alt sm" onclick="addAttachment()">+ 添加附件</button></div><div id="attachments"></div><div class="actions"><button class="btn good" onclick="sendMail()">发送邮件</button><button class="btn alt" onclick="previewMail()">预览</button></div></div><div class="card"><div class="section-head"><h2>发送预览</h2></div><div id="mailPreview" class="empty">填写邮件后点击预览</div><div class="section-head" style="margin-top:20px"><h2>常用模板</h2></div><div class="actions"><button class="btn alt sm" onclick="mailTemplate('补偿')">补偿邮件</button><button class="btn alt sm" onclick="mailTemplate('活动奖励')">活动奖励</button><button class="btn alt sm" onclick="mailTemplate('测试')">测试邮件</button></div></div></div></section>
-    <section class="view" id="view-params"><div class="card"><div class="section-head"><h2>游戏参数</h2><small>热更新：保存后最多 30 秒生效；随时可调回默认值，不损坏玩家存档</small></div><div class="params-tabs" id="paramsTabs"></div><div id="paramsBody"></div></div></section>
+    <section class="view" id="view-params"><div class="card"><div class="section-head"><h2>游戏参数</h2><small>保存后按参数类型生效；部分服务端参数约 30 秒生效，活动奖励必须重启游戏客户端并重新登录</small></div><div class="params-tabs" id="paramsTabs"></div><div id="paramsBody"></div></div></section>
     <section class="view" id="view-release"><div class="card release-card"><div class="section-head"><div><h2>发布说明</h2><p class="muted">读取发布包内的 发布说明.md</p></div><button class="btn alt sm" onclick="loadReleaseNotes()">刷新</button></div><div class="markdown-body release-markdown" id="releaseBody"><div class="empty">读取中…</div></div></div></section>
     <section class="view" id="view-about"><div class="card about-card"><div class="about-head"><div><h2>关于本项目</h2><p>内容来自 README.md · 优先读取本地文件</p></div><a class="btn alt sm" href="https://github.com/glance522/rf4_server_simulator" target="_blank" rel="noreferrer">在 GitHub 查看</a></div><div class="markdown-body" id="aboutReadme"><div class="empty">读取中…</div></div></div></section>
     <section class="view" id="view-audit"><div class="card"><div class="section-head"><h2>最近操作</h2><small>最新 200 条</small></div><div class="table-wrap" id="auditTable"></div></div></section>
@@ -305,8 +307,17 @@ async function loadDashboardSide(){
 }
 // 参数三件套：中文标签 + 输入框 + 可见的一行说明（第 4 项为默认值，第 5 项为说明）
 const EVENT_BRANCHES_DEFAULT='9,10,11,12,13,14,15,16,17,18,19,20';
+const EVENT_STAGE_GIFT_KEY='event_stage_gifts';
+const EVENT_STAGE_MAX=10;
+const EVENT_STAGE_SELECTION_KEY='rf4_event_stage_gift_selection';
+const EVENT_BRANCH_LABELS={9:'MMXXIV',10:'MMXXIV EXTRA',11:'VII',12:'VII EXTRA',13:'MMXXV',14:'2025 EXTRA',15:'VIII',16:'VIII EXTRA',17:'MMXXVI',18:'2026 特别奖',19:'IX',20:'IX EXTRA'};
 // PARAMS_PAGE 记住「游戏参数」最后停留的子页（gameplay/reward/event）。
 let PARAMS_PAGE='';
+let EVENT_GIFT_DRAFT=[];
+let EVENT_GIFT_SELECTED={branch:13,stage:1};
+let EVENT_GIFT_SELECTED_READY=false;
+const EVENT_GIFT_NAME_CACHE=new Map();
+let EVENT_GIFT_NAME_HYDRATION=0;
 const TUNABLE_DEFS=[
   ['bite_probability','上鱼概率',1,'0~1。1=每竿必出；0.5=一半概率出鱼'],
   ['bite_delay_fixed','固定咬钩秒',0,'填 0=按延迟倍率随机；填了以后咬钩时间固定'],
@@ -358,6 +369,197 @@ const TUNABLE_DEFS=[
   ['event_branches','活动分支',EVENT_BRANCHES_DEFAULT,'逗号分隔的分支 ID（9~20）；留空表示不下发任何活动分支'],
   ['event_anniversary_end_unix','活动结束时间',1825632000,'UTC 日期时间，新年与周年面板共用的倒计时终点；默认 2027-11-08 00:00 UTC'],
 ];
+function eventStageGiftRows(raw){
+  if(!raw)return [];
+  let parsed;
+  try{parsed=JSON.parse(raw)}catch{return []}
+  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return [];
+  const rows=[];
+  for(const [branch,stages] of Object.entries(parsed)){
+    if(!stages||typeof stages!=='object'||Array.isArray(stages))continue;
+    for(const [stage,gifts] of Object.entries(stages)){
+      if(!Array.isArray(gifts))continue;
+      rows.push({branch:Number(branch)||9,stage:Number(stage)||1,gifts:gifts.map(g=>({item:String(g?.item??''),name:String(g?.name??''),qty:Math.max(1,Math.min(99,Number(g?.qty)||1))}))});
+    }
+  }
+  rows.sort((a,b)=>a.branch-b.branch||a.stage-b.stage);
+  return rows;
+}
+function eventGiftBranchOptions(selected){
+  return Object.entries(EVENT_BRANCH_LABELS).map(([id,name])=>`<option value="${id}"${Number(selected)===Number(id)?' selected':''}>${id} · ${name}</option>`).join('');
+}
+function eventGiftStageOptions(selected){
+  return Array.from({length:EVENT_STAGE_MAX},(_,i)=>i+1).map(n=>`<option value="${n}"${Number(selected)===n?' selected':''}>阶段 ${n}</option>`).join('');
+}
+function eventStageGiftSavedSelection(){
+  try{
+    const v=JSON.parse(localStorage.getItem(EVENT_STAGE_SELECTION_KEY)||'null');
+    if(v&&EVENT_BRANCH_LABELS[v.branch]&&Number(v.stage)>=1&&Number(v.stage)<=EVENT_STAGE_MAX)return {branch:Number(v.branch),stage:Number(v.stage)};
+  }catch(e){}
+  return null;
+}
+function rememberEventStageGiftSelection(){
+  try{localStorage.setItem(EVENT_STAGE_SELECTION_KEY,JSON.stringify(EVENT_GIFT_SELECTED))}catch(e){}
+}
+function eventStageGiftFind(branch,stage){return EVENT_GIFT_DRAFT.find(x=>Number(x.branch)===Number(branch)&&Number(x.stage)===Number(stage))||null}
+function eventStageGiftCurrent(){return eventStageGiftFind(EVENT_GIFT_SELECTED.branch,EVENT_GIFT_SELECTED.stage)}
+function eventGiftName(gift){return gift.name||gift.item||'未选择物品'}
+function eventGiftCatalogKind(item){
+  return item?.group||item?.kind||'商品';
+}
+async function hydrateEventStageGiftNames(){
+  const token=++EVENT_GIFT_NAME_HYDRATION;
+  const ids=[...new Set(EVENT_GIFT_DRAFT.flatMap(plan=>(plan.gifts||[]).map(g=>String(g.item||'').trim()).filter(Boolean)))];
+  const missing=ids.filter(id=>!EVENT_GIFT_NAME_CACHE.has(id));
+  await Promise.all(missing.map(async id=>{
+    try{
+      const list=await api('/api/catalog/items?q='+encodeURIComponent(id)+'&limit=5');
+      const item=list.find(x=>String(x.item_id||'')===id);
+      EVENT_GIFT_NAME_CACHE.set(id,String(item?.name||id));
+    }catch(e){
+      EVENT_GIFT_NAME_CACHE.set(id,id);
+    }
+  }));
+  if(token!==EVENT_GIFT_NAME_HYDRATION)return;
+  let changed=false;
+  for(const plan of EVENT_GIFT_DRAFT){
+    for(const gift of plan.gifts||[]){
+      if(gift.item&&!gift.name){
+        gift.name=EVENT_GIFT_NAME_CACHE.get(gift.item)||gift.item;
+        changed=true;
+      }
+    }
+  }
+  if(changed)renderEventStageGifts();
+}
+function eventGiftPlanHTML(plan){
+  const gifts=plan?.gifts||[];
+  return `<article class="event-gift-plan"><div class="event-gift-plan-head"><span class="event-gift-index">当前阶段奖励</span><span class="pill">${gifts.length?`已选 ${gifts.length} 种物品`:'暂无奖励'}</span></div>
+    ${gifts.length?`<div class="event-gift-items">${gifts.map((gift,j)=>`<div class="event-gift-item" data-item="${esc(gift.item)}" data-name="${esc(gift.name)}"><button class="picked" type="button" onclick="openEventStageGiftPicker(${j})"><b>${esc(eventGiftName(gift))}</b><span>${esc(gift.item||'点击选择物品')}</span></button><input class="qty" type="number" aria-label="物品数量" min="1" max="99" step="1" value="${gift.qty}" oninput="eventStageGiftRead()"><button class="btn alt sm" onclick="removeEventStageGiftItem(${j})">移除物品</button></div>`).join('')}</div>`:'<div class="event-gift-empty">这个阶段没有奖励配置。点击“添加奖励物品”，从商店商品中选择。</div>'}
+    <div class="actions" style="margin-top:9px"><button class="btn alt sm" onclick="addEventStageGiftItem()">＋ 添加奖励物品</button><span class="muted" style="font-size:11px">从当前分类加载完整商品；活动专属商品也可选，预览按物品 ID 去重。</span></div></article>`;
+}
+function eventStageGiftJSON(){
+  const out={};
+  for(const row of EVENT_GIFT_DRAFT){
+    if(!row.gifts?.length)continue;
+    const branch=String(Number(row.branch)||9),stage=String(Number(row.stage)||1);
+    out[branch]??={};
+    out[branch][stage]=(row.gifts||[]).map(g=>({item:String(g.item||'').trim(),qty:Math.max(1,Math.min(99,Math.round(Number(g.qty)||1)))}));
+  }
+  return JSON.stringify(out,null,2);
+}
+function eventStageGiftRead(){
+  const plan=eventStageGiftCurrent(), el=$('#eventStageGiftPlans');
+  if(plan&&el){plan.gifts=[...el.querySelectorAll('.event-gift-item')].map(item=>({item:item.dataset.item||'',name:item.dataset.name||'',qty:Math.max(1,Math.min(99,Math.round(Number(item.querySelector('.qty')?.value)||1)))}))}
+  const preview=$('#eventStageGiftJson');
+  if(preview)preview.textContent=EVENT_GIFT_DRAFT.length?eventStageGiftJSON():'（空配置：不发放阶段奖励）';
+}
+function renderEventStageGifts(){
+  const plans=$('#eventStageGiftPlans');
+  if(!plans)return;
+  const plan=eventStageGiftCurrent();
+  plans.innerHTML=eventGiftPlanHTML(plan);
+  eventStageGiftRead();
+  const count=$('#eventStageGiftCount');
+  if(count)count.textContent=`已配置 ${EVENT_GIFT_DRAFT.filter(x=>x.gifts?.length).length} 个阶段`;
+}
+function eventStageGiftSwitch(){
+  eventStageGiftRead();
+  EVENT_GIFT_SELECTED={branch:Number($('#eventGiftBranch')?.value)||13,stage:Number($('#eventGiftStage')?.value)||1};
+  rememberEventStageGiftSelection();
+  renderEventStageGifts();
+}
+function addEventStageGiftItem(){
+  eventStageGiftRead();
+  let plan=eventStageGiftCurrent();
+  if(!plan){plan={branch:EVENT_GIFT_SELECTED.branch,stage:EVENT_GIFT_SELECTED.stage,gifts:[]};EVENT_GIFT_DRAFT.push(plan)}
+  plan.gifts.push({item:'',name:'',qty:1});
+  renderEventStageGifts();
+  openEventStageGiftPicker(plan.gifts.length-1);
+}
+function removeEventStageGiftItem(i){
+  eventStageGiftRead();
+  const plan=eventStageGiftCurrent();if(!plan)return;
+  plan.gifts.splice(i,1);
+  if(!plan.gifts.length)EVENT_GIFT_DRAFT=EVENT_GIFT_DRAFT.filter(x=>x!==plan);
+  renderEventStageGifts();
+}
+let EVENT_GIFT_PICK_INDEX=-1,EVENT_GIFT_PICK_GROUP='';
+function openEventStageGiftPicker(i){
+  eventStageGiftRead();EVENT_GIFT_PICK_INDEX=i;EVENT_GIFT_PICK_GROUP='';
+  showModal('选择奖励物品','按分类分层加载完整商品；活动专属商品也会显示，即使没有普通商店货架记录。线轴、竿坯和渔轮内部零件会被排除。',`<div id="eventGiftGroups" class="event-gift-picker-groups"><div class="empty">读取商品分类…</div></div><input id="eventGiftSearch" placeholder="搜索当前分类中的商品名称或 ID" oninput="searchEventStageGiftItems()"><div class="results event-gift-picker-results" id="eventGiftResults"><div class="empty">请选择商品分类</div></div>`,'event-gift');
+  loadEventStageGiftGroups();
+}
+async function loadEventStageGiftGroups(){
+  try{
+    const groups=await api('/api/catalog/groups?complete_only=1');
+    const el=$('#eventGiftGroups');if(!el)return;
+    if(!groups.length){el.innerHTML='<div class="empty">没有可选商品分类</div>';return;}
+    if(!groups.some(x=>x.key===EVENT_GIFT_PICK_GROUP))EVENT_GIFT_PICK_GROUP=groups[0].key;
+    el.innerHTML=groups.map(x=>`<button type="button" class="${x.key===EVENT_GIFT_PICK_GROUP?'on':''}" data-group="${esc(x.key)}">${esc(x.name)} <small>(${x.count})</small></button>`).join('');
+    el.querySelectorAll('button[data-group]').forEach(btn=>btn.onclick=()=>selectEventStageGiftGroup(btn.dataset.group));
+    searchEventStageGiftItems();
+  }catch(e){if($('#eventGiftGroups'))$('#eventGiftGroups').innerHTML='<div class="empty">读取商品分类失败</div>';if($('#eventGiftResults'))$('#eventGiftResults').innerHTML='<div class="empty">读取商品目录失败</div>';}
+}
+function selectEventStageGiftGroup(group){
+  EVENT_GIFT_PICK_GROUP=group;
+  $('#eventGiftGroups')?.querySelectorAll('button[data-group]').forEach(btn=>btn.classList.toggle('on',btn.dataset.group===group));
+  searchEventStageGiftItems();
+}
+async function searchEventStageGiftItems(){
+  const q=$('#eventGiftSearch')?.value.trim()||'';
+  if(!EVENT_GIFT_PICK_GROUP)return;
+  try{
+    const list=await api('/api/catalog/items?q='+encodeURIComponent(q)+'&limit=80&complete_only=1&group='+encodeURIComponent(EVENT_GIFT_PICK_GROUP));
+    const el=$('#eventGiftResults');if(!el)return;
+    el.innerHTML=list.map((x,i)=>`<div class="result"><button type="button" data-index="${i}"><span><b>${esc(x.name||x.item_id)}</b><br><small class="muted mono">${esc(x.item_id)} · ${esc(eventGiftCatalogKind(x))}</small></span><span class="tag">选择</span></button></div>`).join('')||'<div class="empty">当前分类没有匹配的完整商品</div>';
+    el.querySelectorAll('button[data-index]').forEach(btn=>btn.onclick=()=>pickEventStageGiftItem(list[Number(btn.dataset.index)]));
+  }catch(e){if($('#eventGiftResults'))$('#eventGiftResults').innerHTML='<div class="empty">读取商品目录失败</div>';}
+}
+function pickEventStageGiftItem(item){
+  const plan=eventStageGiftCurrent();if(!plan||EVENT_GIFT_PICK_INDEX<0)return;
+  const name=item.name||item.item_id;
+  EVENT_GIFT_NAME_CACHE.set(item.item_id,name);
+  plan.gifts[EVENT_GIFT_PICK_INDEX]={item:item.item_id,name,qty:plan.gifts[EVENT_GIFT_PICK_INDEX]?.qty||1};
+  closeModal(true);renderEventStageGifts();
+}
+function eventStageGiftsCard(t){
+  const previous=EVENT_GIFT_SELECTED_READY?EVENT_GIFT_SELECTED:eventStageGiftSavedSelection();
+  EVENT_GIFT_DRAFT=eventStageGiftRows(String(t[EVENT_STAGE_GIFT_KEY]??''));
+  EVENT_GIFT_SELECTED={branch:Number(previous?.branch)||Number(EVENT_GIFT_DRAFT[0]?.branch)||13,stage:Number(previous?.stage)||Number(EVENT_GIFT_DRAFT[0]?.stage)||1};
+  EVENT_GIFT_SELECTED_READY=true;
+  rememberEventStageGiftSelection();
+  return `<section class="tunable-group event-gift-card" data-page="event"><div class="section-head"><div><h3>活动阶段奖励</h3><div class="tunable-hint">按活动分支和阶段维护奖励物品；保存后写入 event_stage_gifts，必须重启游戏客户端并重新登录后，活动面板才会读取新奖励。</div></div><span class="pill" id="eventStageGiftCount">当前未配置</span></div>
+    <div class="event-gift-intro"><span class="mark">礼</span><div>每个阶段可配置多种物品。奖励物品从完整静态商品目录按分类选择，活动专属商品即使没有普通商店货架记录也可选择；竿坯、手柄、线轴和渔轮内部零件会自动排除，数量限制为 1~99。切换分支或阶段时只显示当前阶段的配置；没有配置的阶段会显示为空。</div></div>
+    <div class="event-gift-selector"><div><label for="eventGiftBranch">活动分支</label><select id="eventGiftBranch" onchange="eventStageGiftSwitch()">${eventGiftBranchOptions(EVENT_GIFT_SELECTED.branch)}</select></div><div><label for="eventGiftStage">阶段</label><select id="eventGiftStage" onchange="eventStageGiftSwitch()">${eventGiftStageOptions(EVENT_GIFT_SELECTED.stage)}</select></div><div class="state">切换后自动加载该阶段奖励</div></div>
+    <div class="event-gift-plans" id="eventStageGiftPlans"></div>
+    <div class="event-gift-actions"><button class="btn good sm" onclick="saveEventStageGifts()">保存全部奖励</button><button class="btn alt sm" onclick="clearEventStageGiftsDraft()">清空全部奖励</button><span class="hint">保存后必须重启游戏客户端并重新登录。</span></div>
+    <details class="event-gift-preview"><summary>查看保存格式（只读）</summary><pre id="eventStageGiftJson"></pre></details>
+  </section>`;
+}
+function clearEventStageGiftsDraft(){EVENT_GIFT_DRAFT=[];renderEventStageGifts()}
+async function saveEventStageGifts(){
+  eventStageGiftRead();
+  // loadTunables() 重建参数页 DOM；先保存当前选择，避免保存后回到默认的阶段 1。
+  const savedSelection={branch:Number(EVENT_GIFT_SELECTED.branch)||13,stage:Number(EVENT_GIFT_SELECTED.stage)||1};
+  for(const row of EVENT_GIFT_DRAFT){
+    const key=`${row.branch}/${row.stage}`;
+    if(!row.gifts.length||row.gifts.some(g=>!g.item)){toast(`请补全 ${key} 的物品 ID`,'bad');return}
+  }
+  try{
+    const value=EVENT_GIFT_DRAFT.length?eventStageGiftJSON():'';
+    await api('/api/tunables',{method:'POST',body:JSON.stringify({key:EVENT_STAGE_GIFT_KEY,value})});
+    toast(EVENT_GIFT_DRAFT.some(x=>x.gifts?.length)?'阶段奖励已保存；请重启游戏客户端并重新登录':'阶段奖励已清空；请重启游戏客户端并重新登录');
+    await loadTunables();
+    // 显式回灌选择并渲染当前阶段；依赖 eventStageGiftsCard 的默认值会在刷新后丢失。
+    EVENT_GIFT_SELECTED=savedSelection;
+    rememberEventStageGiftSelection();
+    const branch=$('#eventGiftBranch'), stage=$('#eventGiftStage');
+    if(branch)branch.value=String(savedSelection.branch);
+    if(stage)stage.value=String(savedSelection.stage);
+    renderEventStageGifts();
+  }catch(e){toast(e.message,'bad')}
+}
 let BAIT_ROWS=[];
 let BAIT_OPEN=new Set();
 let BAIT_RULES_ON=false;
@@ -800,9 +1002,12 @@ async function loadTunables(){
  $('#paramsBody').innerHTML=PAGES.map(p=>
    p.groups.map(g=>group(g[0],g[1],g[2],p.id)).join('')
    + (p.spawnCard ? `<section class="tunable-group" data-page="${p.id}"><h3>发鱼模式<small style="font-weight:400;margin-left:8px;color:var(--muted)">档位比例 · 鱼猎四阶段 · 两档制（底浮）三选一；选中哪种就显示哪组的权重设置</small></h3><div class="tunable-fields">${spawnModeControl(t)}</div></section>` : '')
+   + (p.id==='event' ? eventStageGiftsCard(t) : '')
  ).join('');
  // 首屏按当前页做一次显隐（分组是全量渲染的）
  setParamsPage(cur);
+ renderEventStageGifts();
+ void hydrateEventStageGiftNames();
 }
 // 切换参数子页：所有分组已一次性渲染进 DOM，这里只切显隐，不重新拉接口也不再重绘。
 function setParamsPage(id){
