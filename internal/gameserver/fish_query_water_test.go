@@ -20,7 +20,7 @@ func waterGridForTest(g *fishQueryRegions) *fishQueryWaterGrid {
 }
 
 func TestFishQueryWaterParseAndRead(t *testing.T) {
-	g, err := newFishQueryRegions("test", fishQueryRegionScene{originX: -50, originZ: -20, size: 80}, time.Time{}, true)
+	g, err := newFishQueryRegions("test", fishQueryRegionScene{OriginX: -50, OriginZ: -20, Size: 80}, time.Time{}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,8 +83,8 @@ func TestFishQueryWaterParseAndRead(t *testing.T) {
 }
 
 func TestFishQueryWaterAnyPointKeepsOriginalArea(t *testing.T) {
-	scene := fishQueryRegionScene{originX: -50, originZ: -20, size: 80, paper: &fishQueryPaperMap{-3, 2, 1, 75, 80}}
-	g, err := newFishQueryRegions("test", scene, time.Time{}, true)
+	scene := fishQueryRegionScene{OriginX: -50, OriginZ: -20, Size: 80, Paper: &fishQueryPaperMap{OffsetX: -3, OffsetZ: 2, Scale: 1, Width: 75, Height: 80}}
+	g, err := newFishQueryRegions("test", scene, time.Time{}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestFishQueryWaterAnyPointKeepsOriginalArea(t *testing.T) {
 
 func TestFishQueryWaterMismatchEmptyAndDisabled(t *testing.T) {
 	newGrid := func(enabled bool) *fishQueryRegions {
-		g, err := newFishQueryRegions("test", fishQueryRegionScene{size: 80}, time.Time{}, enabled)
+		g, err := newFishQueryRegions("test", fishQueryRegionScene{Size: 80}, time.Time{}, enabled, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -205,7 +205,7 @@ func TestFishQueryWaterIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.execAdminCmd(&AdminCommand{Op: "reload_tunables"})
-	g, err := newFishQueryRegions("rules-test", fishQueryRegionScenes[level], time.Time{}, true)
+	g, err := newFishQueryRegions("rules-test", fishQueryRegionScenes[level], time.Time{}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

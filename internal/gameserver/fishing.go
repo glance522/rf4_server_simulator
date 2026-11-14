@@ -74,6 +74,7 @@ type FishState struct {
 	biteTicket      uint64
 	pendingTicket   uint64
 	PendingRepush   int           // 14/12 f0=3/5/6 连续拒收鱼实体时的重推次数
+	EmptyStreak     int           // 连续空轮计数（保底杂口 bite_gate_pity_rounds 用；出鱼即清零，不持久化）
 	BiteAt          time.Time     // 原定咬钩绝对时刻；硬重启后据此恢复 timer
 	Keepnet         []*RolledFish // 回退缓存（DB 权威）
 	Bait            string
@@ -919,6 +920,10 @@ func (s *Server) rollFishWithRules(loc, bait string, gearCapKg float64, bonus fi
 	if c.baits == nil {
 		c.baits = []string{bait}
 	}
+	// 硬性鱼口门剔空本图名册时置位：这种杆必须空竿重排，不能落到
+	// 内置鱼池兜底去捞不属于本图的鱼。
+	gateBlocked := false
+	c.gateBlocked = &gateBlocked
 	if s.tunableF("fish_bait_rules_enabled", 0) == 1 {
 		if s.DB != nil && s.cachedResolveStatLoc(s.dbCtx(), c, loc) == "" {
 			return s.rollFishPoolsWithRules(loc, gearCapKg, bonus, c)
@@ -931,6 +936,9 @@ func (s *Server) rollFishWithRules(loc, bait string, gearCapKg float64, bonus fi
 	if s.DB != nil {
 		if f := s.rollFishFromDBWithRules(loc, bait, gearCapKg, bonus, c); f != nil {
 			return f
+		}
+		if gateBlocked {
+			return nil
 		}
 		// 已知水域的鱼群无法匹配时保持空竿。
 		if roster, err := s.cachedLocRoster(s.dbCtx(), c, s.cachedResolveStatLoc(s.dbCtx(), c, loc)); err == nil && len(roster) > 0 {
@@ -1003,6 +1011,36 @@ func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bo
 			}
 		}
 	}
+	// 硬性鱼口资格门（bite_gate_enabled，默认关）：拟饵不喂非掠食鱼、
+	// 天然饵按攻略+生态双票、水层超界只留极小杂口。剔空整杆走
+	// 「本轮无符合条件的鱼」重排。空因写进 c.emptyReason（诊断日志用）。
+	markEmpty := func(reason string) {
+		if c.emptyReason != nil {
+			*c.emptyReason = reason
+		}
+	}
+	if gate := s.biteGateConfig(); gate.enabled {
+		keys, wts = s.applyBiteGates(cctx, keys, wts, c, gate, statLoc)
+		if len(keys) == 0 {
+			markEmpty("食性/水层硬门")
+			if c.gateBlocked != nil {
+				*c.gateBlocked = true
+			}
+			return nil
+		}
+	}
+	// 区域固定鱼种名册（fish_zone，后台可编辑，默认无配置=不限制）：
+	// 落点命中独占区只出名单鱼种，命中增益区名单内加权、名单外打折。
+	if zk, zw, hit := s.applyFishZoneRoster(cctx, statLoc, keys, wts, c); hit {
+		keys, wts = zk, zw
+		if len(keys) == 0 {
+			markEmpty("区域名册（独占区无交集）")
+			if c.gateBlocked != nil {
+				*c.gateBlocked = true
+			}
+			return nil
+		}
+	}
 	interests := map[string]float64{}
 	if strict {
 		base := map[string]float64{}
@@ -1011,6 +1049,7 @@ func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bo
 		}
 		keys, wts = s.filterFishBaitSet(statLoc, c.baits, keys, wts, c.now, c)
 		if len(keys) == 0 {
+			markEmpty("饵料规则（strict）")
 			return nil
 		}
 		for i, key := range keys {
@@ -1022,6 +1061,7 @@ func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bo
 	if distribution && (c.query == nil || !c.query.regional) {
 		applyFishDistribution(statLoc, keys, wts, c)
 		if !slices.ContainsFunc(wts, func(w float64) bool { return w > 0 }) {
+			markEmpty("分布散布（本时段本格无鱼）")
 			return nil
 		}
 	}
@@ -1138,6 +1178,10 @@ func (s *Server) rollFishFromDBWithRules(loc, bait string, gearCapKg float64, bo
 		if baitHit {
 			s.log.Info("roll_from_db 命中饵效", "鱼种", key, "重量", w, "tier", tiers[key])
 		}
+		// 咬钩落点审计：世界坐标 + 40m 网格 + 命中的区域名册（后台划区对账用）。
+		// resolveFishZone 与 applyFishZoneRoster 同源（缓存复用），纯查不改判鱼结果。
+		s.log.Info("咬钩落点", "鱼种", key, "x", math.Round(c.x), "z", math.Round(c.z),
+			"网格", fishArea(statLoc, c), "区域", zoneHitNote(s.fishZonesFor(cctx, statLoc), c))
 		if s.huntStateEnabled() && c.uid > 0 {
 			s.log.Info("发鱼阶段", "uid", c.uid, "loc", c.loc, "spot", c.spot,
 				"stage", s.fishHuntStageName(huntReady.Mode, huntReady.Stage), "A", roundTo(huntReady.A, 3),
@@ -1485,6 +1529,12 @@ func (s *Server) rollFishPoolsWithRules(loc string, gearCapKg float64, bonus fis
 	for i, p := range pool {
 		keys[i] = p.species
 		wts[i] = s.fishBiteEnvironmentWeight(s.dbCtx(), p.species, c)
+	}
+	if gate := s.biteGateConfig(); gate.enabled {
+		keys, wts = s.applyBiteGates(s.dbCtx(), keys, wts, c, gate, "")
+		if len(keys) == 0 {
+			return nil
+		}
 	}
 	if !slices.ContainsFunc(wts, func(w float64) bool { return w > 0 }) {
 		return nil
@@ -2296,18 +2346,46 @@ func (s *Server) onRodBiteTimerTicket(uid int64, st *FishState, ticket fishingTi
 	lureLayer, lureAction, lureMask := st.LureLayer, st.LureAction, st.LureMotionMask
 	lureSpeed := st.ReelSetting
 	boatOn, boatKnown := st.onBoatLocked(now.Unix())
-	f := s.rollFishForRig(s.dbCtx(), uid, st.GearGuid, st.Loc, st.Bait, st.Bonus, fishRollContext{
-		x: x, z: z, hasPos: hasPos, spot: st.Spot, depthCM: baitDepthCM,
-		lureLayer: lureLayer, lureAction: lureAction, lureMask: lureMask, lureSpeed: lureSpeed, rigType: rigType,
-		onBoat: boatOn, boatKnown: boatKnown,
-		now: now, weather: sess.weatherAt(st.Loc, now), happyBite: sess.currentHappyHour().BiteBonus,
-	})
+	buildRollCtx := func(pity bool) fishRollContext {
+		var reason string
+		return fishRollContext{
+			x: x, z: z, hasPos: hasPos, spot: st.Spot, depthCM: baitDepthCM,
+			lureLayer: lureLayer, lureAction: lureAction, lureMask: lureMask, lureSpeed: lureSpeed, rigType: rigType,
+			onBoat: boatOn, boatKnown: boatKnown, pityEnv: pity,
+			emptyReason: &reason,
+			now:         now, weather: sess.weatherAt(st.Loc, now), happyBite: sess.currentHappyHour().BiteBonus,
+		}
+	}
+	rollCtx := buildRollCtx(false)
+	f := s.rollFishForRig(s.dbCtx(), uid, st.GearGuid, st.Loc, st.Bait, st.Bonus, rollCtx)
 	if f == nil {
-		s.log.Info("本轮无符合条件的鱼，继续等待", "rod", shortGUID(st.GearGuid), "rig_type", st.RigType)
+		st.EmptyStreak++
+		// 保底杂口（bite_gate_pity_rounds，0=关）：连续空杆后放宽环境类因素重掷一次，
+		// 食性硬门不动——泥鳅依然不攻亮片，只是「鱼群不在/水层不对」不再死寂。
+		if pityN := int(s.tunableF("bite_gate_pity_rounds", 0)); pityN > 0 && st.EmptyStreak >= pityN {
+			pityCtx := buildRollCtx(true)
+			if f = s.rollFishForRig(s.dbCtx(), uid, st.GearGuid, st.Loc, st.Bait, st.Bonus, pityCtx); f != nil {
+				st.EmptyStreak = 0
+				s.log.Info("保底杂口", "rod", shortGUID(st.GearGuid), "鱼种", f.Species, "连续空轮", pityN)
+			}
+		}
+	}
+	if f == nil {
+		// 空轮也带落点、区域命中与空因：后台对账用，不推玩家提示。
+		rollC := fishRollContext{x: x, z: z, hasPos: hasPos}
+		zoneNote := zoneHitNote(s.fishZonesFor(s.dbCtx(), st.Loc), rollC)
+		reason := "概率/权重全零"
+		if rollCtx.emptyReason != nil && *rollCtx.emptyReason != "" {
+			reason = *rollCtx.emptyReason
+		}
+		s.log.Info("本轮无符合条件的鱼，继续等待", "rod", shortGUID(st.GearGuid), "rig_type", st.RigType,
+			"x", math.Round(x), "z", math.Round(z), "网格", fishArea(st.Loc, rollC), "区域", zoneNote, "空因", reason,
+			"连续空轮", st.EmptyStreak)
 		s.emptyWeatherBiteLocked(sess, st, now)
 		st.mu.Unlock()
 		return
 	}
+	st.EmptyStreak = 0
 	// 鱼吃口扣份：窝被吃薄，死窝会自己缓过来（设计稿第 6 节）。
 	s.groundbaitConsumeBite(s.dbCtx(), uid, st.Loc, x, z, hasPos, st.Spot, s.tunableF("groundbait_consume_bite", 0.20))
 	if !f.BaitsKnown {

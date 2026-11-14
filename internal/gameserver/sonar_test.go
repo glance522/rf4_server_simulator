@@ -497,3 +497,17 @@ func TestSonarChartZoneUsesGuideZoneNumbers(t *testing.T) {
 		}
 	}
 }
+
+// 海图区号以客户端 loc12_N 为权威：局部坐标反查失败时仍能命中（2026-11-14
+// 实测：玩家在 198 区，14/2 落点报 (-100,680) 局部坐标，坐标反查永不中）。
+func TestSonarZoneFromLocAuthoritative(t *testing.T) {
+	if n, ok := sonarZoneFromLoc("loc12_198"); !ok || n != 198 {
+		t.Fatalf("loc12_198 应解析为 198, got %d %v", n, ok)
+	}
+	if _, ok := sonarZoneFromLoc("loc1_02"); ok {
+		t.Fatal("内陆 loc 不应解析出海图区号")
+	}
+	if _, ok := sonarZoneFromLoc("loc12_"); ok {
+		t.Fatal("空区号不应通过")
+	}
+}

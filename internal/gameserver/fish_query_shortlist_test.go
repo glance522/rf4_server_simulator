@@ -10,7 +10,7 @@ import (
 )
 
 func TestFishQueryCoarseRegionScoreAndEmpty(t *testing.T) {
-	g, err := newFishQueryRegions("test", fishQueryRegionScene{size: 80}, time.Time{}, true)
+	g, err := newFishQueryRegions("test", fishQueryRegionScene{Size: 80}, time.Time{}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestFishQueryCoarseRegionScoreAndEmpty(t *testing.T) {
 	if err := g.shortlist(cancelled, "target", nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("ignored cancellation: %v", err)
 	}
-	g, err = newFishQueryRegions("test", fishQueryRegionScene{size: 80}, time.Time{}, false)
+	g, err = newFishQueryRegions("test", fishQueryRegionScene{Size: 80}, time.Time{}, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestFishQueryCoarseRegionScoreAndEmpty(t *testing.T) {
 }
 
 func TestFishQueryCoarseLimitAndFineProbability(t *testing.T) {
-	g, err := newFishQueryRegions("test", fishQueryRegionScene{size: 240}, time.Time{}, true)
+	g, err := newFishQueryRegions("test", fishQueryRegionScene{Size: 240}, time.Time{}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestFishQueryCoarseMapIgnoresBaitAndUsesOverrides(t *testing.T) {
 		weights[row.FishKey] = row.Catches
 	}
 	weights["c.roach"], weights["frog"] = 7, 100
-	want, err := newFishQueryRegions("rules-test", fishQueryRegionScenes[level], at, true)
+	want, err := newFishQueryRegions("rules-test", fishQueryRegionScenes[level], at, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

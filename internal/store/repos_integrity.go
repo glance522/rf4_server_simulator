@@ -39,6 +39,7 @@ var RuntimeTables = []string{
 	"request_receipts", "market_offer", "shop_item_override",
 	"fish_weight_override", "fish_bite_setting", "fish_grade_lines", "skill_link",
 	"fish_ecology", "skill_fish_effect_def", "hook_bite_profile", "fish_bait_override",
+	"fish_zone", "fish_zone_fish",
 }
 
 // TableOwnership 返回每张用户表的唯一归属。静态、玩家、运行时三组必须互不相交。

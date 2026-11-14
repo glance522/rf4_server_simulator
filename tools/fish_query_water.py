@@ -90,8 +90,9 @@ def component_payload(component):
     return raw[(32+length+3)&~3:]
 
 def scenes_from_source():
-    source = (ROOT / 'internal/gameserver/fish_query_regions.go').read_text(encoding='utf8')
-    block = source.split('var fishQueryRegionScenes = map[string]fishQueryRegionScene{', 1)[1].split('\n}', 1)[0]
+    # 标定表自 2026-11 起以 internal/fishmaps 为单一事实源（gameserver 只是别名引用）。
+    source = (ROOT / 'internal/fishmaps/fishmaps.go').read_text(encoding='utf8')
+    block = source.split('var Scenes = map[string]Scene{', 1)[1].split('\n}', 1)[0]
     result = {}
     for line in block.splitlines():
         match = re.match(r'\s*"(level_[^"]+)":\s*\{(.*)\},', line)
@@ -99,12 +100,12 @@ def scenes_from_source():
             if line.strip():
                 raise ValueError('Unrecognized scene declaration: ' + line)
             continue
-        values = {k: float(v) for k,v in re.findall(r'(originX|originZ|size):\s*([-+\d.eE]+)', match[2])}
-        paper = re.search(r'fishQueryPaperMap\{([^}]+)\}', match[2])
+        values = {k: float(v) for k,v in re.findall(r'(OriginX|OriginZ|Size):\s*([-+\d.eE]+)', match[2])}
+        paper = re.search(r'PaperMap\{([^}]+)\}', match[2])
         p = [float(v.strip()) for v in paper[1].split(',')]
-        ox, oz = values.get('originX', 0.), values.get('originZ', 0.)
+        ox, oz = values.get('OriginX', 0.), values.get('OriginZ', 0.)
         px, pz, scale = (struct.unpack('<f', struct.pack('<f', v))[0] for v in p[:3])
-        result[match[1]] = {'origin_x': ox, 'origin_z': oz, 'size': values['size'], 'bounds': [max(ox, ox-px/scale), max(oz, oz-pz/scale), min(ox+values['size'], ox+(p[3]-px)/scale), min(oz+values['size'], oz+(p[4]-pz)/scale)]}
+        result[match[1]] = {'origin_x': ox, 'origin_z': oz, 'size': values['Size'], 'bounds': [max(ox, ox-px/scale), max(oz, oz-pz/scale), min(ox+values['Size'], ox+(p[3]-px)/scale), min(oz+values['Size'], oz+(p[4]-pz)/scale)]}
     if not result:
         raise ValueError('No supported scene definitions')
     return result

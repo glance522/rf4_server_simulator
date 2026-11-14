@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"rf4server/internal/fishmaps"
 	"rf4server/internal/store"
 )
 
@@ -115,13 +116,155 @@ func (s *Server) handleStoreItemReset(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true})
 }
 
+// fishAreaPaper 标定的纸地图数值，字段与 fishmaps.PaperMap 一致（float32 精度原样下发）。
+type fishAreaPaper struct {
+	OffsetX float32 `json:"offset_x"`
+	OffsetZ float32 `json:"offset_z"`
+	Scale   float32 `json:"scale"`
+	Width   float64 `json:"width"`
+	Height  float64 `json:"height"`
+}
+
+// fishAreaCalibration 内陆网格图的场景标定（世界↔图像像素换算见 docs/fish-query-coordinates.md）。
+type fishAreaCalibration struct {
+	OriginX float64        `json:"origin_x"`
+	OriginZ float64        `json:"origin_z"`
+	Size    float64        `json:"size"`
+	Paper   *fishAreaPaper `json:"paper"`
+	// DisplayOriginX/Z 游戏内 HUD 显示坐标原点（显示=(世界−原点)/5）。内陆与 origin 相同；
+	// 挪威海游戏内显示 Z=世界Z/5+420（原点 z=-2100），与像素标定的世界原点分离
+	// （2026-11-14 实测：玩家在 198 区，游戏显示 469:349 ↔ 世界 (2345,-355)）。
+	DisplayOriginX float64 `json:"display_origin_x,omitempty"`
+	DisplayOriginZ float64 `json:"display_origin_z,omitempty"`
+}
+
+// fishAreaRow 在 store.FishAreaView 基础上追加地图编辑器所需的定位信息：
+// map_kind: grid=可拖拽画矩形（有纸地图标定）；sea=海图区号（有图无标定）；
+// none=无图（保留手填兜底）。calibration 为 nil 表示无网格标定。
+type fishAreaRow struct {
+	Loc         string               `json:"loc"`
+	FishCount   int64                `json:"fish_count"`
+	Level       string               `json:"level"`
+	MapKind     string               `json:"map_kind"`
+	Texture     string               `json:"texture"`
+	Calibration *fishAreaCalibration `json:"calibration"`
+}
+
+// handleFishSeaNow GET：玩家当前所在海图区号。优先读 fishing_state 实时钓鱼状态
+// （玩家正在海上抛竿时的 loc12_N），兜底最近一条海钓记录。这是与判鱼完全同源的
+// 权威信号——管理员不用在图上找格子，直接高亮"我在哪"。
+func (s *Server) handleFishSeaNow(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	var loc string
+	var ts float64
+	var live bool
+	err := s.db.SQL.QueryRowContext(ctx,
+		`SELECT loc, updated_ts FROM fishing_state
+		 WHERE loc LIKE 'loc12_%' AND cast_active=1 ORDER BY updated_ts DESC LIMIT 1`).Scan(&loc, &ts)
+	if err == nil {
+		live = true
+	} else {
+		err = s.db.SQL.QueryRowContext(ctx,
+			`SELECT loc, ts FROM catch_log WHERE loc LIKE 'loc12_%' ORDER BY ts DESC LIMIT 1`).Scan(&loc, &ts)
+	}
+	if err != nil {
+		httpError(w, 404, "没有进行中的海钓，也没有海钓记录")
+		return
+	}
+	zone := 0
+	if i := strings.LastIndexByte(loc, '_'); i >= 0 {
+		if n, e := strconv.Atoi(loc[i+1:]); e == nil {
+			zone = n
+		}
+	}
+	if zone <= 0 {
+		httpError(w, 500, "区号解析失败: "+loc)
+		return
+	}
+	writeJSON(w, map[string]any{"zone": zone, "loc": loc, "ts": ts, "live": live})
+}
+
+// handleFishSeaZoneLatest GET：最近一次海钓的客户端上报区号（catch_log.loc=loc12_N）。
+// 海图区域命中按客户端上报区号判定，用钓获记录定位就是零误差——不需要在图上找格子。
+func (s *Server) handleFishSeaZoneLatest(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	var loc, fish string
+	var ts float64
+	err := s.db.SQL.QueryRowContext(ctx,
+		`SELECT loc, COALESCE(name_zh,fish_key), ts FROM catch_log
+		 WHERE loc LIKE 'loc12_%' ORDER BY ts DESC LIMIT 1`).Scan(&loc, &fish, &ts)
+	if err != nil {
+		httpError(w, 404, "还没有海钓记录——去钓一条鱼再回来点")
+		return
+	}
+	zone := 0
+	if i := strings.LastIndexByte(loc, '_'); i >= 0 {
+		if n, err := strconv.Atoi(loc[i+1:]); err == nil {
+			zone = n
+		}
+	}
+	if zone <= 0 {
+		httpError(w, 500, "区号解析失败: "+loc)
+		return
+	}
+	writeJSON(w, map[string]any{"zone": zone, "loc": loc, "fish": fish, "ts": ts})
+}
+
+// handleFishSeaZones GET：海图（挪威海）声呐区号的世界坐标矩形，
+// 供地图编辑器渲染可点选的海图网格。
+func (s *Server) handleFishSeaZones(w http.ResponseWriter, r *http.Request) {
+	grids, err := fishmaps.SeaZoneGrids()
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"zones": grids})
+}
+
 func (s *Server) handleFishAreas(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.ListFishAreasAdmin(r.Context())
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, rows)
+	out := make([]*fishAreaRow, 0, len(rows))
+	for _, row := range rows {
+		item := &fishAreaRow{Loc: row.Loc, FishCount: row.FishCount, MapKind: "none"}
+		if level := s.db.ResolveLevelKeyByName(r.Context(), row.Loc); level != "" {
+			item.Level = level
+			if name, known := fishmaps.TextureFor(level); known {
+				item.Texture = "maps/" + name + ".webp"
+				if sc, ok := fishmaps.Scenes[level]; ok && sc.Paper != nil {
+					item.MapKind = "grid"
+					item.Calibration = &fishAreaCalibration{
+						OriginX: sc.OriginX, OriginZ: sc.OriginZ, Size: sc.Size,
+						Paper: &fishAreaPaper{
+							OffsetX: sc.Paper.OffsetX, OffsetZ: sc.Paper.OffsetZ,
+							Scale: sc.Paper.Scale, Width: sc.Paper.Width, Height: sc.Paper.Height,
+						},
+					}
+				} else {
+					// 海图：区域用声呐区号语义，但几何工具（矩形/格子/圆）同样可用；
+					// 挪威海带客户端标定，其他海图（当前没有）降级矢量参考图。
+					item.MapKind = "sea"
+					if sp := fishmaps.SeaPaper; sp != nil && level == "level_012_north_sea" {
+						item.Calibration = &fishAreaCalibration{
+							OriginX: 0, OriginZ: 0, Size: 0,
+							DisplayOriginX: 0, DisplayOriginZ: -2100,
+							Paper: &fishAreaPaper{
+								OffsetX: sp.OffsetX, OffsetZ: sp.OffsetZ,
+								Scale: sp.Scale, Width: sp.Width, Height: sp.Height,
+							},
+						}
+					}
+				}
+			}
+		}
+		out = append(out, item)
+	}
+	writeJSON(w, out)
 }
 
 func (s *Server) handleFishConfig(w http.ResponseWriter, r *http.Request) {

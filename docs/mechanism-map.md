@@ -16,6 +16,7 @@
 | 咬钩与鱼口 | `fishing.go`、`fish_hunt.go`、`handlers_game.go` | 状态根 `FishState`；定时链 `scheduleBiteState → onRodBiteTimerTicket → pushPendingBite`；咬口质量 `applyHookBiteQuality`、保持判定 `hookRetentionFails`、嘬饵否决 `finishNibbleHook` | `fish_bite_environment_test.go`、`bite_floor_test.go`、`fish_hunt_test.go` |
 | 派鱼与档位 | `fishing.go`、`fish_hunt.go`、`fish_distribution.go`、`fish_roll_context.go` | 总装 `rollFishForRig → rollFishWithRules`；四档 `gradeRatioModel`、`sampleWeightByGradeRatio`、`gradeRatioGradeWeights`；鱼猎阶段 `sampleHuntWeight`；重量上限 `fishWeightCapKg` | `fishing_grade_ratio_test.go`、`fish_distribution_test.go`、`fish_hunt_test.go`、`fishing_weight_cap_test.go` |
 | 饵料与食性 | `fishing_bait_rules.go`、`fishing_bait_override.go`、`hook_profiles.go` | 无单一入口：食性过滤 `filterFishBaitSet`（内嵌 `fishing_bait_rules.txt`）／覆盖与轮换 `RotationState`、`activeBaitGroup`／钩型 `hookBiteProfileFor` | `fishing_bait_rules_test.go`、`fishing_bait_override_test.go`、`hook_profiles_test.go` |
+| 硬门与区域名册 | `fish_bite_gates.go`、`fish_zone.go`、`fish_roll_context.go` | 资格门 `applyBiteGates`（G1 拟饵食性硬剔 / G2 水层地板 / G-diet 双票，开关 `bite_gate_enabled`）；区域名册 `applyFishZoneRoster`（`fish_zone` 表，缓存 30s + `reload_fish_zones` 队列失效）；空候选经 `gateBlocked` 压制鱼池兜底 | `fish_bite_gates_test.go`、`fish_zone_test.go` |
 | 钓组装配 | `rigops.go`、`lure_hooks.go`、`fishing_rods.go` | 唯一写入口 `rigSetComponent`（13/15/16/17 命令族）；拟饵钩位 `lureHookMount`；多竿状态 `fishingStateForRod`；投影重建 `reconcileRigProjection` | `rigops_test.go`、`rigfishing_test.go`、`rig_dup_index_test.go` |
 | 载荷与断损 | `gear_damage.go`、`gear_physics.go`、`reel_fight_wear.go` | 无单一入口：断件 `breakLineOrRodWithLineOut`、`resolveGearBreak`／扣线 `lineLossTx`／承力上限 `gearWeightCapKg`、`gearWeightCapForRig`／搏鱼轮耗 `fightReelCache → settleFightReelWear` | `gear_damage_test.go`、`line_break_loss_test.go`、`reel_fight_wear_test.go` |
 | 搏鱼与结算 | `handlers_game.go`、`catch_settlement.go`、`progress_ops.go` | 结算唯一入口 `settleCatchOnceWithQualification`（回执 `catchReceipt`）；入护 `fishingKeep`、放生 `fishingRelease`、收竿 `fishingEndSettle` 都收敛到它 | `catch_settlement_test.go`、`fishing_contract_test.go`、`fishing_atomic_test.go` |
@@ -46,6 +47,7 @@
 | 管理端 | `../admin/api.go`、`../admin/bait_rules.go`、`../admin/hook_profiles.go` | 路由总装配 `admin.NewServer`；`handleBaitRuleSave`、`handleHookProfileSave`；tunables 读写走 `(*DB).TunableSet` | `../admin/api_test.go`、`../admin/bait_rules_test.go`、`../admin/hook_profiles_test.go` |
 | 启动与监管 | `../../cmd/{launcher,gateway,gameserver,seed}/main.go`、`../supervisor/supervisor.go` | 各 `main()` 是唯一装配点；`seed.Ensure` | `../supervisor/supervisor_test.go`、`../seed/seed_test.go` |
 | 游戏内查鱼 | `fish_query.go`、`fish_query_water.go`、`fish_query_regions.go` | `(*Server).QueryFish` | `fish_query_test.go`、`fish_query_water_test.go` |
+| 纸地图标定与贴图名 | `../fishmaps/fishmaps.go` | `fishmaps.Scenes`（gameserver 经 `fishQueryRegionScenes` 别名引用）、`fishmaps.TextureFor` | `../fishmaps/fishmaps_test.go` |
 
 ## 结构观察（这些是查代码时最容易误判的点）
 

@@ -359,11 +359,15 @@ func insertCatchLogSettleTx(ctx context.Context, tx *sql.Tx, uid int64, f *Rolle
 	if tx == nil || f == nil || f.FishGUID == "" || f.Species == "" {
 		return nil
 	}
+	hookItem := ""
+	if f.HookGUID != "" {
+		_ = tx.QueryRowContext(ctx, `SELECT item_id FROM item WHERE guid=?`, f.HookGUID).Scan(&hookItem)
+	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO catch_log(
-		ts,loc,spot,fish_key,name_zh,weight_g,length_m,source,bait,grade,xp,silver,loc_level,uid,catch_guid,tackle_cat)
-		VALUES(?,?,?,?,?,?,?,'catch',?,?,?,?,?,?,?,?)
+		ts,loc,spot,fish_key,name_zh,weight_g,length_m,source,bait,grade,xp,silver,loc_level,uid,catch_guid,tackle_cat,hook)
+		VALUES(?,?,?,?,?,?,?,'catch',?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(uid,source,catch_guid) WHERE catch_guid IS NOT NULL DO NOTHING`,
 		ts, loc, spot, f.Species, f.Name, f.WeightG, f.LengthM, bait, f.Grade, xp, silver,
-		locLevel, uid, f.FishGUID, tackleCat)
+		locLevel, uid, f.FishGUID, tackleCat, hookItem)
 	return err
 }

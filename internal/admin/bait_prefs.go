@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"net/http"
 	"sort"
 	"strconv"
@@ -26,6 +27,13 @@ type baitPrefRow struct {
 	Baits    []baitPrefEvidence `json:"baits"`     // 证据最强的若干条
 	Locs     []string           `json:"locs"`      // 出现水域（截断）
 	InStrict bool               `json:"in_strict"` // 严格模式下是否还能咬（规则命中或 tier>0）
+
+	// 鱼口画像（fish_ecology，与判鱼 G 层同表同源）：按类食性权重 + 水层 + 档位体重线。
+	Diet   map[string]float64 `json:"diet,omitempty"` // worm/fish/boilie/plant/crustacean/lure
+	LureOK bool               `json:"lure_ok"`        // lure≥0.30 过 G1 硬门
+	Layer  [3]float64         `json:"layer"`          // min/pref/max（0水面~1水底）
+	QualG  int64              `json:"qual_g"`         // 合格档体重（钩容量适配计算用）
+	TrophG int64              `json:"trophy_g"`
 
 	// 可编辑覆盖与轮换：source=override 表示该鱼已被后台规则覆盖。
 	Source     string                   `json:"source"` // default | override
@@ -153,10 +161,46 @@ func (s *Server) handleBaitPrefs(w http.ResponseWriter, r *http.Request) {
 			overrides[o.FishZh] = o
 		}
 	}
+	// 3.5) 鱼口画像：fish_ecology（判鱼 G 层同源）+ fish_grade_lines（档位体重）
+	ecoByFish := map[string][2]any{}
+	if ecoRows, eerr := s.db.SQL.QueryContext(r.Context(),
+		`SELECT fish_key, diet_json, layer_min, layer_pref, layer_max FROM fish_ecology`); eerr == nil {
+		for ecoRows.Next() {
+			var fk, dj string
+			var lmin, lpref, lmax float64
+			if ecoRows.Scan(&fk, &dj, &lmin, &lpref, &lmax) == nil {
+				ecoByFish[fk] = [2]any{dj, [3]float64{lmin, lpref, lmax}}
+			}
+		}
+		ecoRows.Close()
+	}
+	gradeByFish := map[string][2]int64{}
+	if gRows, gerr := s.db.SQL.QueryContext(r.Context(),
+		`SELECT fish_key, qualified_g, trophy_g FROM fish_grade_lines`); gerr == nil {
+		for gRows.Next() {
+			var fk string
+			var q, t int64
+			if gRows.Scan(&fk, &q, &t) == nil {
+				gradeByFish[fk] = [2]int64{q, t}
+			}
+		}
+		gRows.Close()
+	}
+
 	now := time.Now()
 	out := make([]baitPrefRow, 0, len(fish))
 	for _, f := range fish {
 		row := baitPrefRow{FishKey: f.key, NameZh: f.name, Locs: locsByFish[f.key], Source: "default"}
+		if e, ok := ecoByFish[f.key]; ok {
+			diet := map[string]float64{}
+			_ = json.Unmarshal([]byte(e[0].(string)), &diet)
+			row.Diet = diet
+			row.Layer = e[1].([3]float64)
+			row.LureOK = diet["lure"] >= 0.30
+		}
+		if g, ok := gradeByFish[f.key]; ok {
+			row.QualG, row.TrophG = g[0], g[1]
+		}
 		if info, ok := gameserver.ExportedBaitRules(f.name); ok {
 			row.HasRule = true
 			row.Allow = info.Allow

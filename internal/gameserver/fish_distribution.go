@@ -46,6 +46,12 @@ func distributionMultiplier(area, species string, now time.Time) float64 {
 func applyFishDistribution(loc string, keys []string, weights []float64, c fishRollContext) {
 	area := fishArea(loc, c)
 	for i, key := range keys {
-		weights[i] *= distributionMultiplier(area, key, c.now)
+		m := distributionMultiplier(area, key, c.now)
+		// 保底杂口：本时段本格散布为 0 的鱼保底 0.15，避免连续空杆死寂；
+		// 仅 pityEnv 重掷路径生效，正常判鱼不动。
+		if m == 0 && c.pityEnv {
+			m = 0.15
+		}
+		weights[i] *= m
 	}
 }

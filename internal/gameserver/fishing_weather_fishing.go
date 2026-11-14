@@ -101,6 +101,11 @@ func (s *Server) emptyWeatherBiteLocked(sess *Session, st *FishState, now time.T
 	st.Resolved = false
 	delay := s.biteDelayInWeather(st, sess.weatherAt(st.Loc, now), now, st.Bonus)
 	delay *= s.hookBiteDelayFactorForRig(sess.pushCtx(), sess.Userid, st.GearGuid)
+	// 空轮快速重排（bite_empty_retry_scale，默认 1=与正常咬钩同节奏）：
+	// 候选被门/名册/散布滤光时缩短下一轮等待，玩家不至于为一杆空轮等满全延迟。
+	if scale := s.tunableF("bite_empty_retry_scale", 1); scale > 0 && scale < 1 {
+		delay *= scale
+	}
 	s.armBiteTimerLocked(sess.Userid, st, now.Add(time.Duration(delay*float64(time.Second))))
 }
 

@@ -39,13 +39,13 @@ func TestFishQueryPaperMapClipsBeforeRanking(t *testing.T) {
 		cells       int
 		first, last string
 	}{
-		{"inside", fishQueryRegionScene{-50, -50, 200, &fishQueryPaperMap{-10, -30, 2, 160, 200}}, FishQueryRegion{1, 3, 17, 23}, 9, "test/-2/-1", "test/0/1"},
-		{"extends past terrain", fishQueryRegionScene{-50, -50, 200, &fishQueryPaperMap{20, 10, 1, 250, 250}}, FishQueryRegion{0, 0, 40, 40}, 36, "test/-2/-2", "test/3/3"},
-		{"aligned edges", fishQueryRegionScene{-40, -40, 120, &fishQueryPaperMap{0, 0, 1, 80, 80}}, FishQueryRegion{0, 0, 16, 16}, 4, "test/-1/-1", "test/0/0"},
+		{"inside", fishQueryRegionScene{OriginX: -50, OriginZ: -50, Size: 200, Paper: &fishQueryPaperMap{OffsetX: -10, OffsetZ: -30, Scale: 2, Width: 160, Height: 200}}, FishQueryRegion{1, 3, 17, 23}, 9, "test/-2/-1", "test/0/1"},
+		{"extends past terrain", fishQueryRegionScene{OriginX: -50, OriginZ: -50, Size: 200, Paper: &fishQueryPaperMap{OffsetX: 20, OffsetZ: 10, Scale: 1, Width: 250, Height: 250}}, FishQueryRegion{0, 0, 40, 40}, 36, "test/-2/-2", "test/3/3"},
+		{"aligned edges", fishQueryRegionScene{OriginX: -40, OriginZ: -40, Size: 120, Paper: &fishQueryPaperMap{OffsetX: 0, OffsetZ: 0, Scale: 1, Width: 80, Height: 80}}, FishQueryRegion{0, 0, 16, 16}, 4, "test/-1/-1", "test/0/0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			at := time.Unix(1794096000, 0)
-			g, err := newFishQueryRegions("test", tc.scene, at, true)
+			g, err := newFishQueryRegions("test", tc.scene, at, true, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -57,8 +57,8 @@ func TestFishQueryPaperMapClipsBeforeRanking(t *testing.T) {
 				t.Fatalf("changed display origin or unclipped edges: first=%+v last=%+v", first, last)
 			}
 			fullScene := tc.scene
-			fullScene.paper = nil
-			full, err := newFishQueryRegions("test", fullScene, at, true)
+			fullScene.Paper = nil
+			full, err := newFishQueryRegions("test", fullScene, at, true, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -88,16 +88,16 @@ func TestFishQueryPaperMapClipsBeforeRanking(t *testing.T) {
 
 func TestFishQueryPaperMapInvalidBounds(t *testing.T) {
 	for _, paper := range []fishQueryPaperMap{
-		{0, 0, 0, 100, 100}, {0, 0, -1, 100, 100},
-		{0, 0, float32(math.NaN()), 100, 100}, {float32(math.Inf(1)), 0, 1, 100, 100},
-		{0, float32(math.NaN()), 1, 100, 100}, {0, 0, 1, 0, 100},
-		{0, 0, 1, 100, -1}, {0, 0, 1, math.Inf(1), 100}, {0, 0, 1, 100, math.NaN()},
-		{-200, 0, 1, 80, 80}, // only touches terrain at its outer edge
-		{0, 90, 1, 80, 80},   // no overlap on Z
+		{OffsetX: 0, OffsetZ: 0, Scale: 0, Width: 100, Height: 100}, {OffsetX: 0, OffsetZ: 0, Scale: -1, Width: 100, Height: 100},
+		{OffsetX: 0, OffsetZ: 0, Scale: float32(math.NaN()), Width: 100, Height: 100}, {OffsetX: float32(math.Inf(1)), OffsetZ: 0, Scale: 1, Width: 100, Height: 100},
+		{OffsetX: 0, OffsetZ: float32(math.NaN()), Scale: 1, Width: 100, Height: 100}, {OffsetX: 0, OffsetZ: 0, Scale: 1, Width: 0, Height: 100},
+		{OffsetX: 0, OffsetZ: 0, Scale: 1, Width: 100, Height: -1}, {OffsetX: 0, OffsetZ: 0, Scale: 1, Width: math.Inf(1), Height: 100}, {OffsetX: 0, OffsetZ: 0, Scale: 1, Width: 100, Height: math.NaN()},
+		{OffsetX: -200, OffsetZ: 0, Scale: 1, Width: 80, Height: 80}, // only touches terrain at its outer edge
+		{OffsetX: 0, OffsetZ: 90, Scale: 1, Width: 80, Height: 80},   // no overlap on Z
 	} {
 		for _, enabled := range []bool{false, true} {
-			scene := fishQueryRegionScene{originX: -50, originZ: -50, size: 200, paper: &paper}
-			if _, err := newFishQueryRegions("test", scene, time.Time{}, enabled); err == nil {
+			scene := fishQueryRegionScene{OriginX: -50, OriginZ: -50, Size: 200, Paper: &paper}
+			if _, err := newFishQueryRegions("test", scene, time.Time{}, enabled, nil); err == nil {
 				t.Fatalf("accepted invalid paper map %+v, enabled=%v", paper, enabled)
 			}
 		}

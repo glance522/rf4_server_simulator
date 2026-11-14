@@ -36,7 +36,7 @@ test('fishing rule switches save independently, reload and fit supported sizes a
    for(const rule of rules)delete values[rule.key];
    await page.goto(`http://127.0.0.1:${server.address().port}/admin/#fish`,{waitUntil:'networkidle'});
    await page.locator('#fishRulesSwitch').waitFor();
-   assert.equal(await page.locator('#fishRulesCard .rule-item').count(),4);
+   assert.equal(await page.locator('#fishRulesCard .rule-item').count(),6);
    for(const rule of rules){
     assert.equal(await page.locator('#'+rule.prefix+'Switch').isChecked(),rule.default==='1');
     assert.equal(values[rule.key],undefined,'reading default values must not save a switch');
@@ -96,6 +96,8 @@ test('fishing rule switches save independently, reload and fit supported sizes a
    }
    failRead=true;await page.reload({waitUntil:'networkidle'});for(const rule of rules)assert.equal(await page.locator('#'+rule.prefix+'Switch').isDisabled(),true);assert.match(await page.locator('#rulesStatus').textContent(),/读取失败/);failRead=false;
    await page.goto(`http://127.0.0.1:${server.address().port}/admin/#params`,{waitUntil:'networkidle'});
+   // 限时活动开关在 event 子页（参数页分页后非默认可见）
+   await page.locator('.params-tab[data-page="event"]').click();
    await page.locator('#tun_event_newyear_enabled').waitFor();
    assert.match(await page.locator('#tun_event_newyear_enabled').textContent(),/新年任务：开/);
    assert.match(await page.locator('#tun_event_anniversary_enabled').textContent(),/周年活动：关/);

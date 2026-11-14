@@ -90,6 +90,19 @@ func (d *DB) ResolveLevelKey(ctx context.Context, loc string) string {
 	return ""
 }
 
+// ResolveLevelKeyByName 将中文水域名（loc_alias.loc，与 loc_fish.loc 同源）
+// 转换为游戏 level key。无法解析时返回空串，调用方自行降级。
+func (d *DB) ResolveLevelKeyByName(ctx context.Context, loc string) string {
+	loc = strings.TrimSpace(loc)
+	if loc == "" {
+		return ""
+	}
+	var out string
+	_ = d.SQL.QueryRowContext(ctx,
+		`SELECT alias FROM loc_alias WHERE loc=? ORDER BY alias LIMIT 1`, loc).Scan(&out)
+	return out
+}
+
 // ---- 鱼库名册 ----
 
 // FishRosterRow 鱼种权重行（wiki 名册为全集，统计捕获数作权重，缺统计保底 1）。

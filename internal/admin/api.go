@@ -101,6 +101,8 @@ func NewServer(cfg config.Admin, db *store.DB, log logger, webFS fs.FS) *Server 
 	mux.HandleFunc("GET /api/fish/pool", auth(s.handleFishPool))
 	mux.HandleFunc("GET /api/fish/spawn_mode", auth(s.handleSpawnModeGet))
 	mux.HandleFunc("POST /api/fish/spawn_mode", auth(s.handleSpawnModeSet))
+	mux.HandleFunc("GET /api/fish/bite_mode", auth(s.handleBiteModeGet))
+	mux.HandleFunc("POST /api/fish/bite_mode", auth(s.handleBiteModeSet))
 	mux.HandleFunc("GET /api/hooks/profiles", auth(s.handleHookProfiles))
 	mux.HandleFunc("POST /api/hooks/profiles", auth(s.handleHookProfileSave))
 	mux.HandleFunc("GET /api/bait/prefs", auth(s.handleBaitPrefs))
@@ -108,6 +110,12 @@ func NewServer(cfg config.Admin, db *store.DB, log logger, webFS fs.FS) *Server 
 	mux.HandleFunc("GET /api/bait/categories", auth(s.handleBaitCategories))
 	mux.HandleFunc("PUT /api/bait/rules", auth(s.handleBaitRuleSave))
 	mux.HandleFunc("POST /api/bait/rules/reset", auth(s.handleBaitRuleReset))
+	mux.HandleFunc("GET /api/fish/sea-now", auth(s.handleFishSeaNow))
+	mux.HandleFunc("GET /api/fish/sea-zone-latest", auth(s.handleFishSeaZoneLatest))
+	mux.HandleFunc("GET /api/fish/sea-zones", auth(s.handleFishSeaZones))
+	mux.HandleFunc("GET /api/fish/zones", auth(s.handleFishZones))
+	mux.HandleFunc("POST /api/fish/zones", auth(s.handleFishZoneSave))
+	mux.HandleFunc("POST /api/fish/zones/delete", auth(s.handleFishZoneDelete))
 	mux.HandleFunc("POST /api/mail/send", auth(s.handleMailSend))
 	mux.HandleFunc("GET /api/audit", auth(s.handleAudit))
 	mux.HandleFunc("GET /api/about", auth(s.handleAbout))
@@ -432,6 +440,38 @@ func spawnModeFor(t map[string]string) string {
 		return "fish_hunt"
 	}
 	return "legacy"
+}
+
+// handleBiteModeGet/Set 鱼汛模式二选一（legacy/realistic），
+// 原子统管硬性门/生态/天气/吃饵/分布五个开关；mixed 表示手动改过单个开关。
+func (s *Server) handleBiteModeGet(w http.ResponseWriter, r *http.Request) {
+	t, err := s.db.TunableList(r.Context())
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"mode": store.BiteModeFor(t)})
+}
+
+func (s *Server) handleBiteModeSet(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Mode string `json:"mode"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		httpError(w, 400, "参数错误")
+		return
+	}
+	if req.Mode != "legacy" && req.Mode != "realistic" {
+		httpError(w, 400, "鱼汛模式只能是 legacy 或 realistic")
+		return
+	}
+	if err := s.db.BiteModeSet(r.Context(), req.Mode, adminOf(r)); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	_ = s.db.AuditLogWrite(r.Context(), adminOf(r), "bite_mode", "mode", req.Mode)
+	_ = s.db.QueuePush(r.Context(), mustJSON(map[string]any{"op": "reload_tunables"}))
+	writeJSON(w, map[string]any{"ok": true, "mode": req.Mode})
 }
 
 func (s *Server) handleSpawnModeGet(w http.ResponseWriter, r *http.Request) {

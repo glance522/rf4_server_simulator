@@ -754,6 +754,14 @@ func sonarZoneNumber(systemID string) (int, bool) {
 	return zone, true
 }
 
+// sonarZoneFromLoc 客户端上报的 loc12_N 直接给出权威海图区号。
+func sonarZoneFromLoc(loc string) (int, bool) {
+	if !strings.HasPrefix(loc, "loc12_") {
+		return 0, false
+	}
+	return sonarZoneNumber(loc)
+}
+
 // sonarZoneForPoint 把抛竿落点换算成海图区号。矩形重叠时取面积最小的水域，
 // 结果只由静态资源决定，同一坐标重复查询稳定。落在海图之外返回 ok=false。
 func sonarZoneForPoint(levelKey string, x, z float64) (int, bool) {

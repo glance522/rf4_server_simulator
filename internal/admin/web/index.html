@@ -51,8 +51,11 @@ body.notice-on #view-fish.on{height:max(600px,calc(100vh - 204px))}
 #fishRulesCard{flex:none}
 #view-fish .fish-layout{flex:1;min-height:0}
 #view-fish .fish-layout>.card{display:flex;flex-direction:column;min-height:0;overflow:hidden}
-#view-fish .fish-layout>.card>:not(#fishAreas):not(#fishRows){flex:none}
+#view-fish .fish-layout>.card>:not(#fishAreas):not(#fishRows):not(#fishTabBodyRoster):not(#fishTabBodyZones){flex:none}
 #fishAreas{margin-top:10px;flex:1;min-height:0;overflow:auto}
+#fishEditor .tabs{flex:none}
+#fishTabBodyRoster,#fishTabBodyZones{flex:1;min-height:0;display:flex;flex-direction:column}
+#fishTabBodyRoster>:not(#fishRows){flex:none}
 #fishRows{flex:1;min-height:0;display:flex;flex-direction:column}
 #fishEditor .table-wrap{flex:1;min-height:0;overflow:auto}
 @media(max-width:720px){
@@ -61,6 +64,89 @@ body.notice-on #view-fish.on{height:max(600px,calc(100vh - 204px))}
  #fishAreas{max-height:45vh;overflow:auto}
  #fishEditor .table-wrap{max-height:60vh;overflow:auto}
 }
+#fishRulesCard.collapsed{padding:6px 14px}
+#fishRulesCard.collapsed .rules-strip:not(:first-of-type),#fishRulesCard.collapsed #rulesHelp{display:none}
+[hidden]{display:none!important} /* Edge UA 的 [hidden] 无 !important，会被 author display 覆盖 */
+/* 地图区域编辑工作台：画布中心 + 悬浮工具条 + 右侧上下文面板 + 底部状态栏 */
+#fishTabBodyZones{overflow:hidden}
+.zone-workbench{display:flex;flex:1;min-height:0;height:100%}
+.zone-canvas-wrap{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;background:#0a1420;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+#zoneMapStage{position:relative;flex:none;margin:0 auto;background:#08111b;overflow:hidden;cursor:crosshair;user-select:none;touch-action:none;box-shadow:inset 0 0 0 1px #1a2f45}
+#zoneMapStage.tool-pan{cursor:grab}#zoneMapStage.tool-pan:active{cursor:grabbing}
+#zoneMapStage.tool-brush{cursor:cell}
+#zoneMapInner{position:absolute;left:0;top:0;width:2048px;height:2048px;transform-origin:0 0}
+#zoneMapInner img{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#zoneMapInner canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#zoneMapNote{position:absolute;left:0;right:0;top:0;z-index:2;padding:9px 14px;background:#06111de6;border-bottom:1px solid #24384f;color:#cfe3f5;font-size:12.5px;line-height:1.5;pointer-events:none}
+#zoneMapNote b{color:#7fd4ff}
+/* 悬浮工具条（画布左上，Figma 式） */
+.zone-toolbar{position:absolute;left:14px;top:14px;z-index:5;display:flex;flex-direction:column;gap:4px;background:#0e1b29ee;border:1px solid #2a465f;border-radius:12px;padding:6px;box-shadow:0 10px 28px #000a;backdrop-filter:blur(8px)}
+.zone-tool{width:40px;height:40px;border-radius:9px;border:1px solid transparent;background:transparent;color:#9db4c8;display:grid;place-items:center;cursor:pointer;font-size:16px;position:relative;padding:0}
+.zone-tool:hover{background:#14273b;color:#e8f0f8}
+.zone-tool.on{background:#1b4f74;color:#fff;border-color:#3b8fd4}
+.zone-tool .tip{position:absolute;left:48px;top:0;white-space:nowrap;background:#132338f2;border:1px solid #2a465f;border-radius:8px;padding:7px 11px;font-size:12px;color:var(--text);opacity:0;pointer-events:none;transition:opacity .12s;text-align:left;line-height:1.5;z-index:6}
+.zone-tool:hover .tip{opacity:1}
+.zone-tool .tip small{color:var(--muted)}
+.zone-tool-sep{height:1px;background:#24384f;margin:3px 5px}
+/* 底部状态栏 */
+.zone-statusbar{flex:none;display:flex;flex-direction:column;gap:3px;padding:6px 14px;border-top:1px solid var(--line);background:#0b1623;font-size:12px;color:var(--muted)}
+.zs-row{display:flex;align-items:center;gap:12px;min-height:22px;white-space:nowrap;overflow:hidden}
+.zs-row>*{flex:none}
+.zs-row #zmapReadout{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.zs-row .zone-legend{margin-left:auto}
+.zone-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.zone-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+/* 空态引导 */
+.zone-empty-guide{position:absolute;inset:0;z-index:4;display:grid;place-items:center;pointer-events:none}
+.zone-empty-guide .card{position:relative;pointer-events:auto;background:#0e1b29ee;border:1px solid #2a465f;border-radius:14px;padding:22px 26px;max-width:360px;box-shadow:0 18px 44px #000b;backdrop-filter:blur(8px)}
+.zone-empty-guide ol{margin:10px 0 0;padding-left:20px;color:var(--muted);font-size:13px;line-height:2}
+.guide-close{position:absolute;right:10px;top:8px;width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:#132338;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;display:grid;place-items:center;padding:0}
+.guide-close:hover{color:#fff;background:#1d3450}
+/* 右侧上下文面板 */
+.zone-side{flex:none;width:342px;display:flex;flex-direction:column;border-left:1px solid var(--line);background:#0d1927;min-height:0}
+.zone-side-head{flex:none;padding:11px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.zone-side-head b{font-size:14px}
+.zone-side-body{flex:1;min-height:0;overflow:auto;padding:14px}
+.zone-prop-footer{flex:none;padding:10px 14px;border-top:1px solid var(--line);display:flex;gap:8px;background:#0e1b29}
+/* 属性面板分区 */
+.prop-sec{margin-bottom:16px}
+.prop-sec>b{display:block;font-size:11.5px;color:#7a92aa;letter-spacing:.08em;margin-bottom:8px;font-weight:700}
+.seg{display:flex;border:1px solid #2a465f;border-radius:10px;overflow:hidden}
+.seg button{flex:1;border:0;background:transparent;color:var(--muted);padding:9px 0;cursor:pointer;font:inherit;font-size:13px;transition:.12s}
+.seg button.on{background:#1b4f74;color:#fff}
+.btn.mode-on{background:#2f7d4f}
+/* 区域卡片列表：色条 + 中文名药丸（悬停看英文key与权重） */
+.zcard{position:relative;border:1px solid var(--line);border-left:4px solid var(--zc,#37e2b0);border-radius:12px;background:#0e1b29;padding:10px 12px;margin-bottom:10px;cursor:pointer;transition:border-color .12s,background .12s}
+.zcard:hover{background:#122136}
+.zcard.on{outline:2px solid var(--accent);outline-offset:-1px}
+.zcard.off{opacity:.55}
+.zcard .zc-top{display:flex;align-items:center;gap:8px}
+.zcard .zc-top b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px}
+.zcard .zc-range{font-size:11px;color:var(--muted);margin-top:5px;font-family:Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zcard .zc-fish{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.zc-fish .fp{font-size:11px;padding:2.5px 9px;border-radius:999px;background:#1c3148;color:#cfe3f2;cursor:default}
+.zc-fish .fp.w{background:#1f4f6f;color:#bfe4ff}
+.zc-fish .fp.foreign{background:#3a2b14;color:#f0d3a8}
+.zc-fish .fp.more{background:transparent;border:1px dashed #33506b;color:var(--muted)}
+/* 区域列表行选中态（与地图高亮同步） */
+.zone-row{cursor:pointer}
+.zone-row.on{background:#14326f;border-color:#2b5ba8}
+.zone-row.on td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+/* 海图已有区号快捷条：大号数字徽章，点击即编辑 */
+.sea-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.sea-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid #2a4963;border-radius:10px;background:#0e1b29;cursor:pointer;font-weight:650}
+.sea-chip:hover{border-color:var(--accent)}
+.sea-chip .n{font:700 15px Consolas,monospace;color:#7fd4ff}
+.sea-chip.off{opacity:.5}
+.sea-chip small{font-weight:400;color:var(--muted)}
+/* 画布顶部引导条（海图/无图地图说明当前交互方式） */
+#zoneMapNote{position:absolute;left:0;right:0;top:0;z-index:2;padding:9px 14px;background:#06111de6;border-bottom:1px solid #24384f;color:#cfe3f5;font-size:12.5px;line-height:1.5;pointer-events:none}
+#zoneMapNote b{color:#7fd4ff}
+/* 侧栏水域行右侧徽标 */
+.area-badges{display:flex;flex-direction:column;gap:3px;align-items:flex-end;flex:none}
+/* ID 选择器的 display:flex 会压过 [hidden] 的 UA 规则（非 Chromium 内核），
+   页签切换必须显式隐藏，否则两个页签同时渲染撑爆高度 */
+#fishTabBodyRoster[hidden],#fishTabBodyZones[hidden]{display:none!important}
 @media(max-width:720px){#view-fish .fish-layout{grid-template-columns:minmax(0,1fr)!important}#view-dashboard .duo{grid-template-columns:minmax(0,1fr)!important}#paramsBody .tunable-field{display:block}#paramsBody .tunable-field>div:last-child{margin-top:8px;width:100%}#paramsBody .tunable-field input{width:auto;min-width:50px;flex:1}}
 /* 侧栏两行导航：名称 + 一句功能说明 */
 .nav button .txt{display:flex;flex-direction:column;align-items:flex-start;min-width:0}
@@ -168,7 +254,7 @@ body.notice-on #view-fish.on{height:max(600px,calc(100vh - 204px))}
     </section>
     <section class="view" id="view-players"><div class="split"><div class="card player-list"><div class="toolbar"><input class="grow" id="playerSearch" placeholder="搜索 UID / 昵称" onkeydown="if(event.key==='Enter')loadPlayers()"><button class="btn sm" onclick="loadPlayers()">搜索</button><span class="legend"><span class="online-dot on"></span>在线<span class="online-dot off"></span>不在线</span></div><div id="playerList" style="margin-top:12px"></div></div><div class="card" id="playerDetail"><div class="empty">选择左侧玩家开始管理</div></div></div></section>
     <section class="view" id="view-stores"><div class="card"><div class="toolbar"><select id="storeSelect" class="grow" onchange="loadStoreItems()"></select><input id="storeSearch" placeholder="搜索商品 / 名称" onkeydown="if(event.key==='Enter')loadStoreItems()"><button class="btn" onclick="loadStoreItems()">查询</button></div><div id="storeSummary" class="muted" style="margin:12px 0"></div><div class="table-wrap" id="storeTable"></div></div></section>
-    <section class="view" id="view-fish"><div class="card" id="fishRulesCard" style="margin-bottom:12px"><div class="rules-strip"><h2>鱼群规则</h2><label class="rule-item"><span>鱼群随机分布</span><input type="checkbox" class="switch" id="fishDistributionSwitch" disabled onchange="toggleFishRules('distribution',this)"></label><label class="rule-item"><span>鱼类吃饵偏好</span><input type="checkbox" class="switch" id="fishRulesSwitch" disabled onchange="toggleFishRules('bait',this)"></label><label class="rule-item"><span>天气与温度鱼口</span><input type="checkbox" class="switch" id="fishWeatherSwitch" disabled onchange="toggleFishRules('weather',this)"></label><label class="rule-item"><span>欢乐时光</span><input type="checkbox" class="switch" id="happyHourSwitch" disabled onchange="toggleFishRules('happy',this)"></label><small class="muted" id="rulesStatus"></small><button class="btn alt sm" id="rulesHelpBtn" aria-expanded="false" onclick="toggleRulesHelp()">说明 ⌄</button></div><div id="rulesHelp" hidden><p class="muted" style="margin:0 0 8px">各项独立保存；天气、饵料和分布规则默认关闭，欢乐时光默认开启。</p><div class="rule-help"><b>鱼群随机分布</b><span id="fishDistributionMessage" role="status">正在读取开关。</span></div><div class="rule-help"><b>鱼类吃饵偏好</b><span id="fishRulesMessage" role="status">正在读取开关。</span></div><div class="rule-help"><b>天气与温度鱼口</b><span id="fishWeatherMessage" role="status">正在读取开关。</span></div><div class="rule-help"><b>欢乐时光</b><span id="happyHourMessage" role="status">正在读取开关。</span></div></div></div><div class="grid fish-layout" style="grid-template-columns:270px minmax(0,1fr)"><div class="card"><div class="section-head"><h2>水域</h2></div><input id="fishSearch" placeholder="筛选水域" oninput="renderFishAreas()"><div id="fishAreas"></div></div><div class="card" id="fishEditor"><div class="empty">选择水域配置鱼口</div></div></div></section>
+    <section class="view" id="view-fish"><div class="card" id="fishRulesCard" style="margin-bottom:12px"><div class="rules-strip"><h2>鱼口模式</h2><span id="biteModeInline" style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap"><span id="biteModeBody">读取中…</span></span><small class="muted" id="biteModeStatus"></small></div><div class="rules-strip" style="margin-top:8px"><label class="rule-item"><span>硬性鱼口约束</span><input type="checkbox" class="switch" id="biteGateSwitch" disabled onchange="toggleFishRules('gate',this)"></label><label class="rule-item"><span>逐鱼种生态</span><input type="checkbox" class="switch" id="fishEcologySwitch" disabled onchange="toggleFishRules('ecology',this)"></label><label class="rule-item"><span>鱼群随机分布</span><input type="checkbox" class="switch" id="fishDistributionSwitch" disabled onchange="toggleFishRules('distribution',this)"></label><label class="rule-item"><span>鱼类吃饵偏好</span><input type="checkbox" class="switch" id="fishRulesSwitch" disabled onchange="toggleFishRules('bait',this)"></label><label class="rule-item"><span>天气与温度鱼口</span><input type="checkbox" class="switch" id="fishWeatherSwitch" disabled onchange="toggleFishRules('weather',this)"></label><label class="rule-item"><span>欢乐时光</span><input type="checkbox" class="switch" id="happyHourSwitch" disabled onchange="toggleFishRules('happy',this)"></label><small class="muted" id="rulesStatus"></small><button class="btn alt sm" id="rulesHelpBtn" aria-expanded="false" onclick="toggleRulesHelp()">说明 ⌄</button></div><div id="rulesHelp" hidden><p class="muted" style="margin:0 0 8px">各项独立保存；硬性约束、生态、天气、饵料和分布规则默认关闭，欢乐时光默认开启。上方「鱼口模式」一键切换五项组合。</p><div class="rule-help"><b>硬性鱼口约束</b><span id="biteGateMessage" role="status">正在读取开关。</span></div><div class="rule-help"><b>逐鱼种生态</b><span id="fishEcologyMessage" role="status">正在读取开关。</span></div><div class="rule-help"><b>鱼群随机分布</b><span id="fishDistributionMessage" role="status">正在读取开关。</span></div><div class="rule-help"><b>鱼类吃饵偏好</b><span id="fishRulesMessage" role="status">正在读取开关。</span></div><div class="rule-help"><b>天气与温度鱼口</b><span id="fishWeatherMessage" role="status">正在读取开关。</span></div><div class="rule-help"><b>欢乐时光</b><span id="happyHourMessage" role="status">正在读取开关。</span></div></div></div><div class="grid fish-layout" style="grid-template-columns:270px minmax(0,1fr)"><div class="card"><div class="section-head"><h2>水域</h2></div><input id="fishSearch" placeholder="筛选水域" oninput="renderFishAreas()"><div id="fishAreas"></div></div><div class="card" id="fishEditor"><div class="empty">选择水域配置鱼口</div></div></div></section>
     <section class="view" id="view-hooks"><div class="card"><div class="section-head"><div><h2>真实钩子型号档案</h2><small>物理数据来自 item_def；倍率和兜底值只影响咬口，不改钩子拉力</small></div></div><div class="toolbar"><input class="grow" id="hookSearch" placeholder="搜索 item_id / 厂牌，如 triple_20686、simmons" onkeydown="if(event.key==='Enter')loadHookProfiles()"><select id="hookSize"><option value="">全部尺寸</option></select><select id="hookFamily"><option value="">全部钩型族</option><option value="classic">Classic</option><option value="carp">Carp</option><option value="treble">Treble</option><option value="jighead">Jighead</option><option value="offset">Offset</option><option value="marine">Marine</option><option value="other">Other</option></select><button class="btn" onclick="loadHookProfiles()">查询</button></div><p class="muted" style="margin:10px 0">默认倍率 1.0、兜底值 0；修改后写入审计，最多 30 秒由主服热加载。入口容量按真实钩体长度计算。</p><div class="table-wrap" id="hookProfilesTable"><div class="empty">读取中…</div></div></div></section>
     <section class="view" id="view-bait"><div class="card"><div class="section-head"><div><h2>鱼饵偏好</h2><small id="baitSummary" class="muted">正在读取…</small></div></div><div class="toolbar"><input class="grow" id="baitSearch" placeholder="搜索鱼种 key / 中文名，如 pike、狗鱼" onkeydown="if(event.key==='Enter')loadBaitPrefs()"><input id="baitLoc" placeholder="水域（可选）" onkeydown="if(event.key==='Enter')loadBaitPrefs()"><select id="baitFilter" onchange="loadBaitPrefs()"><option value="">全部鱼种</option><option value="tier3">有 tier3 饵</option><option value="norule">规则表无条目</option><option value="rule">规则表有条目</option></select><button class="btn" onclick="loadBaitPrefs()">查询</button></div><p class="muted" style="margin:10px 0">规则来自编译进服务端的 fishing_bait_rules.txt（严格模式生效）；tier 来自 companion_bait_fish 实证（tier3 权重×8 / tier2 ×4 / 在列 ×2）；「证据」是实证条数。点击行展开全部饵；点右侧「编辑」可改吃/不吃/底钓只吃并配置多组轮换。</p><div class="table-wrap" id="baitTable"></div></div></section>
     <section class="view" id="view-mail"><div class="mail-box"><div class="card"><div class="section-head"><h2>撰写邮件</h2><small>队列约 2 秒内由主服投递</small></div><div class="form-grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>收件人 UID</label><input id="mailUid" type="number"></div><div class="field"><label>快捷载入玩家</label><input id="mailPlayerSearch" placeholder="搜索并回车" onkeydown="if(event.key==='Enter')findMailPlayer()"></div></div><div class="field" style="margin-top:12px"><label>邮件正文</label><textarea id="mailText" placeholder="写给玩家的消息…"></textarea></div><div class="section-head" style="margin-top:14px"><h2>附件</h2><button class="btn alt sm" onclick="addAttachment()">+ 添加附件</button></div><div id="attachments"></div><div class="actions"><button class="btn good" onclick="sendMail()">发送邮件</button><button class="btn alt" onclick="previewMail()">预览</button></div></div><div class="card"><div class="section-head"><h2>发送预览</h2></div><div id="mailPreview" class="empty">填写邮件后点击预览</div><div class="section-head" style="margin-top:20px"><h2>常用模板</h2></div><div class="actions"><button class="btn alt sm" onclick="mailTemplate('补偿')">补偿邮件</button><button class="btn alt sm" onclick="mailTemplate('活动奖励')">活动奖励</button><button class="btn alt sm" onclick="mailTemplate('测试')">测试邮件</button></div></div></div></section>
@@ -183,7 +269,7 @@ body.notice-on #view-fish.on{height:max(600px,calc(100vh - 204px))}
 <script>
 let REFRESH_TIMER=null;
 let TOKEN=localStorage.getItem('rf4_admin_token')||'';
-let VIEW='dashboard',PLAYER=null,PLAYER_TAB='profile',FISH_AREA='',FISH_CFG=null,FISH_DIRTY=false,STORE_ITEMS=[],HOOK_PROFILES=[],HOOK_EDIT_ID='';
+let VIEW='dashboard',PLAYER=null,PLAYER_TAB='profile',FISH_AREA='',FISH_CFG=null,FISH_DIRTY=false,STORE_ITEMS=[],HOOK_PROFILES=[],HOOK_EDIT_ID='',FISH_ZONES=null,ZONE_EDIT=null;
 const $=s=>document.querySelector(s);
 for(let i=0;i<=33;i++)$('#hookSize').insertAdjacentHTML('beforeend',`<option value="${i}">${i}</option>`);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -315,6 +401,12 @@ const TUNABLE_DEFS=[
   ['bite_delay_lure_max','路亚上限秒',6,'路亚钓法等待的秒数上限'],
   ['bait_pref_scale','饵效强度',1,'0=鱼不看饵；1=标准效果，按饵料偏好筛鱼'],
   ['bait_pref_weight_shift','饵效偏大体型',1,'越大越偏向个体大的鱼咬钩'],
+  ['bite_gate_lure_diet_min','拟饵食性门槛',0.3,'硬性鱼口约束开启时，生态食性 lure 权重低于该值的鱼不攻拟饵（泥鳅0.20、鲤族0 被剔除；狗鱼2.07、江鳕0.63 保留）。范围 0~1'],
+  ['bite_gate_layer_floor','水层超界杂口',0.01,'硬性鱼口约束开启时，钓层落在鱼种栖息水层范围±0.15 之外时权重乘该系数；0=完全杜绝，0.01=保留约1%极小杂口'],
+  ['bite_gate_diet_min','天然饵食性门槛',0.25,'双票生态票门槛：diet_json 对应食性权重≥该值算「生态认」。0.25 高于合成基线 0.2 噪声地板。范围 0~1'],
+  ['bite_gate_diet_floor','单票小口系数',0.05,'攻略证据与生态食性只认一边时权重乘该系数；两边都不认或明确禁饵则整鱼剔除'],
+  ['bite_empty_retry_scale','空轮重排倍率',1,'空轮（无符合条件的鱼）后下一轮等待时间的倍率：0.25=空轮 5 秒重试（正常 20 秒上限不变）；1=与正常咬钩同节奏'],
+  ['bite_gate_pity_rounds','保底杂口轮数',0,'连续空杆 N 轮后放宽环境因素（分布散布/水层地板）重掷一次保口；0=关闭。食性硬门不放宽：泥鳅永不攻拟饵'],
   ['fish_weight_scale','鱼体重倍率',1,'全地图鱼重整体缩放，2=两倍重'],
   ['fish_weight_cap','鱼重受钓具上限',0,'1=超出钓具负重的鱼按上限截断；0=不限制'],
   ['electric_locked_multiplier','电轮锁轮倍率',3,'电轮锁轮有效承力=当前机械承力与电机承力较小者的该倍率；默认3'],
@@ -402,18 +494,66 @@ function baitRuleHTML(r){
 function renderBaitTable(){
   const el=$('#baitTable');
   if(!BAIT_ROWS.length){el.innerHTML=baitBanner()+'<div class="empty">没有匹配的鱼种</div>';return}
-  const head='<table><colgroup><col style="width:22%"><col style="width:40%"><col style="width:22%"><col style="width:16%"></colgroup>'+
-    '<thead><tr><th>鱼种</th><th>规则（严格模式）</th><th>饵效证据</th><th>水域</th></tr></thead><tbody>';
+  const head='<table><colgroup><col style="width:16%"><col style="width:27%"><col style="width:22%"><col style="width:14%"><col style="width:12%"><col style="width:9%"></colgroup>'+
+    '<thead><tr><th>鱼种</th><th>规则（严格模式）</th><th>偏好口（按类）</th><th>饵效证据</th><th>水域</th><th>水层</th></tr></thead><tbody>';
   const body=BAIT_ROWS.map(r=>{
     const ev=`<div>${baitTierBadge(3)}${r.tier3} ${baitTierBadge(2)}${r.tier2} <span class="muted">共 ${r.total}</span></div>`+
       `<div class="muted clamp" style="font-size:12px">${esc((r.baits||[]).map(b=>b.bait_id).join('、')||'—')}</div>`;
     const open=BAIT_OPEN.has(r.fish_key);
-    const detail=open?`<tr><td colspan="4" style="background:#0b1623"><b>证据最强的饵（tier/条数）</b><div class="muted" style="margin-top:6px">${esc((r.baits||[]).map(b=>`${b.bait_id}(T${b.tier}/${b.evidence})`).join('  ·  ')||'—')}</div><div class="muted" style="margin-top:6px">严格模式可咬：${r.in_strict?'是':'否'} · 规则命中：${r.has_rule?'是':'否'} · 规则来源：${r.source==='override'?'后台覆盖':'内置'}</div></td></tr>`:'';
+    const CLASSES=[['lure','拟饵','#b28dff'],['worm','蠕虫','#9ddca0'],['fish','饵鱼','#7bdff2'],['boilie','煮饵','#ffd166'],['plant','植物','#7ee08a'],['crustacean','甲壳','#f78fb3']];
+    const dietHTML=r.diet?CLASSES
+      .filter(([k])=>(r.diet[k]||0)>0.2)
+      .sort((a,b)=>(r.diet[b[0]]||0)-(r.diet[a[0]]||0))
+      .slice(0,3)
+      .map(([k,zhl,c])=>`<span class="pill" style="background:${c}22;color:${c};border:1px solid ${c}55;margin:1px 0" title="${zhl} ${(r.diet[k]||0).toFixed(2)}">${zhl}${k==='lure'?(r.lure_ok?'✓':'✗'):' '+(r.diet[k]||0).toFixed(1)}</span>`).join(' ')
+      +(r.diet.lure!==undefined?` <span class="pill ${r.lure_ok?'ok':''}" title="G1 硬门：拟饵食性 ${(r.diet.lure||0).toFixed(2)} ${r.lure_ok?'≥0.30 会攻拟饵':'<0.30 不攻拟饵'}">${r.lure_ok?'攻拟饵':'不攻拟饵'}</span>`:'')
+      :'<span class="muted">无档案</span>';
+    const layerHTML=r.layer&&(r.layer[2]||r.layer[0])?`<div title="活动 ${(r.layer[0]||0).toFixed(2)}~${(r.layer[2]||0).toFixed(2)} 偏好 ${(r.layer[1]||0).toFixed(2)}（0水面~1水底，黄线=偏好）" style="position:relative;height:14px;border-radius:7px;background:#0a1521;min-width:64px">
+      <div style="position:absolute;left:${Math.max(0,r.layer[0]*100)}%;width:${Math.max(2,(Math.min(1,r.layer[2])-Math.max(0,r.layer[0]))*100)}%;top:2px;bottom:2px;background:linear-gradient(90deg,#2f7d5f,#2f7d9f);border-radius:5px"></div>
+      <div style="position:absolute;left:calc(${Math.max(0,Math.min(1,r.layer[1])*100)}% - 1.5px);top:0;bottom:0;width:3px;background:#ffe3a0;border-radius:2px"></div>
+    </div>`:'<span class="muted">—</span>';
+    const bar=(k,zhl)=>{
+      const v=r.diet?(r.diet[k]||0):0, gate=k==='lure'?0.30:0.25, over=v>=gate;
+      return `<div style="display:flex;align-items:center;gap:8px;font-size:11.5px">
+        <span style="width:36px;color:var(--muted)">${zhl}</span>
+        <div style="flex:1;height:9px;border-radius:5px;background:#0a1521;position:relative;overflow:hidden">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:${Math.min(100,v/2.2*100)}%;background:${over?'linear-gradient(90deg,#25805e,#2fb584)':'#3a4a5c'};border-radius:5px"></div>
+          <div style="position:absolute;left:${gate/2.2*100}%;top:0;bottom:0;width:2px;background:#ffbb55"></div>
+        </div>
+        <b style="width:40px;text-align:right;font-family:Consolas,monospace;color:${over?'#7ee0b0':'var(--muted)'}">${v.toFixed(2)}</b>
+      </div>`;
+    };
+    const detail=(!open)?'':`<tr><td colspan="6" style="background:#0b1623;padding:14px 18px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 34px">
+        <div>
+          <b style="font-size:12px;color:#7a92aa">食性画像（与判鱼 G 层同源 · 黄线=门槛 0.25 / 拟饵 0.30）</b>
+          <div style="margin-top:8px;display:grid;gap:5px">${CLASSES.map(([k,zhl])=>bar(k,zhl)).join('')}</div>
+          <div class="muted" style="font-size:11px;margin-top:6px">${r.lure_ok?'✅ 此鱼会攻拟饵':'⛔ 此鱼不攻拟饵（G1 硬门剔除，泥鳅类永不咬亮片）'}；灰条=不过门槛（天然饵双票里只算杂口）</div>
+          <div class="muted" style="font-size:11px;margin-top:6px">证据最强的饵：${esc((r.baits||[]).map(b=>`${b.bait_id}(T${b.tier}/${b.evidence})`).join(' · ')||'—')} ｜ 严格模式可咬：${r.in_strict?'是':'否'} · 规则来源：${r.source==='override'?'后台覆盖':'内置'}</div>
+        </div>
+        <div>
+          <b style="font-size:12px;color:#7a92aa">水层（G2 地板判定源 · 浅色带=±0.15 容差）</b>
+          <div style="margin-top:8px;position:relative;height:22px;border-radius:11px;background:#0a1521;overflow:hidden">
+            <div style="position:absolute;left:${Math.max(0,(r.layer[0]-0.15)*100)}%;right:${Math.max(0,100-Math.min(1,r.layer[2]+0.15)*100)}%;top:3px;bottom:3px;background:#1b4f6f55;border-radius:8px"></div>
+            <div style="position:absolute;left:${Math.max(0,r.layer[0]*100)}%;width:${Math.max(2,(Math.min(1,r.layer[2])-Math.max(0,r.layer[0]))*100)}%;top:3px;bottom:3px;background:linear-gradient(90deg,#2f7d5f,#2f7d9f);border-radius:8px"></div>
+            <div style="position:absolute;left:calc(${Math.max(0,Math.min(1,r.layer[1])*100)}% - 1.5px);top:0;bottom:0;width:3px;background:#ffe3a0"></div>
+            <span style="position:absolute;left:6px;top:4px;font-size:10px;color:#6f88a0">水面</span>
+            <span style="position:absolute;right:6px;top:4px;font-size:10px;color:#6f88a0">水底</span>
+          </div>
+          <div class="muted" style="font-size:11px;margin-top:4px">活动 ${(r.layer[0]||0).toFixed(2)}~${(r.layer[2]||0).toFixed(2)} · 偏好 ${(r.layer[1]||0).toFixed(2)}；钓层在容差带外权重×0.01（只剩极小杂口）</div>
+          ${r.qual_g?`<div style="margin-top:10px"><b style="font-size:12px;color:#7a92aa">钩容量适配（物理计算，非实证）</b>
+          <div class="muted" style="font-size:11.5px;margin-top:4px">合格档 <b style="color:var(--text)">${fmt(r.qual_g)}g</b> → 钩入口容量 <b style="color:var(--text)">${fmt(r.qual_g)}~${fmt(r.qual_g*4)}g</b> 全兼容${r.trophy_g?`；奖杯档 ${fmt(r.trophy_g)}g → ${fmt(r.trophy_g)}~${fmt(r.trophy_g*4)}g`:''}</div>
+          <div class="muted" style="font-size:11px">在「钩子手感」页按入口容量对照；容量<鱼重掉保持率，>4×鱼重小口钩化</div></div>`:''}
+          <div class="muted" style="font-size:11px;margin-top:8px">🎣 常用钩型：实证记录已开启（结算自动记钩），积累后在此展示——不做猜测推荐</div>
+        </div>
+      </div>
+    </td></tr>`;
     const row=`<tr class="${open?'ba-open':''}" onclick="toggleBaitRow('${esc(r.fish_key)}')" style="cursor:pointer">`+
       `<td><div class="bait-head"><div><b>${esc(r.name_zh)}</b><div class="muted" style="font-size:12px">${esc(r.fish_key)}</div></div>`+
       `<button class="btn alt sm bait-edit" onclick="event.stopPropagation();editBaitRule('${esc(r.fish_key)}')">编辑</button></div></td>`+
-      `<td>${baitRuleHTML(r)}</td><td>${ev}</td>`+
-      `<td class="muted" style="font-size:12px"><div class="clamp">${esc((r.locs||[]).join('、')||'—')}</div></td></tr>`;
+      `<td>${baitRuleHTML(r)}</td><td><div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">${dietHTML}</div></td><td>${ev}</td>`+
+      `<td class="muted" style="font-size:12px"><div class="clamp">${esc((r.locs||[]).join('、')||'—')}</div></td>`+
+      `<td>${layerHTML}</td></tr>`;
     return row+detail;
   }).join('');
   el.innerHTML=baitBanner()+head+body+'</tbody></table>';
@@ -774,7 +914,7 @@ async function loadTunables(){
  // 全部一次性渲染进 DOM，Tab 只切显隐（见 setParamsPage），避免缓存与重绘。
  const PAGES=[
   {id:'gameplay',tab:'玩法与钓组',sub:'咬钩 · 手感 · 电轮 · 摩擦片磨损',groups:[
-    ['玩法手感','咬钩快慢、饵料偏好、鱼的大小与挣扎力度',['bite_probability','bite_delay_fixed','bite_delay_scale','bite_delay_max','bite_delay_lure_max','bait_pref_scale','bait_pref_weight_shift','fish_weight_scale','fish_weight_cap','fight_power_scale','fish_pull_ln_slope','fish_pull_fallback_k','fish_initial_stamina_ratio']],
+    ['玩法手感','咬钩快慢、饵料偏好、鱼的大小与挣扎力度',['bite_probability','bite_delay_fixed','bite_delay_scale','bite_delay_max','bite_delay_lure_max','bait_pref_scale','bait_pref_weight_shift','bite_gate_lure_diet_min','bite_gate_layer_floor','fish_weight_scale','fish_weight_cap','fight_power_scale','fish_pull_ln_slope','fish_pull_fallback_k','fish_initial_stamina_ratio']],
     ['钩型与咬口','嘬饵总开关与发鱼软匹配；后台钩型倍率仍独立生效',['hook_nibble_enabled','hook_spawn_match_strength']],
     ['电轮参数','电轮锁轮倍率与电机功率折算；改后最多 30 秒生效',['electric_locked_multiplier','electric_motor_kg_per_power']],
     ['摩擦片磨损','泄力打滑通道的系数（2026-11-12 拍平：速率不分档位，旧档位键 reel_slip_wear_low/s25~s28/max 已停用不再读取）；改后最多 30 秒生效，只影响后续结算',['reel_slip_wear','reel_slip_calibration_seconds','reel_slip_deadband_ratio']],
@@ -1129,6 +1269,8 @@ async function resetStoreRow(i){
 }
 let FISH_AREAS=[];
 const FISH_RULE_SWITCHES={
+  gate:{key:'bite_gate_enabled',prefix:'biteGate',enabled:null,on:'硬性资格门：拟饵不再被非掠食鱼（泥鳅、鲤族）攻击；水层超界只保留约1%极小杂口。推荐与吃饵偏好/生态/天气/分布一起开启。',off:'不做硬性约束，任何鱼都可能咬任何饵（旧版手感）。'},
+  ecology:{key:'fish_ecology_enabled',prefix:'fishEcology',enabled:null,on:'启用 252 种鱼的水层/昼夜/季节/天气/底质/拟饵动作等生态权重，影响吃口与候选鱼种。',off:'生态因子全部中性，不影响判鱼。'},
   weather:{key:'fish_weather_enabled',prefix:'fishWeather',enabled:null,on:'按游戏内温度、天气和鱼种习性影响吃口；底钓、浮钓会间歇试口。',off:'关闭天气鱼口修正，沿用原来的一次判鱼流程。'},
   distribution:{key:'fish_distribution_enabled',prefix:'fishDistribution',enabled:null,on:'按地图鱼种、所在区域和游戏昼夜变化鱼口，每四个游戏小时重新分布。',off:'沿用现有分布，各处水域可出鱼，不增加点位限制。'},
   bait:{key:'fish_bait_rules_enabled',prefix:'fishRules',enabled:null,on:'根据钩上饵料筛选鱼种。',off:'沿用现有吃饵逻辑，不增加吃饵限制。'},
@@ -1150,6 +1292,37 @@ async function loadFishRules(){
   }
 }
 function toggleRulesHelp(){const h=$('#rulesHelp'),b=$('#rulesHelpBtn');h.hidden=!h.hidden;b.setAttribute('aria-expanded',String(!h.hidden));b.textContent=h.hidden?'说明 ⌄':'收起 ⌃';}
+// ---- 鱼汛模式二选一（真实 / 旧版全随机）----
+const BITE_MODE_OPTIONS=[
+ ['realistic','真实鱼汛','硬性门+生态+天气+吃饵+分布五开：拟饵不喂非掠食鱼、天然饵按双票、钓层/天气/昼夜/区域都参与判鱼'],
+ ['legacy','全随机（旧版）','五个开关全关：任何鱼都可能咬任何饵，全图名册纯随机出鱼——改造之前的旧版手感']
+];
+let BITE_MODE='';
+async function loadBiteMode(){
+  const el=$('#biteModeBody');if(!el)return;
+  try{
+    const data=await api('/api/fish/bite_mode');
+    BITE_MODE=data.mode||'legacy';
+    renderBiteMode();
+  }catch(e){el.innerHTML='<div class="empty">读取失败：'+esc(e.message)+'</div>'}
+}
+function renderBiteMode(){
+  const btns=BITE_MODE_OPTIONS.map(([m,label,hint])=>`<button class="btn sm" style="${BITE_MODE===m?'background:#2f7d4f':''}" onclick="askBiteMode('${m}')" title="${hint}">${label}${BITE_MODE===m?' ✓':''}</button>`).join('');
+  $('#biteModeBody').innerHTML=`<span style="display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center">${btns}</span>`;
+  const st=$('#biteModeStatus');
+  if(st)st.textContent=BITE_MODE==='mixed'?'开关被手动改过，与预设不一致；点任一模式整体改写':'一键切换五项开关，最多 30 秒生效';
+}
+async function askBiteMode(mode){
+  const opt=BITE_MODE_OPTIONS.find(o=>o[0]===mode);if(!opt)return;
+  if(BITE_MODE===mode){toast('当前已是「'+opt[1]+'」模式');return}
+  askConfirm('切换鱼汛模式','切换为「'+opt[1]+'」？会整体改写五个鱼口开关。',async()=>{
+    try{
+      await api('/api/fish/bite_mode',{method:'POST',body:JSON.stringify({mode})});
+      toast('鱼汛模式已切换为「'+opt[1]+'」，最多 30 秒生效');
+      await loadBiteMode();await loadFishRules();
+    }catch(e){toast(e.message,'bad')}
+  });
+}
 async function toggleFishRules(kind,el){
   const x=FISH_RULE_SWITCHES[kind];if(!x||x.enabled===null||el.disabled)return;
   el.disabled=true;
@@ -1217,7 +1390,10 @@ function baitSummaryHTML(key,row){
 }
 async function loadFishAreas(){
   await loadFishRules();
-  FISH_AREAS=await api('/api/fish/areas');renderFishAreas();
+  loadBiteMode().catch(()=>null);
+  // 先把区域名册拉全（侧栏徽标要用区域数），失败不阻塞水域列表
+  const [areas]=await Promise.all([api('/api/fish/areas'),loadFishZones().catch(()=>null)]);
+  FISH_AREAS=areas;renderFishAreas();
   // 默认选中展示顺序（游戏地图序）的第一个水域，而不是接口返回顺序的第一个
   if(!FISH_AREA&&FISH_AREAS.length){
     const orderOf=x=>{const i=FISH_AREA_ORDER.indexOf(x.loc);return i<0?FISH_AREA_ORDER.length:i};
@@ -1231,31 +1407,117 @@ function renderFishAreas(){
   const q=($('#fishSearch')?.value||'').toLowerCase();
   const orderOf=x=>{const i=FISH_AREA_ORDER.indexOf(x.loc);return i<0?FISH_AREA_ORDER.length:i;};
   const rows=FISH_AREAS.filter(x=>x.loc.toLowerCase().includes(q)).map((x,i)=>({x,i})).sort((a,b)=>orderOf(a.x)-orderOf(b.x)||a.i-b.i).map(e=>e.x);
-  $('#fishAreas').innerHTML=rows.map(x=>`<div class="player-row ${FISH_AREA===x.loc?'on':''}" data-loc="${esc(x.loc)}" onclick="selectFishArea(this.dataset.loc)"><div><div class="n mono">${esc(x.loc)}</div><div class="id">${x.fish_count} 个鱼种</div></div></div>`).join('')||'<div class="empty">没有匹配水域</div>';
+  const zoneCount=loc=>(FISH_ZONES||[]).filter(z=>z.loc===loc).length;
+  $('#fishAreas').innerHTML=rows.map(x=>{
+    const n=zoneCount(x.loc);
+    const badges=`<div class="area-badges">${x.map_kind==='sea'?'<span class="pill" title="海图：按声呐区号划区">⚓ 海图</span>':x.map_kind==='none'?'<span class="pill" title="无纸地图标定：手动输入网格">无图</span>':''}${n?`<span class="pill ${x.loc===FISH_AREA?'ok':''}" title="${n} 个区域">${n} 区</span>`:''}</div>`;
+    return `<div class="player-row ${FISH_AREA===x.loc?'on':''}" data-loc="${esc(x.loc)}" onclick="selectFishArea(this.dataset.loc)"><div><div class="n">${esc(x.loc)}</div><div class="id">${x.fish_count} 个鱼种</div></div>${badges}</div>`;
+  }).join('')||'<div class="empty">没有匹配水域</div>';
   // 选中项不在列表可视区时滚过去，避免“编辑器显示 A、列表里 A 不可见”
   const sel=$('#fishAreas .player-row.on');if(sel)sel.scrollIntoView({block:'nearest'});
 }
 async function selectFishArea(loc,force=false){
-  // 未保存守卫：有改动时切换水域先确认，避免静默丢编辑
-  if(!force&&FISH_DIRTY&&loc!==FISH_AREA){
-    askConfirm('放弃未保存的修改','「'+FISH_AREA+'」的鱼口修改尚未保存，切换水域后将丢失。',async()=>{await selectFishArea(loc,true)});
+  // 未保存守卫：鱼种页或区域面板有改动时切换水域先确认，避免静默丢编辑
+  if(!force&&(FISH_DIRTY||ZONE_DIRTY)&&loc!==FISH_AREA){
+    askConfirm('放弃未保存的修改','「'+FISH_AREA+'」的修改尚未保存，切换水域后将丢失。',async()=>{await selectFishArea(loc,true)});
     return;
   }
-  FISH_DIRTY=false;FISH_AREA=loc;renderFishAreas();
+  FISH_DIRTY=false;ZONE_DIRTY=false;FISH_AREA=loc;renderFishAreas();
   // 鱼种行的"爱吃的饵"列依赖饵效映射；失败不影响鱼口编辑。
   const [cfg]=await Promise.all([api('/api/fish/config?loc='+encodeURIComponent(loc)),ensureBaitMap().catch(()=>null)]);
   FISH_CFG=cfg;
   renderFishEditor();
 }
+let FISH_TAB='roster';
+// 页签骨架只建一次：左侧纸地图画布（网格/区域/拖拽三层 canvas），右侧区域列表+内联编辑面板
+function ensureFishTabs(){
+  if($('#fishTabRoster'))return;
+  $('#fishEditor').innerHTML=`<div class="tabs" id="fishTabs"><button id="fishTabRoster" class="on" onclick="setFishTab('roster')">鱼种名册</button><button id="fishTabZones" onclick="setFishTab('zones')">地图区域</button></div>
+    <div id="fishTabBodyRoster"></div>
+    <div id="fishTabBodyZones" hidden><div class="zone-workbench">
+      <div class="zone-canvas-wrap">
+        <div class="zone-toolbar">
+          <button class="zone-tool on" id="ztool-select" onclick="zmapSetTool('select')" aria-label="选择/画矩形">▣<span class="tip">选择 / 画矩形（V）<br><small>点选已有区 · 空白处拖拽画矩形</small></span></button>
+          <button class="zone-tool" id="ztool-brush" onclick="zmapSetTool('brush')" aria-label="刷子">🖌<span class="tip">刷子（B）<br><small>涂抹 40m 格子 · Alt=擦除</small></span></button>
+          <button class="zone-tool" id="ztool-circle" onclick="zmapSetTool('circle')" aria-label="圆形区">◯<span class="tip">圆形区（C）<br><small>按住定圆心拖出半径 · 米级精度，适合坑/窄口</small></span></button>
+          <button class="zone-tool" id="ztool-pan" onclick="zmapSetTool('pan')" aria-label="平移">✋<span class="tip">平移（H）<br><small>拖动地图 · 滚轮缩放随时可用</small></span></button>
+          <div class="zone-tool-sep"></div>
+          <button class="zone-tool" onclick="zmapZoomStep(1.35)" aria-label="放大">＋<span class="tip">放大</span></button>
+          <button class="zone-tool" onclick="zmapZoomStep(1/1.35)" aria-label="缩小">－<span class="tip">缩小</span></button>
+          <button class="zone-tool" onclick="zmapResetView()" aria-label="复位">⤢<span class="tip">复位视图</span></button>
+        </div>
+        <div class="zone-empty-guide" id="zoneEmptyGuide" hidden><div class="card">
+          <button class="guide-close" onclick="zoneHideGuide()" aria-label="关闭引导">×</button><b style="font-size:15px">在这张图上划出你的第一块钓鱼区</b>
+          <ol><li>选左侧 <b>▣</b> 工具，在地图空白处拖一个矩形（或 <b>🖌</b> 刷子涂任意形状）</li>
+          <li>右侧给区域起名、选「独占 / 增益」</li>
+          <li>从本图名册挑鱼种，保存即生效（约 30 秒）</li></ol>
+        </div></div>
+        <div id="zoneMapStage"><div id="zoneMapInner"><div id="zoneMapNote" hidden></div><img id="zoneMapImg" alt="纸地图" draggable="false"><canvas id="zoneMapGrid"></canvas><canvas id="zoneMapZonesCv"></canvas><canvas id="zoneMapDraftCv"></canvas></div></div>
+        <div class="zone-statusbar">
+          <div class="zs-row">
+            <span id="zmapReadout">—</span>
+            <span class="toolbar" style="gap:5px" title="填游戏内 HUD 坐标（如 81:61），在图上钉十字核对站位——校验区域与游戏坐标是否对得上">🎯<input id="zmapPinInput" placeholder="定位 x:z" style="width:88px;padding:4px 7px;font-size:12px" onchange="zmapPin(this.value)"><button class="btn alt sm" style="padding:4px 8px" onclick="zmapPin('')">清除</button></span>
+          </div>
+          <div class="zs-row">
+            <span id="zoneMapMeta"></span>
+            <span id="zoneOverlapNote" style="color:#ff9f9f"></span>
+            <span id="zoneLegend" style="margin-left:auto"></span>
+          </div>
+        </div>
+      </div>
+      <aside class="zone-side">
+        <div class="zone-side-head">
+          <div><b id="zoneSideTitle">区域</b><small id="zoneMapTitle" style="margin-left:8px;color:var(--muted)"></small></div>
+          <div class="toolbar" style="gap:6px">
+            <button class="btn sm" id="zoneSeaNowBtn" onclick="zoneShowMe()" hidden title="高亮你当前所在的海图区号（实时读客户端上报），再确认建区——不用在图上找格子">📡 我在哪</button>
+            <button class="btn sm" id="zoneSeaLatestBtn" onclick="zoneFromLatestCatch()" hidden title="读最近一次海钓的客户端上报区号，直接建区——零误差，不用在图上找格子">📍 钓点建区</button>
+            <button class="btn sm" id="zoneNewRectBtn" onclick="zoneStartNew()" title="切到▣工具后在地图拖拽也可新建">+ 矩形</button>
+            <button class="btn sm" id="zoneBrushBtn" onclick="zoneStartBrush()">+ 涂格</button>
+            <button class="btn alt sm" id="zoneManualBtn" onclick="showZoneEditor()" hidden>手动</button>
+          </div>
+        </div>
+        <div class="zone-side-body" id="zoneSideBody"><div id="zoneRows"><div class="empty">读取中…</div></div><div id="zonePanel" hidden></div></div>
+        <div class="zone-prop-footer" id="zonePanelFooter" hidden>
+          <button class="btn good" style="flex:1" onclick="saveZone()">保存区域</button>
+          <button class="btn alt" onclick="zoneClosePanel()">取消</button>
+        </div>
+      </aside>
+    </div></div>`;
+  zmapBindEvents();
+  if(window.ResizeObserver){
+    const wrap=document.querySelector('.zone-canvas-wrap');
+    new ResizeObserver(()=>{zmapSquareStage();zmapClampView()}).observe(wrap||document.getElementById('zoneMapStage'));
+  }
+}
+function setFishTab(tab,force=false){
+  if(!force&&(FISH_DIRTY||ZONE_DIRTY)&&tab!==FISH_TAB){
+    askConfirm('放弃未保存的修改','当前页签有未保存的修改，切换后将丢失。',()=>setFishTab(tab,true));
+    return;
+  }
+  FISH_TAB=tab;
+  const onR=tab==='roster';
+  $('#fishTabRoster')?.classList.toggle('on',onR);
+  $('#fishTabZones')?.classList.toggle('on',!onR);
+  if($('#fishTabBodyRoster'))$('#fishTabBodyRoster').hidden=!onR;
+  if($('#fishTabBodyZones'))$('#fishTabBodyZones').hidden=onR;
+  // 地图工作台吃高度：进入时折叠顶部规则卡，回到名册恢复
+  const rc=$('#fishRulesCard');
+  if(rc)rc.classList.toggle('collapsed',!onR);
+  if(!onR){zmapClampView();requestAnimationFrame(zmapClampView)}
+}
 function renderFishEditor(){
   if(!FISH_CFG)return;const c=FISH_CFG,s=c.setting;
+  ensureFishTabs();
   const keepFilter=$('#fishFilter')?.value||'';
   const fixedText=Number(s.bite_delay_fixed)>0?s.bite_delay_fixed+' 秒':'随机';
-  $('#fishEditor').innerHTML=`<div class="section-head"><div><h2 class="mono">${esc(c.area)}</h2><small>${c.fish.length} 个鱼种 · 权重 0 或关闭即排除</small></div><button class="btn" onclick="showAddFish()">+ 添加鱼种</button></div>
+  $('#fishTabBodyRoster').innerHTML=`<div class="section-head"><div><h2 class="mono">${esc(c.area)}</h2><small>${c.fish.length} 个鱼种 · 权重 0 或关闭即排除</small></div><button class="btn" onclick="showAddFish()">+ 添加鱼种</button></div>
     <div class="params-bar"><span class="tag blue">咬钩</span><span class="vals">概率 <b>${s.bite_probability}</b> · 延迟 <b>${fixedText}</b> · 倍率 <b>×${s.bite_delay_scale}</b> · 上限 <b>${s.bite_delay_max}s</b> / 路亚 <b>${s.bite_delay_lure_max}s</b></span><button class="btn alt sm" id="paramsToggle" aria-expanded="false" onclick="toggleFishParams()">调整</button></div>
     <div class="params-form" id="fishParamsForm" hidden><div class="form-grid" style="grid-template-columns:repeat(5,minmax(0,1fr))"><div class="field"><label for="fishProb">上鱼概率 (0-1)</label><input id="fishProb" type="number" min="0" max="1" step="0.01" value="${s.bite_probability}" onchange="FISH_DIRTY=true"><div class="tunable-hint">1=每竿必出；0.5=一半概率出鱼</div></div><div class="field"><label for="fishFixed">固定延迟秒（0=不用）</label><input id="fishFixed" type="number" min="0" step="0.1" value="${s.bite_delay_fixed}" onchange="FISH_DIRTY=true"><div class="tunable-hint">填 0=按延迟倍率随机</div></div><div class="field"><label for="fishScale">延迟倍率</label><input id="fishScale" type="number" min="0" step="0.05" value="${s.bite_delay_scale}" onchange="FISH_DIRTY=true"><div class="tunable-hint">0.5=快一倍，2=慢一倍</div></div><div class="field"><label for="fishMax">普通竿延迟上限</label><input id="fishMax" type="number" min="1" step="0.5" value="${s.bite_delay_max}" onchange="FISH_DIRTY=true"><div class="tunable-hint">等待超过该秒数必定咬钩</div></div><div class="field"><label for="fishLureMax">路亚延迟上限</label><input id="fishLureMax" type="number" min="0.5" step="0.5" value="${s.bite_delay_lure_max}" onchange="FISH_DIRTY=true"><div class="tunable-hint">路亚钓法等待的秒数上限</div></div></div></div>
     <div class="toolbar" style="margin:0 0 10px"><input class="grow" id="fishFilter" placeholder="筛选当前水域鱼种" value="${esc(keepFilter)}" oninput="renderFishRows()"><button class="btn alt sm" id="fishAllOn" onclick="fishSetAll(true)">全部启用</button><button class="btn alt sm" id="fishAllOff" onclick="fishSetAll(false)">全部关闭</button></div><div id="fishRows"></div><div class="actions"><button class="btn good" onclick="saveFishConfig()">保存鱼口配置</button><button class="btn alt" onclick="selectFishArea(FISH_AREA,true)">放弃修改</button><button class="btn bad" onclick="resetFishConfig()">恢复默认鱼口</button></div>`;
   renderFishRows();
+  setFishTab(FISH_TAB,true);
+  zmapSetup();
+  renderZoneRows();
 }
 function toggleFishParams(){
   const f=$('#fishParamsForm'),b=$('#paramsToggle');
@@ -1305,6 +1567,1034 @@ async function resetFishConfig(){askConfirm('恢复默认鱼口','清除「'+FIS
 async function showAddFish(){showModal('添加鱼种到水域','搜索鱼库后添加到当前覆盖列表',`<input id="fishAddSearch" placeholder="中文名或 fish_key" oninput="debounce('fishAdd',searchFishPool)"><div class="results" id="fishAddResults"></div>`);searchFishPool()}
 async function searchFishPool(){const q=$('#fishAddSearch').value.trim();const list=await api('/api/fish/pool?q='+encodeURIComponent(q)+'&limit=80');$('#fishAddResults').innerHTML=list.map(x=>`<div class="result" data-key="${esc(x.fish_key)}" data-name="${esc(x.name_zh)}" onclick="addFishFromPool(this.dataset.key,this.dataset.name)"><div><b>${esc(x.name_zh)}</b><div class="muted mono">${esc(x.fish_key)}</div></div><span class="tag">${fmt(x.min_g)}-${fmt(x.max_g)}g</span></div>`).join('')||'<div class="empty">无结果</div>'}
 function addFishFromPool(key,name){syncFishRows();if(FISH_CFG.fish.some(f=>f.fish_key===key)){closeModal();return toast('该鱼种已在列表','bad')}FISH_CFG.fish.push({fish_key:key,name_zh:name,base_weight:0,weight:1,enabled:true,has_override:true});closeModal();renderFishRows();toast('已加入，记得保存')}
+
+// ---- 区域固定鱼种（fish_zone）：纸地图拖拽编辑 + 本图名册选鱼 ----
+// 坐标换算与 docs/fish-query-coordinates.md 同源：图像像素=(世界-原点)×scale+offset；
+// 网格 gx=floor(世界/40)（含端点）；HUD 显示坐标=(世界-原点)/5。
+async function loadFishZones(force=false){
+  if(FISH_ZONES!==null&&!force)return FISH_ZONES;
+  const data=await api('/api/fish/zones');
+  // fish 恒为数组（老数据/异常形状统一归一，下游不再判空）
+  FISH_ZONES=(data.zones||[]).map(z=>(z.fish=z.fish||[],z));
+  return FISH_ZONES;
+}
+function webURL(p){return API_ROOT==='/admin/api'?'/admin/'+p:p}
+let ZONE_DIRTY=false;
+// 海图矢量底图：sonar 区号世界矩形（/api/fish/sea-zones），按世界包围盒画进 2048 画布当贴图
+let SEA_GRIDS=null,SEA_CHART_URL='';
+const ZONE_MAP={kind:'none',calib:null,imgOk:false,sel:0,hover:0,draft:null,downPos:null,bound:false,
+  view:{tx:0,ty:0,k:1},tool:'select',pan:false,painting:false,hoverZone:0,pin:null,paintErase:false,stroke:null,guideDismissed:false};
+function zmapAreaRow(){return (FISH_AREAS||[]).find(x=>x.loc===FISH_AREA)||null}
+function zmapCal(){return ZONE_MAP.calib}
+// 换算注意：客户端纸地图公式的 Y 是从图片底部往上量（Unity 纹理坐标），
+// 而位图行号从顶部往下数——Z 轴必须做 H− 翻转（X 轴不用）。
+// 实机验证：2026-11-14 克马羚诺也湖，玩家 HUD 81:61（世界 405,305）画区对账。
+function zmapWorldToImg(wx,wz){const c=zmapCal(),p=c.paper;return [(wx-c.origin_x)*p.scale+p.offset_x,p.height-((wz-c.origin_z)*p.scale+p.offset_z)]}
+function zmapImgToWorld(px,pz){const c=zmapCal(),p=c.paper;return [c.origin_x+(px-p.offset_x)/p.scale,c.origin_z+((p.height-pz)-p.offset_z)/p.scale]}
+// 图像覆盖的世界格范围（含边界残格）：[gx0,gz0,gx1,gz1]
+function zmapGridBounds(){
+  const [ax,az]=zmapImgToWorld(0,0),[bx,bz]=zmapImgToWorld(2048,2048);
+  return [Math.floor(Math.min(ax,bx)/40),Math.floor(Math.min(az,bz)/40),Math.ceil(Math.max(ax,bx)/40)-1,Math.ceil(Math.max(az,bz)/40)-1];
+}
+function zmapStagePos(e){const r=$('#zoneMapStage').getBoundingClientRect();const v=ZONE_MAP.view;return [(e.clientX-r.left-v.tx)/v.k,(e.clientY-r.top-v.ty)/v.k]}
+// 视图控制：滚轮缩放（光标锚定）、移动模式拖拽平移、复位
+function zmapSquareStage(){
+  // 舞台保持正方形：取画布区内容高度（扣状态栏）与宽度的较小值，显式设定宽高
+  const stage=$('#zoneMapStage'),wrap=document.querySelector('.zone-canvas-wrap');
+  if(!stage||!wrap)return;
+  const h=wrap.clientHeight-(document.querySelector('.zone-statusbar')?.offsetHeight||36)-2;
+  const w=wrap.clientWidth-2;
+  const side=Math.max(240,Math.floor(Math.min(w,h)));
+  stage.style.width=side+'px';stage.style.height=side+'px';
+}
+function zmapClampView(){
+  const stage=$('#zoneMapStage');if(!stage)return;
+  const r=stage.getBoundingClientRect(),v=ZONE_MAP.view;
+  const minK=r.width/2048;
+  if(v.k<minK)v.k=minK;
+  if(v.k>12)v.k=12;
+  // 平移限制：不让画布完全拖出窗口
+  const maxTx=0,minTx=r.width-2048*v.k,maxTy=0,minTy=r.height-2048*v.k;
+  v.tx=Math.min(maxTx,Math.max(minTx,v.tx));v.ty=Math.min(maxTy,Math.max(minTy,v.ty));
+  $('#zoneMapInner').style.transform=`translate(${v.tx}px,${v.ty}px) scale(${v.k})`;
+}
+function zmapFitView(){
+  const stage=$('#zoneMapStage');if(!stage)return;
+  const r=stage.getBoundingClientRect();
+  ZONE_MAP.view={tx:0,ty:0,k:r.width/2048};
+  zmapClampView();
+}
+function zmapResetView(){zmapFitView()}
+function zmapSetTool(tool){
+  // 工具互斥：select=点选/拖矩形，circle=拖圆形，brush=涂格（需 cells 编辑目标），pan=平移
+  if((tool==='brush'||tool==='circle')&&ZONE_MAP.kind!=='grid'){toast('几何区域仅内陆地图支持；海图用单击网格按区号建区','bad');return}
+  if(tool!=='brush'&&ZONE_MAP.painting)ZONE_MAP.painting=false;
+  if(tool==='brush'){
+    if(!ZONE_EDIT||ZONE_EDIT.kind!=='grid_cells'){zoneStartBrush();return}
+    ZONE_MAP.painting=true;
+  }
+  ZONE_MAP.tool=tool;
+  ZONE_MAP.pan=tool==='pan';
+  const stage=$('#zoneMapStage');
+  if(stage){stage.classList.toggle('tool-pan',ZONE_MAP.pan);stage.classList.toggle('tool-brush',tool==='brush')}
+  for(const t of ['select','brush','pan']){
+    const b=$('#ztool-'+t);
+    if(b)b.classList.toggle('on',t===tool);
+  }
+  const btn=$('#zoneBrushPaintBtn');
+  if(btn){btn.classList.toggle('mode-on',ZONE_MAP.painting);btn.textContent=ZONE_MAP.painting?'🖌 涂抹中（Alt=擦除）· 点此停笔':'🖌 继续涂抹'}
+}
+function zmapZoomStep(f){
+  const stage=$('#zoneMapStage');if(!stage)return;
+  const r=stage.getBoundingClientRect(),v=ZONE_MAP.view;
+  const sx=r.width/2,sy=r.height/2;
+  const px=(sx-v.tx)/v.k,py=(sy-v.ty)/v.k;
+  v.k*=f;zmapClampView();
+  v.tx=sx-px*v.k;v.ty=sy-py*v.k;
+  zmapClampView();
+}
+function zmapWheel(e){
+  if(ZONE_MAP.kind!=='grid'&&ZONE_MAP.kind!=='sea')return;
+  e.preventDefault();
+  const r=$('#zoneMapStage').getBoundingClientRect(),v=ZONE_MAP.view;
+  const sx=e.clientX-r.left,sy=e.clientY-r.top;
+  const px=(sx-v.tx)/v.k,py=(sy-v.ty)/v.k; // 光标下的画布点
+  v.k*=Math.pow(1.0015,-e.deltaY);
+  zmapClampView();
+  v.tx=sx-px*v.k;v.ty=sy-py*v.k;
+  zmapClampView();
+}
+function zmapGridAt(px,pz){
+  const cx=Math.min(2047.999,Math.max(0,px)),cz=Math.min(2047.999,Math.max(0,pz));
+  const [wx,wz]=zmapImgToWorld(cx,cz);
+  return [Math.floor(wx/40),Math.floor(wz/40)];
+}
+// 网格矩形 → 图像像素矩形（0~2048）
+function zmapRectImg(gx0,gz0,gx1,gz1){
+  const [ax,az]=zmapWorldToImg(Math.min(gx0,gx1)*40,Math.min(gz0,gz1)*40);
+  const [bx,bz]=zmapWorldToImg((Math.max(gx0,gx1)+1)*40,(Math.max(gz0,gz1)+1)*40);
+  return [Math.min(ax,bx),Math.min(az,bz),Math.abs(bx-ax),Math.abs(bz-az)];
+}
+function zmapSetup(){
+  const row=zmapAreaRow();
+  ZONE_MAP.kind=row?(row.map_kind||'none'):'none';
+  ZONE_MAP.calib=row&&row.calibration?row.calibration:null;
+  const _c=ZONE_MAP.calib;
+  if(_c){_c.display_origin_x=_c.display_origin_x??_c.origin_x;_c.display_origin_z=_c.display_origin_z??_c.origin_z}
+  ZONE_MAP.imgOk=false;ZONE_MAP.sel=0;ZONE_MAP.draft=null;ZONE_MAP.meZone=0;ZONE_DIRTY=false;ZONE_MAP.stroke=null;ZONE_MAP.painting=false;ZONE_MAP.guideDismissed=false;const _g=document.getElementById('zoneEmptyGuide');if(_g)delete _g.dataset.dismissed;
+  // 换水域时收起旧水域的编辑面板，避免面板还挂着上一张图的区域
+  ZONE_EDIT=null;
+  const panel=$('#zonePanel');if(panel){panel.hidden=true;panel.innerHTML=''}
+  const img=$('#zoneMapImg');
+  if(ZONE_MAP.kind==='sea'){zmapSetupSea();return}
+  if(row&&row.texture){img.src=webURL(row.texture);img.onload=()=>{ZONE_MAP.imgOk=true;zmapDrawAll()};img.onerror=()=>{ZONE_MAP.imgOk=false;img.removeAttribute('src');zmapRenderMeta()}}
+  else img.removeAttribute('src');
+  zmapSquareStage();zmapRenderMeta();zmapFitView();zmapDrawAll();
+}
+async function zmapSetupSea(){
+  const img=$('#zoneMapImg');
+  try{
+    if(!SEA_GRIDS){
+      const d=await api('/api/fish/sea-zones');
+      SEA_GRIDS=d.zones||[];
+    }
+    if(!SEA_GRIDS.length)throw new Error('无海图网格数据');
+    if(!SEA_CHART_URL)SEA_CHART_URL=zmapSeaChartURL(SEA_GRIDS);
+  }catch(e){
+    ZONE_MAP.imgOk=false;img&&img.removeAttribute('src');
+    const ro=$('#zmapReadout');if(ro)ro.textContent='海图网格加载失败：'+e.message;
+    zmapRenderMeta();return;
+  }
+  // 优先：游戏原版海图 + 客户端标定（服务端 areas 下发）
+  const row=zmapAreaRow();
+  if(row&&row.calibration&&row.calibration.paper&&row.texture){
+    ZONE_MAP.calib=row.calibration;
+    img.src=webURL(row.texture);
+    img.onload=()=>{ZONE_MAP.imgOk=true;zmapFitView();zmapRenderMeta();zmapDrawAll()};
+    return;
+  }
+  // 兜底（无标定海图）：合成矢量参考图，把世界包围盒等比放进 2048×2048
+  const bb=zmapSeaBounds(SEA_GRIDS);
+  const sc=Math.min(2048/bb.spanX,2048/bb.spanZ);
+  const padX=(2048-bb.spanX*sc)/2,padTop=(2048-bb.spanZ*sc)/2;
+  ZONE_MAP.calib={origin_x:0,origin_z:0,size:0,paper:{
+    offset_x:padX-bb.minX*sc, offset_z:2048-padTop-bb.maxZ*sc,
+    scale:sc,width:2048,height:2048}};
+  SEA_GRIDS.bounds=bb;
+  img.src=SEA_CHART_URL;
+  img.onload=()=>{ZONE_MAP.imgOk=true;zmapFitView();zmapRenderMeta();zmapDrawAll()};
+}
+function zmapSeaBounds(gs){
+  let minX=1e9,maxX=-1e9,minZ=1e9,maxZ=-1e9;
+  for(const g of gs){
+    minX=Math.min(minX,g.x0);maxX=Math.max(maxX,g.x1);
+    minZ=Math.min(minZ,g.z1);maxZ=Math.max(maxZ,g.z0);
+  }
+  return {minX,maxX,minZ,maxZ,spanX:maxX-minX,spanZ:maxZ-minZ};
+}
+function zmapSeaChartURL(gs){
+  const c=document.createElement('canvas');c.width=2048;c.height=2048;
+  const g=c.getContext('2d');
+  g.fillStyle='#0b1d30';g.fillRect(0,0,2048,2048);
+  const bb=zmapSeaBounds(gs);
+  const sc=Math.min(2048/bb.spanX,2048/bb.spanZ);
+  const padX=(2048-bb.spanX*sc)/2,padTop=(2048-bb.spanZ*sc)/2;
+  const toPx=(wx,wz)=>[padX+(wx-bb.minX)*sc,2048-padTop-(bb.maxZ-wz)*sc];
+  for(const z of gs){
+    const [x0,y0]=toPx(z.x0,z.z0),[x1,y1]=toPx(z.x1,z.z1);
+    const x=Math.min(x0,x1),y=Math.min(y0,y1),w=Math.abs(x1-x0),h=Math.abs(y1-y0);
+    g.fillStyle='rgba(64,118,170,.10)';g.fillRect(x,y,w,h);
+    g.strokeStyle='#3b6a8f';g.lineWidth=1.5;g.strokeRect(x,y,w,h);
+    const label=String(z.zone);
+    g.font=(w<50?'bold 15px':'bold 22px')+' Consolas,monospace';
+    g.fillStyle=w<50?'#7aa9cf':'#a8d4f5';
+    g.textAlign='center';g.textBaseline='middle';
+    g.fillText(label,x+w/2,y+h/2);
+  }
+  g.textAlign='start';g.textBaseline='alphabetic';
+  return c.toDataURL('image/png');
+}
+// 落点 → 命中的声呐区号（与判鱼同语义：含 x 边、含 z 大边）
+function zmapSeaZoneAt(wx,wz){
+  // 与判鱼 sonarZoneForPoint 同语义：重叠矩形取面积最小（嵌套小区优先），平手取小号
+  let best=0,bestA=Infinity;
+  for(const g of SEA_GRIDS||[]){
+    if(wx>=g.x0&&wx<g.x1&&wz<=g.z0&&wz>g.z1){
+      const a=(g.x1-g.x0)*(g.z0-g.z1);
+      if(a<bestA||(a===bestA&&g.zone<best)){best=g.zone;bestA=a}
+    }
+  }
+  return best;
+}
+function zmapSeaRect(zone){
+  for(const g of SEA_GRIDS||[]){if(g.zone===zone)return g}
+  return null;
+}
+// 海图已建区渲染：按区号矩形着色 + 悬停格高亮
+function zmapDrawSeaZones(g){
+  const zones=(FISH_ZONES||[]).filter(z=>z.loc===FISH_AREA&&z.kind==='sea_zone');
+  for(const z of zones){
+    const setN=(z.sea_zones&&z.sea_zones.length?z.sea_zones:[z.sea_zone]).filter(n=>zmapSeaRect(n));
+    const r=setN.length?zmapSeaRect(setN[0]):null;if(!r)continue;
+    const e=ZONE_EDIT&&ZONE_EDIT.id===z.id?ZONE_EDIT:null;
+    const [x0,y0]=zmapWorldToImg(r.x0,r.z0),[x1,y1]=zmapWorldToImg(r.x1,r.z1);
+    const x=Math.min(x0,x1),y=Math.min(y0,y1),w=Math.abs(x1-x0),h=Math.abs(y1-y0);
+    const sel=z.id===ZONE_MAP.sel,hov=z.id===ZONE_MAP.hover;
+    const col=zoneColor(z),dim=!z.enabled&&!e;
+    for(const n of setN){
+      const rr=zmapSeaRect(n);
+      const p1=zmapWorldToImg(rr.x0,rr.z0),p2=zmapWorldToImg(rr.x1,rr.z1);
+      const xx=Math.min(p1[0],p2[0]),yy=Math.min(p1[1],p2[1]),ww=Math.abs(p2[0]-p1[0]),hh=Math.abs(p2[1]-p1[1]);
+      g.fillStyle=dim?'rgba(130,148,170,.10)':zmapTint(col,sel||hov?.34:.20);
+      g.fillRect(xx,yy,ww,hh);
+      g.setLineDash(dim?[10,6]:[]);g.strokeStyle=dim?'#8294aa':col;g.lineWidth=sel?5:hov?4:2.5;
+      g.strokeRect(xx,yy,ww,hh);g.setLineDash([]);
+    }
+    g.font='bold 30px "Segoe UI","Microsoft YaHei",sans-serif';
+    const label=(e&&e.name!==undefined&&e.name!==z.name?(e.name||'（未命名）'):z.name)||('#'+z.sea_zone);
+    g.fillStyle='rgba(6,17,29,.74)';g.fillRect(x+4,y+4,g.measureText(label).width+16,36);
+    g.fillStyle=dim?'#c3ccd6':'#eafffa';g.fillText(label,x+12,y+30);
+  }
+  // 悬停的无区格：虚线高亮 + 区号提示
+  // 📡 我在哪：品红高亮当前所在区
+  if(ZONE_MAP.meZone){
+    const r=zmapSeaRect(ZONE_MAP.meZone);
+    if(r){
+      const p1=zmapWorldToImg(r.x0,r.z0),p2=zmapWorldToImg(r.x1,r.z1);
+      const x=Math.min(p1[0],p2[0]),y=Math.min(p1[1],p2[1]),w=Math.abs(p2[0]-p1[0]),h=Math.abs(p2[1]-p1[1]);
+      g.fillStyle='rgba(255,77,157,.18)';g.fillRect(x,y,w,h);
+      g.strokeStyle='#ff4d9d';g.lineWidth=6;g.strokeRect(x,y,w,h);
+      g.font='bold 40px Consolas,monospace';g.fillStyle='#ff8dc0';g.textAlign='center';
+      g.fillText('我在 '+ZONE_MAP.meZone,x+w/2,Math.max(y-14,44));g.textAlign='start';
+    }
+  }
+  // 悬停格提示：细线角标（弱化，只在选择工具下出现，避免“默认蓝框”的困惑）
+  if(ZONE_MAP.hoverZone&&ZONE_MAP.tool==='select'&&!ZONE_MAP.painting){
+    const r=zmapSeaRect(ZONE_MAP.hoverZone);
+    if(r&&!zones.some(z=>z.sea_zone===ZONE_MAP.hoverZone)){
+      const [x0,y0]=zmapWorldToImg(r.x0,r.z0),[x1,y1]=zmapWorldToImg(r.x1,r.z1);
+      const x=Math.min(x0,x1),y=Math.min(y0,y1),w=Math.abs(x1-x0),h=Math.abs(y1-y0),L=18;
+      g.strokeStyle='rgba(127,212,255,.75)';g.lineWidth=2;
+      g.beginPath();
+      g.moveTo(x,y+L);g.lineTo(x,y);g.lineTo(x+L,y);
+      g.moveTo(x+w-L,y);g.lineTo(x+w,y);g.lineTo(x+w,y+L);
+      g.moveTo(x+w,y+h-L);g.lineTo(x+w,y+h);g.lineTo(x+w-L,y+h);
+      g.moveTo(x+L,y+h);g.lineTo(x,y+h);g.lineTo(x,y+h-L);
+      g.stroke();
+    }
+  }
+}
+// 海图点击：有区→选中编辑；无区→按该区号新建
+function zmapSeaZonesInRect(x0,y0,x1,y1){
+  const out=new Set();
+  for(const g of SEA_GRIDS||[]){
+    const p1=zmapWorldToImg(g.x0,g.z0),p2=zmapWorldToImg(g.x1,g.z1);
+    const a=Math.min(p1[0],p2[0]),b=Math.max(p1[0],p2[0]),c=Math.min(p1[1],p2[1]),d=Math.max(p1[1],p2[1]);
+    if(a<=Math.max(x0,x1)&&b>=Math.min(x0,x1)&&c<=Math.max(y0,y1)&&d>=Math.min(y0,y1))out.add(g.zone);
+  }
+  return [...out].sort((m,n)=>m-n);
+}
+function zmapDrawSeaDraft(g){
+  const d=ZONE_MAP.draft;
+  if(!d||!zmapCal())return;
+  const set=zmapSeaZonesInRect(Math.min(d.px0,d.px1),Math.min(d.py0,d.py1),Math.max(d.px0,d.px1),Math.max(d.py0,d.py1));
+  for(const n of set){
+    const r=zmapSeaRect(n);if(!r)continue;
+    const p1=zmapWorldToImg(r.x0,r.z0),p2=zmapWorldToImg(r.x1,r.z1);
+    const x=Math.min(p1[0],p2[0]),y=Math.min(p1[1],p2[1]),w=Math.abs(p2[0]-p1[0]),h=Math.abs(p2[1]-p1[1]);
+    g.fillStyle='rgba(255,187,85,.22)';g.fillRect(x,y,w,h);
+    g.setLineDash([10,6]);g.strokeStyle='#ffbb55';g.lineWidth=2;g.strokeRect(x,y,w,h);g.setLineDash([]);
+  }
+  const ro=$('#zmapReadout');
+  if(ro)ro.textContent='框选 '+set.length+' 个区号'+(set.length?'（'+set.slice(0,8).join('、')+(set.length>8?'…':'')+'）':'')+' · 松开建区';
+}
+function zmapSeaStartRect(pos){
+  ZONE_MAP.draft={px0:pos[0],py0:pos[1],px1:pos[0],py1:pos[1]};
+  zmapDrawDraft();
+}
+function zmapSeaFinishRect(){
+  const d=ZONE_MAP.draft;ZONE_MAP.draft=null;zmapDrawDraft();
+  if(!d||!zmapCal())return null;
+  const set=zmapSeaZonesInRect(Math.min(d.px0,d.px1),Math.min(d.py0,d.py1),Math.max(d.px0,d.px1),Math.max(d.py0,d.py1));
+  return set.length?set:null;
+}
+async function zoneShowMe(){
+  try{
+    const d=await api('/api/fish/sea-now');
+    ZONE_MAP.meZone=d.zone;ZONE_MAP.meLive=d.live;
+    zmapDrawZones();
+    const r=zmapSeaRect(d.zone);
+    if(r&&zmapCal()){
+      const [ix,iy]=zmapWorldToImg((r.x0+r.x1)/2,(r.z0+r.z1)/2);
+      const st=$('#zoneMapStage');
+      if(st){const rc=st.getBoundingClientRect(),v=ZONE_MAP.view;
+        v.tx=rc.width/2-ix*v.k;v.ty=rc.height/2-iy*v.k;zmapClampView()}
+    }
+    askConfirm('我在 '+d.zone+' 号区'+(d.live?'（正在钓鱼）':'（最近钓点）'),
+      '高亮的就是你当前所在的区号格。按 '+d.zone+' 建独占区？想限制别的坑：开船去那里抛一竿，再回来点「📡 我在哪」。',
+      ()=>zoneStartSeaSet([d.zone]));
+  }catch(e){toast(e.message,'bad')}
+}
+async function zoneFromLatestCatch(){
+  try{
+    const d=await api('/api/fish/sea-zone-latest');
+    const t=new Date(d.ts*1000).toLocaleString('zh-CN');
+    askConfirm('用最近钓点建区',`最近一次海钓：${d.fish} · ${d.loc}（${t}）。按区号 ${d.zone} 建独占区？先去目标位置钓一条鱼再回来点，可保证区号正确。`,()=>{
+      zoneStartSeaSet([d.zone]);
+      $('#zoneName').value=d.fish+'钓点区';
+    });
+  }catch(e){toast(e.message,'bad')}
+}
+async function zoneAppendLatest(){
+  if(!ZONE_EDIT||ZONE_EDIT.kind!=='sea_zone')return;
+  try{
+    const d=await api('/api/fish/sea-zone-latest');
+    ZONE_EDIT.sea_zones=ZONE_EDIT.sea_zones||[ZONE_EDIT.sea_zone||1];
+    if(ZONE_EDIT.sea_zones.includes(d.zone))return toast('区号 '+d.zone+' 已在集合里');
+    ZONE_EDIT.sea_zones.push(d.zone);
+    ZONE_EDIT.sea_zones.sort((a,b)=>a-b);
+    ZONE_DIRTY=true;
+    zoneOpenPanel();zmapDrawZones();
+    toast('已追加区号 '+d.zone+'（记得保存）');
+  }catch(e){toast(e.message,'bad')}
+}
+function zoneStartSeaSet(set){
+  if(ZONE_DIRTY&&ZONE_EDIT&&$('#zonePanel')&&!$('#zonePanel').hidden){
+    askConfirm('放弃未保存的修改','面板里有未保存的区域修改，新建将丢弃。',()=>zoneStartSeaSet(set));
+    return;
+  }
+  ZONE_EDIT={id:0,loc:FISH_AREA,name:'',kind:'sea_zone',sea_zone:set[0],sea_zones:set,mode:'exclusive',boost:3,keep_others:0.35,enabled:true,fish:[]};
+  ZONE_MAP.sel=0;
+  zoneOpenPanel();
+  zmapDrawZones();zoneRowsHighlight();
+  $('#zoneName')?.focus();
+}
+function zmapSeaDown(pos){
+  const [wx,wz]=zmapImgToWorld(pos[0],pos[1]);
+  const n=zmapSeaZoneAt(wx,wz);
+  if(!n)return;
+  const exist=(FISH_ZONES||[]).find(z=>z.loc===FISH_AREA&&z.kind==='sea_zone'&&(z.sea_zones||[z.sea_zone]).includes(n));
+  if(exist){zoneSelect(exist.id);return}
+  if(ZONE_DIRTY&&ZONE_EDIT&&$('#zonePanel')&&!$('#zonePanel').hidden){
+    askConfirm('放弃未保存的修改','面板里有未保存的区域修改，新建将丢弃。',()=>zmapSeaDown(pos));
+    return;
+  }
+  ZONE_EDIT={id:0,loc:FISH_AREA,name:'海图 '+n+' 号区',kind:'sea_zone',sea_zone:n,sea_zones:[n],gx0:0,gz0:0,gx1:0,gz1:0,mode:'exclusive',boost:3,keep_others:0.35,enabled:true,fish:[]};
+  ZONE_MAP.sel=0;
+  zoneOpenPanel();
+  zmapDrawZones();zoneRowsHighlight();
+  $('#zoneName')?.focus();
+}
+function zmapRenderMeta(){
+  const el=$('#zoneMapMeta');
+  const title=$('#zoneMapTitle');
+  if(title)title.textContent=FISH_AREA||'';
+  if(el)el.textContent=ZONE_MAP.kind==='grid'?'拖拽画矩形 · 点击选择 · 滚轮缩放'
+    :ZONE_MAP.kind==='sea'?'海图仅浏览（不做区域划分）':'无纸地图标定';
+  // 挪威海不做区域划分（2026-11-14 用户决定）：隐藏全部建区入口，地图仅浏览
+  for(const id of ['zoneNewRectBtn','zoneBrushBtn','zoneSeaNowBtn','zoneSeaLatestBtn']){
+    const b=document.getElementById(id);if(b)b.hidden=true;
+  }
+  const manual=$('#zoneManualBtn');if(manual)manual.hidden=ZONE_MAP.kind!=='none';
+  for(const t of ['select','brush','circle']){
+    const b=$('#ztool-'+t);
+    if(b)b.style.display=(ZONE_MAP.kind==='grid')?'':'none';
+  }
+  const legend=$('#zoneLegend');
+  if(legend)legend.innerHTML=ZONE_MAP.kind==='grid'?'<span>每区一色</span><span><i style="background:#ffffff22;border:1px dashed #fff"></i>白虚线=选中</span><span><i style="background:#ffbb5533;border:1px dashed #ffbb55"></i>黄=未保存</span><span>红斜纹=重叠</span>':'';
+  const note=$('#zoneMapNote');
+  if(note){
+    note.hidden=ZONE_MAP.kind==='grid';
+    note.innerHTML=ZONE_MAP.kind==='sea'
+      ?'⚓ 挪威海<b>不做区域划分</b>——按全图名册出鱼。地图仅供浏览定位（滚轮缩放 / ✋ 平移 / 🎯 定位钉）。'
+      :ZONE_MAP.kind==='none'?'本图无纸地图标定：点右侧「手动」按网格数字建区。':'';
+  }
+  const stage=$('#zoneMapStage');
+  if(stage&&ZONE_MAP.kind!=='grid')stage.style.cursor='default';
+}
+// 海图区号徽章条：已有海图区一排大号数字，点击即编辑
+function zmapRenderSeaChips(){/* chips 已并入 renderZoneRows 列表顶部 */}
+function zmapDrawAll(){zmapDrawGrid();zmapDrawZones();zmapDrawDraft()}
+function zmapDrawGrid(){
+  const cv=$('#zoneMapGrid');if(!cv)return;const g=cv.getContext('2d');
+  cv.width=2048;cv.height=2048;
+  if(ZONE_MAP.kind!=='grid'||!ZONE_MAP.imgOk||!zmapCal())return;
+  const [gx0,gz0,gx1,gz1]=zmapGridBounds();
+  g.font='22px Consolas';
+  for(let gx=gx0;gx<=gx1+1;gx++){
+    const x=zmapWorldToImg(gx*40,0)[0],major=gx%5===0;
+    g.strokeStyle=major?'rgba(66,184,255,.42)':'rgba(66,184,255,.15)';
+    g.lineWidth=major?2:1;
+    g.beginPath();g.moveTo(x,0);g.lineTo(x,2048);g.stroke();
+    if(major&&gx<gx1+1){g.fillStyle='rgba(150,200,240,.85)';g.fillText(gx,Math.min(x+5,2000),30)}
+  }
+  for(let gz=gz0;gz<=gz1+1;gz++){
+    const y=zmapWorldToImg(0,gz*40)[1],major=gz%5===0;
+    g.strokeStyle=major?'rgba(66,184,255,.42)':'rgba(66,184,255,.15)';
+    g.lineWidth=major?2:1;
+    g.beginPath();g.moveTo(0,y);g.lineTo(2048,y);g.stroke();
+    if(major&&gz<gz1+1){g.fillStyle='rgba(150,200,240,.85)';g.fillText(gz,8,Math.min(y+26,2040))}
+  }
+}
+// 每区一色（按 id 稳定取色），列表/海图条/地图共用同一颜色，帮用户对应
+const ZONE_COLORS=['#37e2b0','#42b8ff','#ff9f6e','#ffd166','#b28dff','#7bdff2','#f78fb3','#9ddca0'];
+function zoneColor(z){return ZONE_COLORS[(z.id||0)%ZONE_COLORS.length]}
+// hex → rgba
+function zmapTint(hex,a){
+  const n=parseInt(hex.slice(1),16);
+  return `rgba(${n>>16},${(n>>8)&255},${n&255},${a})`;
+}
+// zoneCellList(z)：把任何 grid 区域展开成格子列表（rect 展开、cells 原样），渲染与重叠检测共用
+function zoneCellList(z){
+  if(z.kind==='grid_cells')return z.cells||[];
+  if(z.kind!=='grid_rect')return [];
+  const out=[];
+  for(let gx=z.gx0;gx<=z.gx1;gx++)for(let gz=z.gz0;gz<=z.gz1;gz++)out.push([gx,gz]);
+  return out;
+}
+function zmapDrawCell(g,gx,gz,col,fillA,lineW,dash){
+  const [x,y,w,h]=zmapRectImg(gx,gz,gx,gz);
+  g.fillStyle=zmapTint(col,fillA);g.fillRect(x,y,w,h);
+  g.setLineDash(dash||[]);g.strokeStyle=col;g.lineWidth=lineW;g.strokeRect(x,y,w,h);g.setLineDash([]);
+}
+function zmapDrawZones(){
+  const cv=$('#zoneMapZonesCv');if(!cv)return;const g=cv.getContext('2d');
+  cv.width=2048;cv.height=2048;
+  if(ZONE_MAP.kind==='sea'){zmapDrawSeaZones(g);zmapDrawGeoZones(g);return}
+  if(ZONE_MAP.kind!=='grid')return;
+  zmapDrawGeoZones(g);
+}
+// 几何区（矩形/格子/圆）绘制：内陆与海图共用
+function zmapDrawGeoZones(g){
+  const zones=(FISH_ZONES||[]).filter(z=>z.loc===FISH_AREA&&(z.kind==='grid_rect'||z.kind==='grid_cells'||z.kind==='circle'));
+  // 圆形区：描边+填充+圆心
+  zones.forEach(z=>{
+    if(z.kind!=='circle')return;
+    const e=ZONE_EDIT&&ZONE_EDIT.id===z.id?ZONE_EDIT:null;
+    const src=e||z;
+    const sel=z.id===ZONE_MAP.sel,hov=z.id===ZONE_MAP.hover;
+    const col=zoneColor(z),dim=!z.enabled&&!e;
+    zmapDrawCircle(g,src.cx||z.cx,src.cz||z.cz,src.radius||z.radius,dim?'#8294aa':col,dim?.08:(sel||hov?.30:.16),sel?5:hov?4:2,dim?[10,6]:[]);
+    const label=e&&e.name!==z.name?(e.name||'（未命名）'):z.name;
+    if(label){
+      const [px,pz]=zmapWorldToImg(src.cx||z.cx,src.cz||z.cz);
+      g.font='bold 26px "Segoe UI","Microsoft YaHei",sans-serif';
+      g.fillStyle='rgba(6,17,29,.74)';g.fillRect(px+4,pz-40,g.measureText(label).width+16,34);
+      g.fillStyle=dim?'#c3ccd6':'#eafffa';g.fillText(label,px+12,pz-16);
+    }
+  });
+  zones.forEach(z=>{
+    if(z.kind==='circle')return;
+    // 正在编辑该区时按面板里的实时数据画（含手改网格/涂抹的预览）
+    const e=ZONE_EDIT&&ZONE_EDIT.id===z.id?ZONE_EDIT:null;
+    const src=e||z;
+    const sel=z.id===ZONE_MAP.sel,hov=z.id===ZONE_MAP.hover;
+    const col=zoneColor(z),dim=!z.enabled&&!e;
+    const cells=e&&e.kind==='grid_cells'?e.cells:zoneCellList(z);
+    cells.forEach(c=>zmapDrawCell(g,c[0],c[1],dim?'#8294aa':col,dim?.08:(sel||hov?.30:.17),sel?4:hov?3:2,dim?[10,6]:[]));
+    if(sel&&cells.length){ // 选中：白虚线内框（取包围盒）
+      let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+      cells.forEach(c=>{const [x,y,w,h]=zmapRectImg(c[0],c[1],c[0],c[1]);x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x+w);y1=Math.max(y1,y+h)});
+      g.setLineDash([4,5]);g.strokeStyle='#ffffffcc';g.lineWidth=2;g.strokeRect(x0+5,y0+5,x1-x0-10,y1-y0-10);g.setLineDash([]);
+    }
+    // 名字标在包围盒左上
+    let label=e&&e.name!==undefined&&e.name!==z.name?(e.name||'（未命名）'):z.name;
+    if(label&&cells.length){
+      let x0=1e9,y0=1e9;
+      cells.forEach(c=>{const [x,y]=zmapRectImg(c[0],c[1],c[0],c[1]);x0=Math.min(x0,x);y0=Math.min(y0,y)});
+      g.font='bold 26px "Segoe UI","Microsoft YaHei",sans-serif';
+      g.fillStyle='rgba(6,17,29,.74)';g.fillRect(x0+4,y0+4,g.measureText(label).width+16,36);
+      g.fillStyle=dim?'#c3ccd6':'#eafffa';g.fillText(label,x0+12,y0+30);
+    }
+  });
+  // 重叠可视化：被 ≥2 个启用区覆盖的格子铺红色斜纹（叠加语义下无死区，但重叠仍值得看见）
+  const cover=new Map();
+  zones.filter(z=>z.enabled||ZONE_EDIT&&ZONE_EDIT.id===z.id).forEach(z=>{
+    zoneCellList(ZONE_EDIT&&ZONE_EDIT.id===z.id?ZONE_EDIT:z).forEach(c=>{
+      const k=c[0]+','+c[1];cover.set(k,(cover.get(k)||0)+1);
+    });
+  });
+  let overlaps=0;
+  g.save();
+  for(const [k,n] of cover){
+    if(n<2)continue;overlaps++;
+    const [gx,gz]=k.split(',').map(Number);
+    const [x,y,w,h]=zmapRectImg(gx,gz,gx,gz);
+    g.beginPath();g.moveTo(x,y+h);g.lineTo(x+w,y);g.lineWidth=2;g.strokeStyle='rgba(255,120,120,.75)';g.stroke();
+  }
+  g.restore();
+  const ov=$('#zoneOverlapNote');
+  if(ov)ov.textContent=overlaps?`⚠ ${overlaps} 个格子在多个区域重叠（叠加生效：独占取交、增益连乘）`:'';
+  // 新区（未保存）：面板开着期间保持黄色，画了不会消失
+  if(ZONE_EDIT&&!ZONE_EDIT.id&&ZONE_EDIT.kind==='circle'&&ZONE_EDIT.loc===FISH_AREA&&zmapCal()){
+    zmapDrawCircle(g,ZONE_EDIT.cx,ZONE_EDIT.cz,ZONE_EDIT.radius||2,'#ffbb55',.18,3,[12,6]);
+    const label=ZONE_EDIT.name||('圆形区 r'+Math.round(ZONE_EDIT.radius||0)+'m');
+    const [px,pz]=zmapWorldToImg(ZONE_EDIT.cx,ZONE_EDIT.cz);
+    g.font='bold 26px "Segoe UI","Microsoft YaHei",sans-serif';
+    g.fillStyle='rgba(6,17,29,.74)';g.fillRect(px+4,pz-40,g.measureText(label).width+16,34);
+    g.fillStyle='#ffe3b0';g.fillText(label,px+12,pz-16);
+  }
+  if(ZONE_EDIT&&!ZONE_EDIT.id&&(ZONE_EDIT.kind==='grid_rect'||ZONE_EDIT.kind==='grid_cells')&&ZONE_EDIT.loc===FISH_AREA){
+    const cells=ZONE_EDIT.kind==='grid_cells'?(ZONE_EDIT.cells||[]):zoneCellList({...ZONE_EDIT,kind:'grid_rect'});
+    cells.forEach(c=>zmapDrawCell(g,c[0],c[1],'#ffbb55',.18,3,[12,6]));
+    if(ZONE_EDIT.kind==='grid_rect'){
+      const [x,y,w,h]=zmapRectImg(ZONE_EDIT.gx0,ZONE_EDIT.gz0,ZONE_EDIT.gx1,ZONE_EDIT.gz1);
+      g.setLineDash([12,6]);g.strokeStyle='#ffbb55';g.lineWidth=3;g.strokeRect(x,y,w,h);g.setLineDash([]);
+    }
+    const label=ZONE_EDIT.name||((ZONE_EDIT.kind==='grid_cells'?'涂格区 ':'新区域 ')+(ZONE_EDIT.cells?ZONE_EDIT.cells.length+'格':''));
+    if(cells.length){
+      let x0=1e9,y0=1e9;cells.forEach(c=>{const [x,y]=zmapRectImg(c[0],c[1],c[0],c[1]);x0=Math.min(x0,x);y0=Math.min(y0,y)});
+      g.font='bold 26px "Segoe UI","Microsoft YaHei",sans-serif';
+      g.fillStyle='rgba(6,17,29,.74)';g.fillRect(x0+4,y0+4,g.measureText(label).width+16,36);
+      g.fillStyle='#ffe3b0';g.fillText(label,x0+12,y0+30);
+    }
+  }
+}
+function zmapDrawCircle(g,cx,cz,rM,col,fillA,lineW,dash){
+  const [px,pz]=zmapWorldToImg(cx,cz);
+  const r=rM*zmapCal().paper.scale;
+  g.fillStyle=zmapTint(col,fillA);
+  g.beginPath();g.arc(px,pz,r,0,Math.PI*2);g.fill();
+  g.setLineDash(dash||[]);g.strokeStyle=col;g.lineWidth=lineW;
+  g.beginPath();g.arc(px,pz,r,0,Math.PI*2);g.stroke();g.setLineDash([]);
+  g.fillStyle=col;g.beginPath();g.arc(px,pz,4,0,Math.PI*2);g.fill();
+}
+function zmapPin(v){
+  v=(v||'').trim();
+  if(!v){ZONE_MAP.pin=null;zmapDrawDraft();return}
+  const m=v.match(/(-?[\d.]+)\s*[:：,/]\s*(-?[\d.]+)/);
+  if(!m||!zmapCal())return toast('格式如 81:61（游戏 HUD 坐标）','bad');
+  const dx=parseFloat(m[1]),dz=parseFloat(m[2]);
+  const c=zmapCal();
+  const dox=c.display_origin_x??c.origin_x,doz=c.display_origin_z??c.origin_z;
+  ZONE_MAP.pin={wx:dx*5+dox,wz:dz*5+doz};
+  zmapDrawDraft();
+  // 钉的位置滚到可视区
+  const [ix,iy]=zmapWorldToImg(ZONE_MAP.pin.wx,ZONE_MAP.pin.wz);
+  const st=$('#zoneMapStage');
+  if(st){
+    const r=st.getBoundingClientRect(),v2=ZONE_MAP.view;
+    if(ix*v2.k+v2.tx<20||ix*v2.k+v2.tx>r.width-20||iy*v2.k+v2.ty<20||iy*v2.k+v2.ty>r.height-20){
+      v2.tx=r.width/2-ix*v2.k;v2.ty=r.height/2-iy*v2.k;zmapClampView();
+    }
+  }
+  toast('已钉住 显示 '+dx+':'+dz+'（世界 '+Math.round(ZONE_MAP.pin.wx)+','+Math.round(ZONE_MAP.pin.wz)+'）——应与你游戏内站位一致');
+}
+function zmapDrawDraft(){
+  const cv=$('#zoneMapDraftCv');if(!cv)return;const g=cv.getContext('2d');
+  cv.width=2048;cv.height=2048;
+  if(ZONE_MAP.kind==='sea'){zmapDrawSeaDraft(g);return}
+  if(ZONE_MAP.stroke&&ZONE_MAP.stroke.circle&&zmapCal()){
+    const st=ZONE_MAP.stroke;
+    zmapDrawCircle(g,st.cx,st.cz,Math.max(st.r,0.01),'#ffbb55',.18,3,[12,6]);
+    return;
+  }
+  if(ZONE_MAP.pin&&zmapCal()){
+    const [px,py]=zmapWorldToImg(ZONE_MAP.pin.wx,ZONE_MAP.pin.wz);
+    g.strokeStyle='#ff4d6d';g.lineWidth=5;
+    g.beginPath();g.moveTo(px-28,py);g.lineTo(px+28,py);g.moveTo(px,py-28);g.lineTo(px,py+28);g.stroke();
+    g.beginPath();g.arc(px,py,10,0,Math.PI*2);g.stroke();
+  }
+  const d=ZONE_MAP.draft;if(!d)return;
+  const [x,y,w,h]=zmapRectImg(d.gx0,d.gz0,d.gx1,d.gz1);
+  g.fillStyle='rgba(255,187,85,.20)';g.fillRect(x,y,w,h);
+  g.setLineDash([12,6]);g.strokeStyle='#ffbb55';g.lineWidth=3;g.strokeRect(x,y,w,h);g.setLineDash([]);
+}
+function zmapBindEvents(){
+  const stage=$('#zoneMapStage');if(!stage||ZONE_MAP.bound)return;ZONE_MAP.bound=true;
+  const readout=()=>$('#zmapReadout');
+  stage.addEventListener('wheel',zmapWheel,{passive:false});
+  stage.addEventListener('pointerdown',e=>{
+    if((ZONE_MAP.kind!=='grid'&&ZONE_MAP.kind!=='sea')||!ZONE_MAP.imgOk)return;
+    e.preventDefault();stage.setPointerCapture(e.pointerId);
+    const pos=zmapStagePos(e);
+    if(ZONE_MAP.kind==='sea'){
+      if(ZONE_MAP.pan){ZONE_MAP.stroke={pan:true,sx:pos[0],sy:pos[1],tx:ZONE_MAP.view.tx,ty:ZONE_MAP.view.ty};return}
+      if(false){/*海图局部坐标不可靠，几何手势禁用*/}
+      if(false&&ZONE_MAP.tool==='circle'&&zmapCal()){
+        const [wx,wz]=zmapImgToWorld(pos[0],pos[1]);
+        ZONE_MAP.stroke={circle:true,cx:wx,cz:wz,r:0};
+        return;
+      }
+      // 海图纯浏览：无建区交互
+      const hit=zmapHit(pos);
+      if(hit){zoneSelect(hit.id);return}
+      return;
+    }
+    if(ZONE_MAP.pan){ZONE_MAP.stroke={pan:true,sx:pos[0],sy:pos[1],tx:ZONE_MAP.view.tx,ty:ZONE_MAP.view.ty};return}
+    if(ZONE_MAP.painting&&ZONE_EDIT&&ZONE_EDIT.kind==='grid_cells'){
+      ZONE_MAP.paintErase=e.altKey;ZONE_MAP.stroke={paint:true};zmapPaintAt(pos);return;
+    }
+    const hit=zmapHit(pos);
+    if(hit){zoneSelect(hit.id);return}
+    if(ZONE_MAP.tool==='circle'){
+      const [wx,wz]=zmapImgToWorld(pos[0],pos[1]);
+      ZONE_MAP.stroke={circle:true,cx:wx,cz:wz,r:0};
+      return;
+    }
+    const [gx,gz]=zmapGridAt(pos[0],pos[1]);
+    ZONE_MAP.downPos=pos;
+    ZONE_MAP.draft={gx0:gx,gz0:gz,gx1:gx,gz1:gz};
+    zmapDrawDraft();
+  });
+  stage.addEventListener('pointermove',e=>{
+    if((ZONE_MAP.kind!=='grid'&&ZONE_MAP.kind!=='sea')||!ZONE_MAP.imgOk)return;
+    const pos=zmapStagePos(e);
+    // —— 进行中的手势（海图/内陆同一套）：平移 / 涂抹 / 圆半径 / 矩形草稿 ——
+    if(ZONE_MAP.stroke){
+      if(ZONE_MAP.stroke.pan){
+        const v=ZONE_MAP.view;
+        v.tx=ZONE_MAP.stroke.tx+(pos[0]-ZONE_MAP.stroke.sx)*v.k;
+        v.ty=ZONE_MAP.stroke.ty+(pos[1]-ZONE_MAP.stroke.sy)*v.k;
+        zmapClampView();return;
+      }
+      if(ZONE_MAP.stroke.paint){zmapPaintAt(pos);return}
+      if(ZONE_MAP.stroke.circle&&zmapCal()){
+        const [wx,wz]=zmapImgToWorld(pos[0],pos[1]);
+        ZONE_MAP.stroke.r=Math.hypot(wx-ZONE_MAP.stroke.cx,wz-ZONE_MAP.stroke.cz);
+        zmapDrawDraft();
+        const ro=$('#zmapReadout');
+        {const cc=zmapCal();const dox2=cc.display_origin_x??cc.origin_x,doz2=cc.display_origin_z??cc.origin_z;if(ro)ro.textContent=`圆形区 半径 ${ZONE_MAP.stroke.r.toFixed(0)}m（圆心 显示 ${((ZONE_MAP.stroke.cx-dox2)/5).toFixed(0)}:${((ZONE_MAP.stroke.cz-doz2)/5).toFixed(0)}）· 松开完成`;}
+        return;
+      }
+    }
+    if(!zmapCal())return;
+    // —— 矩形草稿增长（海图/内陆同一套）——
+    if(ZONE_MAP.kind==='sea'&&ZONE_MAP.draft&&ZONE_MAP.draft.px0!==undefined){
+      ZONE_MAP.draft.px1=pos[0];ZONE_MAP.draft.py1=pos[1];
+      zmapDrawDraft();
+      return;
+    }
+    if(ZONE_MAP.draft){
+      const [gx,gz]=zmapGridAt(pos[0],pos[1]),c=zmapCal();
+      const d=ZONE_MAP.draft;
+      d.gx0=Math.min(d.gx0,gx);d.gz0=Math.min(d.gz0,gz);d.gx1=Math.max(d.gx1,gx);d.gz1=Math.max(d.gz1,gz);
+      zmapDrawDraft();
+      const dd=v=>(Math.round(v*10)/10).toString();
+      const ro=$('#zmapReadout');
+      if(ro)ro.textContent=`新矩形 ${d.gx0}:${d.gz0} ~ ${d.gx1}:${d.gz1}（${(d.gx1-d.gx0+1)*40}×${(d.gz1-d.gz0+1)*40}m）· 显示 ${dd((d.gx0*40-c.origin_x)/5)}:${dd((d.gz0*40-c.origin_z)/5)}~${dd(((d.gx1+1)*40-c.origin_x)/5)}:${dd(((d.gz1+1)*40-c.origin_z)/5)}`;
+      return;
+    }
+    // —— 悬停读数（按图种）——
+    const ro=$('#zmapReadout');
+    if(ZONE_MAP.kind==='sea'){
+      const [wx,wz]=zmapImgToWorld(pos[0],pos[1]);
+      const n=zmapSeaZoneAt(wx,wz);
+      if(n!==ZONE_MAP.hoverZone){ZONE_MAP.hoverZone=n;zmapDrawZones()}
+      stage.style.cursor=ZONE_MAP.pan?'grab':(ZONE_MAP.painting||ZONE_MAP.tool==='circle'?'cell':(n?'pointer':'default'));
+      if(ro)ro.textContent=n?`海图 ${n} 号区 · 世界 ${Math.round(wx)},${Math.round(wz)} · 单击${(FISH_ZONES||[]).some(z=>z.loc===FISH_AREA&&z.kind==='sea_zone'&&z.sea_zone===n)?'编辑':'按区号建区'}（拖拽=矩形区）`:`海图外 · 世界 ${Math.round(wx)},${Math.round(wz)}`;
+      return;
+    }
+    const [gx,gz]=zmapGridAt(pos[0],pos[1]),c=zmapCal();
+    const dox=c.display_origin_x??c.origin_x,doz=c.display_origin_z??c.origin_z;const dx=(gx*40-dox)/5,dz=(gz*40-doz)/5;
+    stage.style.cursor=ZONE_MAP.pan?'grab':(ZONE_MAP.painting?'cell':(zmapHit(pos)?'pointer':'crosshair'));
+    if(ro)ro.textContent=`网格 ${gx}:${gz} · 显示 ${dx.toFixed(0)}~${(dx+8).toFixed(0)}:${dz.toFixed(0)}~${(dz+8).toFixed(0)} · 世界 ${gx*40}~${(gx+1)*40}m`;
+  });
+  stage.addEventListener('pointerup',e=>{
+    if(ZONE_MAP.stroke){
+      const st=ZONE_MAP.stroke;
+      ZONE_MAP.stroke=null;
+      if(st.pan||st.paint)return;
+      if(st.circle){
+        zmapDrawDraft();
+        if(st.r>=2)zoneStartCircle(st);
+        return;
+      }
+    }
+    if(ZONE_MAP.kind==='sea'){ZONE_MAP.downPos=null;return}
+    if(!ZONE_MAP.draft)return;
+    const d=ZONE_MAP.draft;ZONE_MAP.draft=null;zmapDrawDraft();
+    const pos=zmapStagePos(e);
+    if(ZONE_MAP.downPos&&Math.hypot(pos[0]-ZONE_MAP.downPos[0],pos[1]-ZONE_MAP.downPos[1])<8){
+      if(ZONE_MAP.sel&&!ZONE_DIRTY)zoneDeselect();
+      return;
+    }
+    zoneStartNew(d);
+  });
+  stage.addEventListener('pointercancel',()=>{ZONE_MAP.draft=null;ZONE_MAP.stroke=null;zmapDrawDraft()});
+  // 工具快捷键：V 选择/B 刷子/H 平移/Esc 取消选中；输入框中不生效
+  document.addEventListener('keydown',e=>{
+    if(!$('#fishTabBodyZones')||$('#fishTabBodyZones').hidden)return;
+    const tag=(document.activeElement&&document.activeElement.tagName)||'';
+    if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
+    if(e.key==='v'||e.key==='V')zmapSetTool('select');
+    else if(e.key==='b'||e.key==='B')zmapSetTool('brush');
+    else if(e.key==='c'||e.key==='C')zmapSetTool('circle');
+    else if(e.key==='h'||e.key==='H')zmapSetTool('pan');
+    else if(e.key==='Escape'){if(ZONE_EDIT&&!ZONE_DIRTY)zoneDeselect()}
+  });
+}
+// 涂抹：把当前格写进/移出 ZONE_EDIT.cells
+function zmapPaintAt(pos){
+  if(!ZONE_EDIT||ZONE_EDIT.kind!=='grid_cells')return;
+  const [gx,gz]=zmapGridAt(pos[0],pos[1]);
+  ZONE_EDIT.cells=ZONE_EDIT.cells||[];
+  const i=ZONE_EDIT.cells.findIndex(c=>c[0]===gx&&c[1]===gz);
+  if(ZONE_MAP.paintErase){if(i>=0)ZONE_EDIT.cells.splice(i,1)}
+  else if(i<0)ZONE_EDIT.cells.push([gx,gz]);
+  ZONE_DIRTY=true;
+  zmapDrawZones();
+  const cnt=$('#zoneCellCount');if(cnt)cnt.textContent=(ZONE_EDIT.cells.length)+' 格';
+  const ro=$('#zmapReadout');if(ro)ro.textContent='涂抹中：'+(ZONE_EDIT.cells.length)+' 格（Alt=擦除）';
+}
+function zmapHit(pos){
+  if(!zmapCal())return null;
+  const [wx,wz]=zmapImgToWorld(pos[0],pos[1]);
+  const gx=Math.floor(wx/40),gz=Math.floor(wz/40);
+  const zones=(FISH_ZONES||[]).filter(z=>z.loc===FISH_AREA&&(z.kind==='grid_rect'||z.kind==='grid_cells'||z.kind==='circle'));
+  for(const z of zones){
+    if(z.kind==='grid_rect'){if(gx>=z.gx0&&gx<=z.gx1&&gz>=z.gz0&&gz<=z.gz1)return z}
+    else if(z.kind==='circle'){const dx=wx-z.cx,dz=wz-z.cz;if(dx*dx+dz*dz<=z.radius*z.radius)return z}
+    else if((z.cells||[]).some(c=>c[0]===gx&&c[1]===gz))return z;
+  }
+  return null;
+}
+function zoneRangeText(z){
+  if(z.kind==='sea_zone'){const ss=z.sea_zones&&z.sea_zones.length?z.sea_zones:[z.sea_zone];return ss.length>1?('海图 '+ss.length+' 个区号（'+ss.slice(0,6).join('、')+(ss.length>6?'…':'')+'）'):('海图 '+z.sea_zone+' 号区域');}
+  if(z.kind==='circle'){
+    const d=v=>(Math.round(v*10)/10).toString();
+    const cc2=zmapCal();const dox3=cc2?(cc2.display_origin_x??cc2.origin_x):0,doz3=cc2?(cc2.display_origin_z??cc2.origin_z):0;
+    return `圆形 r=${Math.round(z.radius)}m · 圆心 显示 ${d((z.cx-dox3)/5)}:${d((z.cz-doz3)/5)}`;
+  }
+  if(z.kind==='grid_cells'){
+    const base=`格子区 ${(z.cells||[]).length} 格（任意形状）`;
+    const c=zmapCal();
+    if(c&&c.paper){
+      let x0=1e9,z0=1e9,x1=-1e9,z1=-1e9;
+      (z.cells||[]).forEach(cl=>{x0=Math.min(x0,cl[0]);z0=Math.min(z0,cl[1]);x1=Math.max(x1,cl[0]);z1=Math.max(z1,cl[1])});
+      const d=v=>(Math.round(v*10)/10).toString();
+      const dox=c.display_origin_x??c.origin_x,doz=c.display_origin_z??c.origin_z;
+      return base+` · 显示 ${d((x0*40-dox)/5)}:${d((z0*40-doz)/5)}~${d(((x1+1)*40-dox)/5)}:${d(((z1+1)*40-doz)/5)}`;
+    }
+    return base;
+  }
+  const base=`网格 ${z.gx0}:${z.gz0} ~ ${z.gx1}:${z.gz1}（${(z.gx1-z.gx0+1)*40}×${(z.gz1-z.gz0+1)*40}m）`;
+  const c=zmapCal();
+  if(c&&c.paper){
+    const d=v=>(Math.round(v*10)/10).toString();
+    const dox=c.display_origin_x??c.origin_x,doz=c.display_origin_z??c.origin_z;
+    return base+` · 显示 ${d((z.gx0*40-dox)/5)}:${d((z.gz0*40-doz)/5)}~${d(((z.gx1+1)*40-dox)/5)}:${d(((z.gz1+1)*40-doz)/5)}`;
+  }
+  return base;
+}
+async function renderZoneRows(){
+  if(!FISH_AREA)return;
+  const el=$('#zoneRows');if(!el)return;
+  try{await loadFishZones()}catch(e){el.innerHTML='<div class="empty">读取失败：'+esc(e.message)+'</div>';return}
+  const zones=FISH_ZONES.filter(z=>z.loc===FISH_AREA);
+  // 鱼种中文名映射：本图名册优先
+  const nameOf=k=>{
+    const f=(FISH_CFG&&FISH_CFG.fish||[]).find(x=>x.fish_key===k);
+    return f&&f.name_zh?f.name_zh:k;
+  };
+  const fishPills=z=>{
+    const on=(z.fish||[]).filter(f=>f.enabled);
+    if(!on.length)return '<span class="muted" style="font-size:11px">名单为空 · 区内不出鱼</span>';
+    const inMap=k=>(FISH_CFG&&FISH_CFG.fish||[]).some(x=>x.fish_key===k);
+    const shown=on.slice(0,6).map(f=>{
+      const zh=nameOf(f.fish_key);
+      const foreign=!inMap(f.fish_key);
+      const w=f.weight&&f.weight!==1?`×${f.weight}`:'';
+      return `<span class="fp ${foreign?'foreign':''}" title="${esc(f.fish_key)}${w?` · 权重${f.weight}`:''}${foreign?' · 本图外鱼种':''}">${esc(zh===f.fish_key?f.fish_key:zh)}${w?`<b style="opacity:.65">${w}</b>`:''}</span>`;
+    }).join('');
+    return shown+(on.length>6?`<span class="fp more">+${on.length-6}</span>`:'');
+  };
+  const seaChips=ZONE_MAP.kind==='sea'&&zones.filter(z=>z.kind==='sea_zone').length
+    ?`<div class="sea-chips" style="margin:0 0 12px">${zones.filter(z=>z.kind==='sea_zone').map(z=>`<span class="sea-chip ${z.enabled?'':'off'}" style="${z.id===ZONE_MAP.sel?'border-color:var(--accent)':''}" onclick="zoneSelect(${z.id})"><span style="width:10px;height:10px;border-radius:3px;background:${zoneColor(z)}"></span><span class="n">${z.sea_zone}号</span><small>${z.mode==='exclusive'?'独占':'增益×'+z.boost}</small><small>${(z.fish||[]).filter(f=>f.enabled).length}鱼</small></span>`).join('')}</div>`
+    :'';
+  const summary=zones.length
+    ?`<div class="muted" style="font-size:12px;margin:0 0 10px">共 <b style="color:var(--text)">${zones.length}</b> 个 · 独占 ${zones.filter(z=>z.mode==='exclusive').length} · 增益 ${zones.filter(z=>z.mode==='boost').length} · 停用 ${zones.filter(z=>!z.enabled).length}</div>`:'';
+  const emptyText=ZONE_MAP.kind==='sea'?'挪威海不做区域划分——按全图名册出鱼，无需在此配置'
+    :ZONE_MAP.kind==='none'?'还没有区域；点「手动」按网格数字建区'
+    :'在地图上拖拽 / 涂抹 / 画圆即可创建第一块区域';
+  const cards=zones.map(z=>`
+    <div class="zone-row zcard ${z.id===ZONE_MAP.sel?'on':''} ${z.enabled?'':'off'}" data-id="${z.id}" style="--zc:${zoneColor(z)}"
+      onclick="if(event.target.tagName!=='INPUT'&&event.target.tagName!=='BUTTON')zoneSelect(${z.id})"
+      onmouseenter="zoneHover(${z.id})" onmouseleave="zoneHover(0)">
+      <div class="zc-top">
+        <b title="${esc(z.name||'#'+z.id)}">${esc(z.name||('#'+z.id))}</b>
+        ${z.mode==='exclusive'?'<span class="tag gold">独占</span>':`<span class="tag blue">增益 ×${z.boost}</span>`}
+        <input class="switch" type="checkbox" ${z.enabled?'checked':''} onchange="toggleZoneEnabled(${z.id},this.checked)" onclick="event.stopPropagation()">
+        <button class="btn bad sm" onclick="event.stopPropagation();deleteZone(${z.id})">删</button>
+      </div>
+      <div class="zc-range">${esc(zoneRangeText(z))}</div>
+      <div class="zc-fish">${fishPills(z)}</div>
+    </div>`).join('');
+  el.innerHTML=seaChips+summary+(zones.length?cards:`<div class="empty">${emptyText}</div>`);
+  zmapDrawZones();
+  zoneRowsHighlight();
+  const guide=$('#zoneEmptyGuide');
+  if(guide)guide.hidden=guide.dataset.dismissed==='1'||ZONE_MAP.guideDismissed||!(ZONE_MAP.kind==='grid'&&ZONE_MAP.imgOk&&zones.length===0);
+}
+async function toggleZoneEnabled(id,on){
+  const z=FISH_ZONES.find(x=>x.id===id);if(!z)return;
+  z.fish=z.fish||[];z.enabled=on;
+  await api('/api/fish/zones',{method:'POST',body:JSON.stringify(z)});
+  toast(on?'已启用，最多 30 秒生效':'已停用，最多 30 秒生效');
+  await loadFishZones(true);renderZoneRows();
+  if(ZONE_MAP.sel===id&&ZONE_EDIT){ZONE_EDIT.enabled=on;const cb=$('#zoneEnabledView');if(cb){cb.textContent=on?'启用中':'已停用';cb.className='pill '+(on?'ok':'bad')}}
+}
+// 编辑路由：有纸地图 → 内联面板；无图地图 → 保留手填弹窗兜底
+function zoneEdit(id){
+  if(ZONE_MAP.kind==='none'){showZoneEditor(id);return}
+  zoneSelect(id);
+}
+function zoneSelect(id){
+  const z=FISH_ZONES&&FISH_ZONES.find(x=>x.id===id);if(!z)return;
+  ZONE_MAP.sel=id;ZONE_DIRTY=false;ZONE_MAP.painting=false;
+  ZONE_EDIT=JSON.parse(JSON.stringify(z));
+  ZONE_EDIT.fish=ZONE_EDIT.fish||[];
+  zoneOpenPanel();
+  zmapDrawZones();
+  zoneRowsHighlight();
+}
+// 列表悬停 ↔ 地图高亮联动
+function zoneHover(id){ZONE_MAP.hover=id;zmapDrawZones()}
+// 取消选中：收起面板、清高亮（地图单击空地时用）
+function zoneDeselect(){zoneClosePanel()}
+// 列表行与选中态同步（不重拉数据，只切 class）
+function zoneRowsHighlight(){
+  document.querySelectorAll('#zoneRows .zone-row').forEach(r=>r.classList.toggle('on',Number(r.dataset.id)===ZONE_MAP.sel));
+}
+function zoneStartCircle(st){
+  if(ZONE_DIRTY&&ZONE_EDIT&&$('#zonePanel')&&!$('#zonePanel').hidden){
+    askConfirm('放弃未保存的修改','面板里有未保存的区域修改，新建将丢弃。',()=>zoneStartCircle(st));
+    return;
+  }
+  ZONE_EDIT={id:0,loc:FISH_AREA,name:'',kind:'circle',cx:st.cx,cz:st.cz,radius:Math.round(st.r),sea_zone:1,gx0:0,gz0:0,gx1:0,gz1:0,mode:'exclusive',boost:3,keep_others:0.35,enabled:true,fish:[]};
+  ZONE_MAP.sel=0;
+  zoneOpenPanel();
+  zmapDrawZones();zoneRowsHighlight();
+  $('#zoneName')?.focus();
+}
+function zoneStartBrush(){
+  if(ZONE_DIRTY&&ZONE_EDIT&&$('#zonePanel')&&!$('#zonePanel').hidden){
+    askConfirm('放弃未保存的修改','面板里有未保存的区域修改，新建将丢弃。',()=>zoneStartBrush());
+    return;
+  }
+  ZONE_EDIT={id:0,loc:FISH_AREA,name:'',kind:'grid_cells',cells:[],sea_zone:1,gx0:0,gz0:0,gx1:0,gz1:0,mode:'exclusive',boost:3,keep_others:0.35,enabled:true,fish:[]};
+  ZONE_MAP.sel=0;
+  zoneOpenPanel();
+  zmapSetTool('brush');
+  zmapDrawZones();zoneRowsHighlight();
+  $('#zoneName')?.focus();
+  $('#zmapReadout')&&(document.getElementById('zmapReadout').textContent='涂抹模式：按住左键刷格子（Alt=擦除）；涂完在右侧保存');
+}
+function zoneStartNew(rect){
+  if(ZONE_DIRTY&&ZONE_EDIT&&$('#zonePanel')&&!$('#zonePanel').hidden){
+    askConfirm('放弃未保存的新区','面板里有未保存的区域修改，新建将丢弃。',()=>zoneStartNew(rect));
+    return;
+  }
+  const kind='grid_rect'; // 内陆拖矩形；海图不进此路径（点格走区号区）
+  ZONE_EDIT={id:0,loc:FISH_AREA,name:'',kind,sea_zone:1,gx0:rect?rect.gx0:0,gz0:rect?rect.gz0:0,gx1:rect?rect.gx1:0,gz1:rect?rect.gz1:0,mode:'exclusive',boost:3,keep_others:0.35,enabled:true,fish:[]};
+  ZONE_MAP.sel=0;
+  zoneOpenPanel();
+  zmapDrawZones();
+  zoneRowsHighlight();
+  zmapRenderSeaChips();
+  // 海图直接聚焦区号；内陆图聚焦名称
+  ($(kind==='sea_zone'?'#zoneSea':'#zoneName'))?.focus();
+}
+function zoneOpenPanel(){
+  const z=ZONE_EDIT,isNew=!z.id;
+  const rows=$('#zoneRows'),panel=$('#zonePanel'),foot=$('#zonePanelFooter'),title=$('#zoneSideTitle');
+  if(!panel)return;
+  if(rows)rows.hidden=true;
+  if(foot)foot.hidden=false;
+  if(title)title.textContent=isNew?'新建区域':'编辑区域';
+  panel.hidden=false;
+  const kindName=z.kind==='sea_zone'?'海图区号':z.kind==='grid_cells'?'涂格区':z.kind==='circle'?'圆形区':'矩形区';
+  const seaSet=z.sea_zones&&z.sea_zones.length?z.sea_zones:[z.sea_zone||1];
+  const rangeHTML=z.kind==='sea_zone'
+    ?`<div class="muted mono" style="font-size:13px;line-height:1.7">${seaSet.join('、')}</div><div class="toolbar" style="margin-top:8px"><button class="btn sm" onclick="zoneAppendLatest()">＋ 追加最近钓点区号</button></div><div class="tunable-hint">图上拖拽框选＝批量区号，单击网格＝单区号；或钓一条鱼后点「追加最近钓点」——客户端上报的区号零误差</div>`
+    :z.kind==='circle'
+    ?`<div class="form-grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>半径（米）</label><input id="zoneRadius" type="number" min="2" max="500" step="1" value="${Math.round(z.radius)||10}" onchange="zoneCircleInput(this)"></div><div class="field"><label>圆心（世界）</label><div class="muted mono" style="padding-top:8px">${Math.round(z.cx)}, ${Math.round(z.cz)}</div></div></div><div class="tunable-hint">2~500m；改动实时预览到地图。想挪圆心：关掉面板用 ◯ 工具重画一个</div>`
+    :z.kind==='grid_cells'
+    ?`<div class="toolbar"><button class="btn sm" id="zoneBrushPaintBtn" onclick="zmapSetTool(ZONE_MAP.painting?'select':'brush')">${ZONE_MAP.painting?'✔ 停止涂抹':'🖌 继续涂抹'}</button><button class="btn alt sm" onclick="zoneClearCells()">清空</button><span class="muted" id="zoneCellCount">${(z.cells||[]).length} 格</span></div><div class="tunable-hint">选 🖌 工具（快捷键 B）在地图上刷；Alt=擦除</div>`
+    :`<div class="muted mono" style="font-size:13px">gx ${z.gx0}:${z.gz0} ~ ${z.gx1}:${z.gz1} · ${(z.gx1-z.gx0+1)*40}×${(z.gz1-z.gz0+1)*40}m</div>
+      <details style="margin-top:6px"><summary class="muted" style="cursor:pointer;font-size:12px">手改坐标（实时预览）</summary><div class="form-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-top:6px"><div class="field"><label>gx0</label><input id="zoneGX0" type="number" step="1" value="${z.gx0}" onchange="zoneGridInput(this)"></div><div class="field"><label>gz0</label><input id="zoneGZ0" type="number" step="1" value="${z.gz0}" onchange="zoneGridInput(this)"></div><div class="field"><label>gx1</label><input id="zoneGX1" type="number" step="1" value="${z.gx1}" onchange="zoneGridInput(this)"></div><div class="field"><label>gz1</label><input id="zoneGZ1" type="number" step="1" value="${z.gz1}" onchange="zoneGridInput(this)"></div></div></details>`;
+  const modeHTML=ZONE_MAP.kind==='sea'||z.kind!=='sea_zone'
+    ?`<div class="seg"><button class="${z.mode==='exclusive'?'on':''}" onclick="ZONE_EDIT.mode='exclusive';ZONE_DIRTY=true;renderZoneModeParams();document.querySelectorAll('#zonePanel .seg button')[0].classList.add('on');document.querySelectorAll('#zonePanel .seg button')[1].classList.remove('on')">独占 · 只出名单鱼</button><button class="${z.mode==='boost'?'on':''}" onclick="ZONE_EDIT.mode='boost';ZONE_DIRTY=true;renderZoneModeParams();document.querySelectorAll('#zonePanel .seg button')[1].classList.add('on');document.querySelectorAll('#zonePanel .seg button')[0].classList.remove('on')">增益 · 名单加权</button></div>`
+    :'<div class="tunable-hint">海图区同样支持独占/增益</div>';
+  panel.innerHTML=`
+    <div class="prop-sec"><b>名称与状态</b>
+      <div class="field"><label>区域名称</label><input id="zoneName" value="${esc(z.name)}" placeholder="例如：湾口鲤区" onchange="ZONE_DIRTY=true;zmapDrawZones()"></div>
+      <div class="field" style="margin-top:10px"><label>形状类型</label><div class="muted">${kindName}${!isNew?` <span class="pill ${z.enabled?'ok':'bad'}" id="zoneEnabledView">${z.enabled?'启用中':'已停用'}</span>`:''}</div></div>
+    </div>
+    <div class="prop-sec"><b>范围（画在哪）</b>${rangeHTML}</div>
+    <div class="prop-sec"><b>出鱼方式</b>${modeHTML}</div>
+    <div id="zoneModeParams"></div>
+    <div class="prop-sec"><b>区内出什么鱼（先挑本图鱼种）</b>
+      <div class="toolbar"><input class="grow" id="zoneFishSearch" placeholder="筛选本图鱼种" oninput="renderZoneRosterPick()"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap;cursor:pointer"><input type="checkbox" class="switch" id="zoneFishAllPool" onchange="renderZoneRosterPick()">全库</label></div>
+      <div class="zone-fish-list" id="zoneFishResults"></div>
+      <div id="zoneFishRows" style="margin-top:10px"></div>
+    </div>`;
+  renderZoneModeParams();renderZoneRosterPick();renderZoneFishRows();
+}
+function zoneCircleInput(el){
+  if(!ZONE_EDIT)return;
+  const v=Math.min(500,Math.max(2,Math.round(Number(el.value)||10)));
+  el.value=v;ZONE_EDIT.radius=v;ZONE_DIRTY=true;zmapDrawZones();
+}
+function zoneClearCells(){if(ZONE_EDIT){ZONE_EDIT.cells=[];ZONE_DIRTY=true;zmapDrawZones();const c=document.getElementById('zoneCellCount');if(c)c.textContent='0 格'}}
+function zoneHideGuide(){ZONE_MAP.guideDismissed=true;const g=document.getElementById('zoneEmptyGuide');if(g){g.dataset.dismissed='1';g.hidden=true}}
+function zoneHidePanel(){const el=$('#zonePanel'),foot=$('#zonePanelFooter');if(el)el.hidden=true;if(foot)foot.hidden=true;const rows=$('#zoneRows');if(rows)rows.hidden=false;if($('#zoneSideTitle'))$('#zoneSideTitle').textContent='区域';ZONE_MAP.painting=false}
+// 手改网格输入：写回 ZONE_EDIT 并实时预览到地图
+function zoneGridInput(el){
+  const map={zoneGX0:'gx0',zoneGZ0:'gz0',zoneGX1:'gx1',zoneGZ1:'gz1'};
+  const k=map[el.id];
+  if(k&&ZONE_EDIT){ZONE_EDIT[k]=Math.round(Number(el.value)||0);ZONE_DIRTY=true;zmapDrawZones()}
+}
+function zoneClosePanel(){
+  const panel=$('#zonePanel'),rows=$('#zoneRows'),foot=$('#zonePanelFooter'),title=$('#zoneSideTitle');
+  if(panel){panel.hidden=true;panel.innerHTML=''}
+  if(rows)rows.hidden=false;
+  if(foot)foot.hidden=true;
+  if(title)title.textContent='区域';
+  ZONE_DIRTY=false;ZONE_MAP.sel=0;ZONE_EDIT=null;
+  closeModal(true);
+  zmapDrawZones();
+}
+function renderZoneModeParams(){
+  const m=$('#zoneMode')?.value||ZONE_EDIT.mode;
+  $('#zoneModeParams').innerHTML=m==='boost'
+    ?`<div class="form-grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>名单内乘数</label><input id="zoneBoost" type="number" min="0.1" step="0.1" value="${ZONE_EDIT.boost}" onchange="ZONE_DIRTY=true"></div><div class="field"><label>名单外保留系数 (0~1)</label><input id="zoneKeep" type="number" min="0" max="1" step="0.05" value="${ZONE_EDIT.keep_others}" onchange="ZONE_DIRTY=true"></div></div>`
+    :'<div class="tunable-hint">独占区：落点在区内时只出名单内鱼种（与地图名册取交集）；名单为空 = 区内不出鱼</div>';
+}
+// 鱼种选择默认展示本图名册（/api/fish/config 的鱼种表），勾选「全库搜索」走 /api/fish/pool 兜底
+function renderZoneRosterPick(){
+  const el=$('#zoneFishResults');if(!el||!ZONE_EDIT)return;
+  if($('#zoneFishAllPool')?.checked){searchZoneFish();return}
+  const q=($('#zoneFishSearch')?.value||'').toLowerCase();
+  const roster=(FISH_CFG&&FISH_CFG.fish)||[];
+  const rows=roster.filter(f=>!ZONE_EDIT.fish.some(zf=>zf.fish_key===f.fish_key)&&(!q||`${f.fish_key} ${f.name_zh}`.toLowerCase().includes(q)));
+  el.innerHTML=rows.slice(0,120).map(f=>`<div class="zone-fish-row" data-key="${esc(f.fish_key)}" data-name="${esc(f.name_zh||f.fish_key)}" data-w="${Number(f.base_weight)||1}" onclick="addZoneFish(this.dataset.key,this.dataset.name,this.dataset.w)"><b>${esc(f.name_zh||f.fish_key)}</b> <span class="muted mono">${esc(f.fish_key)}</span><span class="w">基础 ${Number(f.base_weight).toFixed(1)}</span><span class="tag">+</span></div>`).join('')||`<div class="empty">${roster.length?'没有匹配的本图鱼种；外来鱼种勾选「全库搜索」':'本图名册未加载，勾选「全库搜索」从全鱼库添加'}</div>`;
+}
+async function searchZoneFish(){
+  if(!ZONE_EDIT)return;
+  const q=$('#zoneFishSearch').value.trim();
+  const list=await api('/api/fish/pool?q='+encodeURIComponent(q)+'&limit=40');
+  $('#zoneFishResults').innerHTML=list.filter(x=>!ZONE_EDIT.fish.some(f=>f.fish_key===x.fish_key)).map(x=>`<div class="zone-fish-row" data-key="${esc(x.fish_key)}" data-name="${esc(x.name_zh)}" onclick="addZoneFish(this.dataset.key,this.dataset.name,1)"><b>${esc(x.name_zh)}</b> <span class="muted mono">${esc(x.fish_key)}</span><span class="w">外来</span><span class="tag">+</span></div>`).join('')||'<div class="empty">无结果或已在名单</div>';
+}
+function addZoneFish(key,name,w){
+  if(!ZONE_EDIT)return;
+  ZONE_EDIT.fish.push({fish_key:key,weight:Number(w)||1,enabled:true});
+  ZONE_DIRTY=true;
+  renderZoneRosterPick();renderZoneFishRows();
+}
+function renderZoneFishRows(){
+  if(!ZONE_EDIT||!$('#zoneFishRows'))return;
+  const cnt=$('#zoneFishCount');if(cnt)cnt.textContent=ZONE_EDIT.fish.length+' 个';
+  const nameOf=k=>{
+    const f=(FISH_CFG&&FISH_CFG.fish||[]).find(x=>x.fish_key===k);
+    return f&&f.name_zh?`${esc(f.name_zh)} <span class="muted mono" style="font-size:10.5px">${esc(k)}</span>`:esc(k);
+  };
+  $('#zoneFishRows').innerHTML=ZONE_EDIT.fish.length?`<table class="fish-table"><tbody>${ZONE_EDIT.fish.map((f,i)=>`<tr><td><input class="switch" type="checkbox" ${f.enabled?'checked':''} onchange="ZONE_EDIT.fish[${i}].enabled=this.checked;ZONE_DIRTY=true;renderZoneFishRows()"></td><td>${nameOf(f.fish_key)}</td><td><input class="mini-input" type="number" min="0" step="0.1" value="${f.weight}" title="相对权重" onchange="ZONE_EDIT.fish[${i}].weight=Number(this.value)||1;ZONE_DIRTY=true"></td><td><button class="btn bad sm" onclick="ZONE_EDIT.fish.splice(${i},1);ZONE_DIRTY=true;renderZoneFishRows();renderZoneRosterPick()">移除</button></td></tr>`).join('')}</tbody></table>`:'<div class="empty">名单为空；独占模式下该区域不出鱼。左边列表点击鱼种即可加入。</div>';
+}
+async function saveZone(){
+  if(!ZONE_EDIT)return;
+  const num=id=>{const v=Number($('#'+id)?.value);return Number.isFinite(v)?v:0};
+  ZONE_EDIT.name=($('#zoneName').value||'').trim();
+  const modeEl=$('#zoneMode');
+  if(modeEl)ZONE_EDIT.mode=modeEl.value;
+  const kindEl=$('#zoneKind');
+  if(kindEl)ZONE_EDIT.kind=kindEl.value;
+  if(ZONE_EDIT.kind==='sea_zone'){
+    if(!ZONE_EDIT.sea_zones||!ZONE_EDIT.sea_zones.length)ZONE_EDIT.sea_zones=[Math.max(1,Math.round(ZONE_EDIT.sea_zone||1))];
+    ZONE_EDIT.sea_zone=ZONE_EDIT.sea_zones[0];
+  }
+  else if(ZONE_EDIT.kind==='circle'){
+    ZONE_EDIT.radius=Math.min(500,Math.max(2,Math.round(num('zoneRadius')||ZONE_EDIT.radius)));
+  }
+  else if(ZONE_EDIT.kind==='grid_cells'){
+    ZONE_EDIT.cells=(ZONE_EDIT.cells||[]).filter((c,i,a)=>a.findIndex(x=>x[0]===c[0]&&x[1]===c[1])===i);
+    if(!ZONE_EDIT.cells.length)return toast('格子区至少要涂一个格子（先点「继续涂抹」再去地图上刷）','bad');
+  }
+  else{ZONE_EDIT.gx0=Math.round(num('zoneGX0'));ZONE_EDIT.gx1=Math.round(num('zoneGX1'));ZONE_EDIT.gz0=Math.round(num('zoneGZ0'));ZONE_EDIT.gz1=Math.round(num('zoneGZ1'))}
+  if(ZONE_EDIT.mode==='boost'){ZONE_EDIT.boost=Math.max(0.1,num('zoneBoost')||3);ZONE_EDIT.keep_others=Math.min(1,Math.max(0,num('zoneKeep')||0.35))}
+  try{
+    const res=await api('/api/fish/zones',{method:'POST',body:JSON.stringify(ZONE_EDIT)});
+    toast('区域已保存，最多 30 秒生效（id '+res.id+'）');
+    await loadFishZones(true);
+    renderFishAreas();
+    // 保持面板开着回显已保存的内容，可继续微调（重载后找不到该区时也要清 dirty）
+    ZONE_DIRTY=false;
+    zoneSelect(res.id);
+    renderZoneRows();
+  }catch(e){toast(e.message,'bad')}
+}
+async function deleteZone(id){
+  const z=FISH_ZONES.find(x=>x.id===id);if(!z)return;
+  askConfirm('删除区域','「'+(z.name||('#'+z.id))+'」的区域名册将被删除，区内恢复地图默认出鱼。',async()=>{
+    await api('/api/fish/zones/delete',{method:'POST',body:JSON.stringify({id})});
+    toast('区域已删除，最多 30 秒生效');
+    zoneClosePanel();
+    await loadFishZones(true);
+    renderFishAreas();
+    renderZoneRows();
+  });
+}
+// 手动输入兜底（仅无纸地图标定的地图使用；有图的地图走内联面板，字段 id 同源避免共存）
+function showZoneEditor(id=0){
+  const z=id?(FISH_ZONES||[]).find(x=>x.id===id):null;
+  ZONE_EDIT=z?JSON.parse(JSON.stringify(z)):{id:0,loc:FISH_AREA,name:'',kind:'grid_rect',sea_zone:1,gx0:0,gz0:0,gx1:0,gz1:0,mode:'exclusive',boost:3,keep_others:0.35,enabled:true,fish:[]};
+  showModal((z?'编辑区域':'划区域')+' · '+FISH_AREA,'无纸地图标定，按网格数字或海图区号填写',`
+    <div class="field"><label>区域名称</label><input id="zoneName" value="${esc(ZONE_EDIT.name)}" placeholder="例如：湾口鲤区"></div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-top:10px">
+      <div class="field"><label>区域类型</label><select id="zoneKind" onchange="showZoneEditor(${ZONE_EDIT.id})"><option value="grid_rect" ${ZONE_EDIT.kind==='grid_rect'?'selected':''}>网格矩形（内陆图）</option><option value="sea_zone" ${ZONE_EDIT.kind==='sea_zone'?'selected':''}>海图区号</option></select></div>
+      <div class="field"><label>模式</label><select id="zoneMode" onchange="renderZoneModeParams()"><option value="exclusive" ${ZONE_EDIT.mode==='exclusive'?'selected':''}>独占（只出名单鱼种）</option><option value="boost" ${ZONE_EDIT.mode==='boost'?'selected':''}>增益（名单加权）</option></select></div>
+    </div>
+    <div id="zoneGeom" style="margin-top:10px">${ZONE_EDIT.kind==='sea_zone'
+      ?`<div class="field"><label>海图区号</label><input id="zoneSea" type="number" min="1" step="1" value="${ZONE_EDIT.sea_zone||1}"><div class="tunable-hint">与客户端水域编号同源，例如「海图 120 号区域」填 120</div></div>`
+      :`<div class="form-grid" style="grid-template-columns:repeat(4,minmax(0,1fr))"><div class="field"><label>gx0</label><input id="zoneGX0" type="number" step="1" value="${ZONE_EDIT.gx0}"></div><div class="field"><label>gz0</label><input id="zoneGZ0" type="number" step="1" value="${ZONE_EDIT.gz0}"></div><div class="field"><label>gx1</label><input id="zoneGX1" type="number" step="1" value="${ZONE_EDIT.gx1}"></div><div class="field"><label>gz1</label><input id="zoneGZ1" type="number" step="1" value="${ZONE_EDIT.gz1}"></div></div><div class="tunable-hint">网格坐标 = floor(世界坐标/40)，含端点；查鱼助手回复里的区域范围（如 80:96～88:104）可直接换算</div>`}</div>
+    <div id="zoneModeParams" style="margin-top:10px"></div>
+    <div class="section-head" style="margin-top:14px"><h2>区内鱼种</h2><span class="muted">${ZONE_EDIT.fish.length} 个</span></div>
+    <input id="zoneFishSearch" placeholder="中文名或 fish_key" oninput="debounce('zoneFish',searchZoneFish)">
+    <div class="results" id="zoneFishResults"></div>
+    <div id="zoneFishRows" style="margin-top:10px"></div>
+    <div class="actions"><button class="btn good" onclick="saveZone()">保存</button><button class="btn alt" onclick="closeModal()">取消</button></div>`);
+  renderZoneModeParams();searchZoneFish();renderZoneFishRows();
+}
 
 async function loadHookProfiles(){
   const q=encodeURIComponent(($('#hookSearch')?.value||'').trim());

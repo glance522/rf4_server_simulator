@@ -882,6 +882,61 @@ func (d *DB) SpawnModeSet(ctx context.Context, mode, updatedBy string) error {
 	return tx.Commit()
 }
 
+// biteModeKeys 是「鱼汛模式」预设统管的五个开关。与发鱼模式不同，
+// 五个开关也可以在鱼群规则条里逐个手调（那是合法的 mixed 状态）。
+var biteModeKeys = []string{
+	"bite_gate_enabled", "fish_ecology_enabled", "fish_weather_enabled",
+	"fish_bait_rules_enabled", "fish_distribution_enabled",
+}
+
+// BiteModeFor 由当前 tunables 推断鱼汛模式：realistic=五开、legacy=五关，
+// 其余为 mixed（管理员手动改过单个开关）。
+func BiteModeFor(t map[string]string) string {
+	all, none := true, true
+	for _, key := range biteModeKeys {
+		if t[key] == "1" {
+			none = false
+		} else {
+			all = false
+		}
+	}
+	switch {
+	case all:
+		return "realistic"
+	case none:
+		return "legacy"
+	}
+	return "mixed"
+}
+
+// BiteModeSet 原子切换鱼汛模式：realistic=五开，legacy=五关。
+func (d *DB) BiteModeSet(ctx context.Context, mode, updatedBy string) error {
+	value := "0"
+	switch mode {
+	case "realistic":
+		value = "1"
+	case "legacy":
+	default:
+		return fmt.Errorf("未知鱼汛模式: %s", mode)
+	}
+	now := float64(time.Now().Unix())
+	tx, err := d.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, key := range biteModeKeys {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO tunables(key, value, updated_by, updated_ts) VALUES(?,?,?,?)
+			ON CONFLICT (key) DO UPDATE SET value=?, updated_by=?, updated_ts=?`,
+			key, value, updatedBy, now,
+			value, updatedBy, now); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // TunableList 全量参数。
 func (d *DB) TunableList(ctx context.Context) (map[string]string, error) {
 	rows, err := d.SQL.QueryContext(ctx, `SELECT key, value FROM tunables ORDER BY key`)

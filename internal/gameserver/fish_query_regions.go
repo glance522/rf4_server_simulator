@@ -7,6 +7,9 @@ import (
 	"math"
 	"sort"
 	"time"
+
+	"rf4server/internal/fishmaps"
+	"rf4server/internal/store"
 )
 
 var errFishQueryRegionMapUnsupported = errors.New("暂不支持该地图的区域查询")
@@ -16,44 +19,13 @@ const (
 	fishQueryRegionAxisLimit   = 76 // Includes the offset 3000-unit islands terrain.
 )
 
-type fishQueryRegionScene struct {
-	originX, originZ, size float64
-	paper                  *fishQueryPaperMap
-}
+// 纸地图标定与贴图名单一事实源在 internal/fishmaps（admin 后台地图编辑器共用）；
+// 这里保留本地别名，查鱼扫描与既有测试的类型名不变。
+type fishQueryRegionScene = fishmaps.Scene
 
-// fishQueryPaperMap stores numeric calibration, not image content. Client map
-// pixels are scene-relative world coordinates * scale + offset. Preserve the
-// serialized float32 calibration; use float64 for continuous scan bounds.
-type fishQueryPaperMap struct {
-	offsetX, offsetZ, scale float32
-	width, height           float64
-}
+type fishQueryPaperMap = fishmaps.PaperMap
 
-// Only scenes with verified display origins, TerrainData extents and paper-map
-// calibration are included. The islands use their outer main terrain; the inner terrain is
-// contained within it and must not be scanned again. TerrainData.size is already
-// in world units; do not multiply it by Transform scale or rotate its X/Z bounds.
-// The scan intersects terrain with the paper map; neither is a water mask.
-// See docs/fish-query-coordinates.md; other maps must not inherit a default.
-var fishQueryRegionScenes = map[string]fishQueryRegionScene{
-	"level_001_lake":            {size: 600, paper: &fishQueryPaperMap{-745, -835, 5, 2048, 2048}},
-	"level_002_kirzah_river":    {originX: -500, originZ: -500, size: 1000, paper: &fishQueryPaperMap{-945, -1113, 4.2, 2048, 2048}},
-	"level_003_viiveri_lake":    {originX: -500, originZ: -500.0000305175781, size: 1000, paper: &fishQueryPaperMap{-1116, -1115, 4.24, 2048, 2048}},
-	"level_004_torfyanoe_ozero": {size: 400, paper: &fishQueryPaperMap{56, 37, 4.824, 2048, 2048}},
-	"level_005_volhov":          {size: 1000, paper: &fishQueryPaperMap{77, 89, 1.88, 2048, 2048}},
-	"level_006_ladoga":          {size: 500, paper: &fishQueryPaperMap{-102, 8, 4.22, 2048, 2048}},
-	"level_007_grass_lake":      {size: 500, paper: &fishQueryPaperMap{-108.4, -72.8, 4.54, 2048, 2048}},
-	"level_008_sura_river":      {size: 800, paper: &fishQueryPaperMap{61, 28.6, 2.445, 2048, 2048}},
-	"level_009_ahtuba":          {size: 1000, paper: &fishQueryPaperMap{62, 74, 1.91, 2048, 2048}},
-	"level_010_belaya":          {size: 500, paper: &fishQueryPaperMap{15, 145, 3.56, 2048, 2048}},
-	"level_011_ladoga_02":       {originX: -500, originZ: -500, size: 3000, paper: &fishQueryPaperMap{78, 80, .63, 2048, 2048}},
-	"level_013_sev_don":         {size: 1000, paper: &fishQueryPaperMap{-55, -45, 2.15, 2048, 2048}},
-	"level_014_carp_lake":       {size: 1200, paper: &fishQueryPaperMap{15, -185, 2.1, 2048, 2048}},
-	"level_015_tunguska":        {size: 1200, paper: &fishQueryPaperMap{80, 80, 1.57, 2048, 2048}},
-	"level_016_yama":            {size: 1500, paper: &fishQueryPaperMap{78, 74, 1.27, 2048, 2048}},
-	"level_018_moskitnoe":       {originX: -128, originZ: -128, size: 512, paper: &fishQueryPaperMap{-906.3, -884.7, 7.58, 2048, 2048}},
-	"level_019_american_pond":   {originX: -127.4000015258789, originZ: -126.9000015258789, size: 1000, paper: &fishQueryPaperMap{-619, -619, 3.29, 2048, 2048}},
-}
+var fishQueryRegionScenes = fishmaps.Scenes
 
 // FishQueryRegion is a half-open rectangle in continuous HUD/map coordinates,
 // not a selected cast point or a guarantee of water/shore access.
@@ -79,33 +51,37 @@ type fishQueryRegions struct {
 	worldBounds                       [4]float64
 	minCellX, minCellZ, width, height int
 	waterFiltered                     bool
+	// zones 是该水域的区域固定鱼种名册；cells 记录每个区域代表点的世界坐标
+	// （与 fishArea 用的格角同源），供区域评分乘名册系数。
+	zones []store.FishZone
+	cells [][2]float64
 }
 
-func newFishQueryRegions(loc string, scene fishQueryRegionScene, now time.Time, enabled bool) (*fishQueryRegions, error) {
-	minWorldX, minWorldZ := scene.originX, scene.originZ
-	maxWorldX, maxWorldZ := scene.originX+scene.size, scene.originZ+scene.size
-	minCellX, minCellZ := math.Floor(scene.originX/fishQueryAreaSize), math.Floor(scene.originZ/fishQueryAreaSize)
+func newFishQueryRegions(loc string, scene fishQueryRegionScene, now time.Time, enabled bool, zones []store.FishZone) (*fishQueryRegions, error) {
+	minWorldX, minWorldZ := scene.OriginX, scene.OriginZ
+	maxWorldX, maxWorldZ := scene.OriginX+scene.Size, scene.OriginZ+scene.Size
+	minCellX, minCellZ := math.Floor(scene.OriginX/fishQueryAreaSize), math.Floor(scene.OriginZ/fishQueryAreaSize)
 	maxCellX, maxCellZ := math.Ceil(maxWorldX/fishQueryAreaSize), math.Ceil(maxWorldZ/fishQueryAreaSize)
-	if !validFishQueryCoordinate(scene.size) || scene.size <= 0 ||
-		!validFishQueryCoordinate(scene.originX) || !validFishQueryCoordinate(scene.originZ) ||
+	if !validFishQueryCoordinate(scene.Size) || scene.Size <= 0 ||
+		!validFishQueryCoordinate(scene.OriginX) || !validFishQueryCoordinate(scene.OriginZ) ||
 		!validFishQueryCoordinate(maxWorldX) || !validFishQueryCoordinate(maxWorldZ) ||
-		maxWorldX <= scene.originX || maxWorldZ <= scene.originZ ||
+		maxWorldX <= scene.OriginX || maxWorldZ <= scene.OriginZ ||
 		maxCellX-minCellX > fishQueryRegionAxisLimit || maxCellZ-minCellZ > fishQueryRegionAxisLimit {
 		return nil, fmt.Errorf("区域扫描范围无效")
 	}
-	if p := scene.paper; p != nil {
-		scale, offsetX, offsetZ := float64(p.scale), float64(p.offsetX), float64(p.offsetZ)
+	if p := scene.Paper; p != nil {
+		scale, offsetX, offsetZ := float64(p.Scale), float64(p.OffsetX), float64(p.OffsetZ)
 		if !validFishQueryCoordinate(scale) || scale <= 0 ||
 			!validFishQueryCoordinate(offsetX) || !validFishQueryCoordinate(offsetZ) ||
-			!validFishQueryCoordinate(p.width) || !validFishQueryCoordinate(p.height) || p.width <= 0 || p.height <= 0 {
+			!validFishQueryCoordinate(p.Width) || !validFishQueryCoordinate(p.Height) || p.Width <= 0 || p.Height <= 0 {
 			return nil, fmt.Errorf("纸地图范围无效")
 		}
 		// Intersect in world space before scoring. Do not clamp a winning result
 		// afterwards: that would move its probability to a different fish cell.
-		minWorldX = math.Max(minWorldX, scene.originX-offsetX/scale)
-		minWorldZ = math.Max(minWorldZ, scene.originZ-offsetZ/scale)
-		maxWorldX = math.Min(maxWorldX, scene.originX+(p.width-offsetX)/scale)
-		maxWorldZ = math.Min(maxWorldZ, scene.originZ+(p.height-offsetZ)/scale)
+		minWorldX = math.Max(minWorldX, scene.OriginX-offsetX/scale)
+		minWorldZ = math.Max(minWorldZ, scene.OriginZ-offsetZ/scale)
+		maxWorldX = math.Min(maxWorldX, scene.OriginX+(p.Width-offsetX)/scale)
+		maxWorldZ = math.Min(maxWorldZ, scene.OriginZ+(p.Height-offsetZ)/scale)
 		if minWorldX >= maxWorldX || minWorldZ >= maxWorldZ {
 			return nil, fmt.Errorf("纸地图与地形没有有效交集")
 		}
@@ -114,11 +90,12 @@ func newFishQueryRegions(loc string, scene fishQueryRegionScene, now time.Time, 
 	}
 	g := &fishQueryRegions{now: now, enabled: enabled, factors: map[string][]float64{},
 		worldBounds: [4]float64{minWorldX, minWorldZ, maxWorldX, maxWorldZ},
-		minCellX:    int(minCellX), minCellZ: int(minCellZ), width: int(maxCellX - minCellX), height: int(maxCellZ - minCellZ)}
+		minCellX:    int(minCellX), minCellZ: int(minCellZ), width: int(maxCellX - minCellX), height: int(maxCellZ - minCellZ),
+		zones: zones}
 	if !enabled {
 		return g, nil
 	}
-	frame := fishQueryMapFrame{originX: scene.originX, originZ: scene.originZ}
+	frame := fishQueryMapFrame{originX: scene.OriginX, originZ: scene.OriginZ}
 	// Align with production's world grid, not the scene origin. An offset scene
 	// or paper map can begin/end in a cell; clip both ends before projecting.
 	for ix := minCellX; ix < maxCellX; ix++ {
@@ -128,6 +105,7 @@ func newFishQueryRegions(loc string, scene fishQueryRegionScene, now time.Time, 
 			maxX, maxZ, _ := frame.project(math.Min((ix+1)*fishQueryAreaSize, maxWorldX), math.Min((iz+1)*fishQueryAreaSize, maxWorldZ))
 			g.bounds = append(g.bounds, FishQueryRegion{MinX: mx, MinZ: mz, MaxX: maxX, MaxZ: maxZ})
 			g.areas = append(g.areas, fishArea(loc, fishRollContext{x: x, z: z, hasPos: true}))
+			g.cells = append(g.cells, [2]float64{x, z})
 		}
 	}
 	g.scanned = len(g.areas)
@@ -144,6 +122,9 @@ func (g *fishQueryRegions) distributionFactors(ctx context.Context, key string) 
 			return nil, ctx.Err()
 		}
 		factors[i] = distributionMultiplier(area, key, g.now)
+		if len(g.zones) > 0 && i < len(g.cells) {
+			factors[i] *= fishZoneFactorForPoint(g.zones, g.cells[i][0], g.cells[i][1], key)
+		}
 	}
 	g.factors[key] = factors
 	return factors, nil

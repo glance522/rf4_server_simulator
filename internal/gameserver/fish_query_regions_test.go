@@ -12,7 +12,7 @@ import (
 )
 
 func TestFishQueryRegionRankingUsesCompetition(t *testing.T) {
-	g, err := newFishQueryRegions("test", fishQueryRegionScene{size: 80}, time.Unix(1794096000, 0), true)
+	g, err := newFishQueryRegions("test", fishQueryRegionScene{Size: 80}, time.Unix(1794096000, 0), true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,9 +46,9 @@ func TestFishQueryRegionCaptureMatchesPointCalculation(t *testing.T) {
 	q := &fishQueryCapture{fish: "c.roach", grade: 2, regional: true}
 	c.query = q
 	s.rollFishWithRules(c.loc, "rule_worm", .8, bonus, c)
-	scene := fishQueryRegionScene{originX: -120.5, originZ: -200.25, size: 400,
-		paper: &fishQueryPaperMap{-25, -40, 2, 300, 400}}
-	g, err := newFishQueryRegions("rules-test", scene, c.now, true)
+	scene := fishQueryRegionScene{OriginX: -120.5, OriginZ: -200.25, Size: 400,
+		Paper: &fishQueryPaperMap{OffsetX: -25, OffsetZ: -40, Scale: 2, Width: 300, Height: 400}}
+	g, err := newFishQueryRegions("rules-test", scene, c.now, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestFishQueryRegionCaptureMatchesPointCalculation(t *testing.T) {
 	var wantRegion FishQueryRegion
 	for _, area := range g.bounds {
 		point := c
-		point.x, point.z, point.hasPos = (area.MinX+area.MaxX)*2.5+scene.originX, (area.MinZ+area.MaxZ)*2.5+scene.originZ, true
+		point.x, point.z, point.hasPos = (area.MinX+area.MaxX)*2.5+scene.OriginX, (area.MinZ+area.MaxZ)*2.5+scene.OriginZ, true
 		point.query = &fishQueryCapture{fish: q.fish, grade: q.grade}
 		s.rollFishWithRules(point.loc, "rule_worm", .8, bonus, point)
 		if point.query.chance > want.chance {
@@ -197,7 +197,7 @@ func TestFishQueryRegionsPreserveSeaGridQuery(t *testing.T) {
 
 func TestFishQueryRegionBoundsAndCancellation(t *testing.T) {
 	for key, scene := range fishQueryRegionScenes {
-		g, err := newFishQueryRegions(key, scene, time.Unix(1794096000, 0), true)
+		g, err := newFishQueryRegions(key, scene, time.Unix(1794096000, 0), true, nil)
 		want := fishQueryExpectedDisplayBounds[key]
 		if err != nil || len(g.areas) != want.cells {
 			t.Fatalf("%s: grid=%+v err=%v", key, g, err)
@@ -208,11 +208,11 @@ func TestFishQueryRegionBoundsAndCancellation(t *testing.T) {
 		}
 	}
 	for _, invalid := range []float64{0, -1, math.NaN(), math.Inf(1), 1e7} {
-		if _, err := newFishQueryRegions("test", fishQueryRegionScene{size: invalid}, time.Time{}, true); err == nil {
+		if _, err := newFishQueryRegions("test", fishQueryRegionScene{Size: invalid}, time.Time{}, true, nil); err == nil {
 			t.Fatalf("accepted invalid extent %g", invalid)
 		}
 	}
-	g, _ := newFishQueryRegions("test", fishQueryRegionScene{size: 80}, time.Now(), false)
+	g, _ := newFishQueryRegions("test", fishQueryRegionScene{Size: 80}, time.Now(), false, nil)
 	q := &fishQueryCapture{chance: .2}
 	if region, err := g.best(t.Context(), q); err != nil || region != nil || q.chance != .2 {
 		t.Fatal("disabled distribution invented a winning region or changed chance")
@@ -222,7 +222,7 @@ func TestFishQueryRegionBoundsAndCancellation(t *testing.T) {
 	if _, err := g.best(cancelled, q); !errors.Is(err, context.Canceled) {
 		t.Fatalf("ignored cancellation: %v", err)
 	}
-	g, _ = newFishQueryRegions("test", fishQueryRegionScene{size: 80}, time.Now(), true)
+	g, _ = newFishQueryRegions("test", fishQueryRegionScene{Size: 80}, time.Now(), true, nil)
 	if region, err := g.best(t.Context(), &fishQueryCapture{}); err != nil || region != nil {
 		t.Fatal("empty capture generated a region")
 	}
@@ -256,14 +256,14 @@ func TestFishQueryVerifiedSceneCoverage(t *testing.T) {
 	for key, size := range wantSizes {
 		t.Run(key, func(t *testing.T) {
 			scene := fishQueryRegionScenes[key]
-			if got := scene.size; got != size {
+			if got := scene.Size; got != size {
 				t.Fatalf("extent=%g, want %g", got, size)
 			}
 			want := fishQueryExpectedDisplayBounds[key].bounds
-			if scene.paper == nil {
+			if scene.Paper == nil {
 				t.Fatal("supported map lacks paper-map calibration")
 			}
-			g, err := newFishQueryRegions(key, scene, time.Time{}, true)
+			g, err := newFishQueryRegions(key, scene, time.Time{}, true, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -283,7 +283,7 @@ func TestFishQueryVerifiedSceneCoverage(t *testing.T) {
 				seen[g.areas[i]] = true
 				// Compare both corners inside the half-open cell with the
 				// production partition, including truncated outer cells.
-				for _, p := range [][2]float64{{r.MinX*5 + scene.originX + 1e-6, r.MinZ*5 + scene.originZ + 1e-6}, {r.MaxX*5 + scene.originX - 1e-6, r.MaxZ*5 + scene.originZ - 1e-6}} {
+				for _, p := range [][2]float64{{r.MinX*5 + scene.OriginX + 1e-6, r.MinZ*5 + scene.OriginZ + 1e-6}, {r.MaxX*5 + scene.OriginX - 1e-6, r.MaxZ*5 + scene.OriginZ - 1e-6}} {
 					if area := fishArea(key, fishRollContext{x: p[0], z: p[1], hasPos: true}); area != g.areas[i] {
 						t.Fatalf("display region %+v maps to %s, want %s", r, area, g.areas[i])
 					}
@@ -347,8 +347,8 @@ func TestFishQueryVerifiedMapQueries(t *testing.T) {
 }
 
 func TestFishQueryOffsetGridAlignment(t *testing.T) {
-	scene := fishQueryRegionScene{originX: -500, originZ: -500, size: 1000}
-	g, err := newFishQueryRegions("test", scene, time.Time{}, true)
+	scene := fishQueryRegionScene{OriginX: -500, OriginZ: -500, Size: 1000}
+	g, err := newFishQueryRegions("test", scene, time.Time{}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,12 +360,12 @@ func TestFishQueryOffsetGridAlignment(t *testing.T) {
 		t.Fatalf("last cell is not clipped to the world grid: %s %+v", g.areas[last], g.bounds[last])
 	}
 	for _, invalid := range []fishQueryRegionScene{
-		{originX: math.NaN(), size: 40}, {originZ: math.Inf(1), size: 40},
-		{originX: 1e7, size: 40}, {originX: 1e7, size: 1e-12},
-		{originX: 1, size: 3040}, // shifted 76-cell extent intersects 77 world cells
+		{OriginX: math.NaN(), Size: 40}, {OriginZ: math.Inf(1), Size: 40},
+		{OriginX: 1e7, Size: 40}, {OriginX: 1e7, Size: 1e-12},
+		{OriginX: 1, Size: 3040}, // shifted 76-cell extent intersects 77 world cells
 	} {
 		for _, enabled := range []bool{false, true} {
-			if _, err := newFishQueryRegions("test", invalid, time.Time{}, enabled); err == nil {
+			if _, err := newFishQueryRegions("test", invalid, time.Time{}, enabled, nil); err == nil {
 				t.Fatalf("accepted invalid scene %+v", invalid)
 			}
 		}
@@ -373,7 +373,7 @@ func TestFishQueryOffsetGridAlignment(t *testing.T) {
 }
 
 func TestFishQueryCopperLakeClippedEdges(t *testing.T) {
-	g, err := newFishQueryRegions("copper", fishQueryRegionScenes["level_018_moskitnoe"], time.Time{}, true)
+	g, err := newFishQueryRegions("copper", fishQueryRegionScenes["level_018_moskitnoe"], time.Time{}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +392,7 @@ func TestFishQueryCopperLakeClippedEdges(t *testing.T) {
 }
 
 func TestFishQueryCopperPaperMapExcludesOutsideAreas(t *testing.T) {
-	g, err := newFishQueryRegions("copper", fishQueryRegionScenes["level_018_moskitnoe"], time.Time{}, true)
+	g, err := newFishQueryRegions("copper", fishQueryRegionScenes["level_018_moskitnoe"], time.Time{}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,10 +437,10 @@ func TestFishQueryUnverifiedScenesRemainUnsupported(t *testing.T) {
 func TestFishQueryLadogaIslandsCoordinates(t *testing.T) {
 	const mapKey = "level_011_ladoga_02"
 	scene, ok := fishQueryRegionScenes[mapKey]
-	if !ok || scene.originX != -500 || scene.originZ != -500 || scene.size != 3000 {
+	if !ok || scene.OriginX != -500 || scene.OriginZ != -500 || scene.Size != 3000 {
 		t.Fatalf("islands must use the outer main terrain: %+v, supported=%v", scene, ok)
 	}
-	g, err := newFishQueryRegions(mapKey, scene, time.Time{}, true)
+	g, err := newFishQueryRegions(mapKey, scene, time.Time{}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -507,7 +507,7 @@ func BenchmarkFishQueryRegionalGrid(b *testing.B) {
 	now := time.Unix(1794096000, 0)
 	b.ReportAllocs()
 	for b.Loop() {
-		g, _ := newFishQueryRegions("benchmark", fishQueryRegionScene{size: 1500}, now, true)
+		g, _ := newFishQueryRegions("benchmark", fishQueryRegionScene{Size: 1500}, now, true, nil)
 		if err := g.shortlist(b.Context(), "fish-0", weights); err != nil {
 			b.Fatal(err)
 		}

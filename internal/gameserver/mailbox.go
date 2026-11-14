@@ -1025,6 +1025,11 @@ func (s *Server) execAdminCmd(cmd *AdminCommand) {
 	case "reload_bait_rules":
 		s.invalidateBaitOverrides()
 		s.log.Info("管理指令：鱼饵规则覆盖已刷新")
+	case "reload_fish_zones":
+		s.fishZoneMu.Lock()
+		s.fishZoneCache = nil
+		s.fishZoneMu.Unlock()
+		s.log.Info("管理指令：区域鱼种名册已刷新")
 	case "fish_tv_test":
 		// 鱼汛通道探测：向指定玩家（0=全部在线会话）推送一条测试消息。
 		var targets []*Session
