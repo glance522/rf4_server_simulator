@@ -50,6 +50,138 @@ func TestCatchSkillFloatResidueHidesSkillRow(t *testing.T) {
 	}
 }
 
+// 官服对拍结论：磨损只按搏鱼受力时间结算，不存在"每尾鱼扣一笔"的离散磨损
+// （docs/实测博鱼过程对装备磨损的影响分析.md §一.2）。主线/前导/鱼钩/竿本体/
+// 浮漂/轮体全部停扣，仅拟饵保留按尾磨损（产品口径）。
+func TestCatchSettlementDoesNotWearUnsupportedGear(t *testing.T) {
+	srv, db := newRigTestServer(t)
+	ctx := context.Background()
+	const uid = int64(1000001)
+	rod, err := srv.CreateItem(ctx, uid, "feeder_10125_FD360", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line, err := srv.CreateItem(ctx, uid, "mono_40853", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook, err := srv.CreateItem(ctx, uid, "c_hook_20712", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reel, err := srv.CreateItem(ctx, uid, "bclp_5004", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess := newProbeSess(srv)
+	mountGearForTest(t, srv, sess, rod.GUID, line.GUID)
+	mountGearForTest(t, srv, sess, rod.GUID, hook.GUID)
+	mountGearForTest(t, srv, sess, rod.GUID, reel.GUID)
+	before := map[string]float64{}
+	for name, guid := range map[string]string{"rod": rod.GUID, "line": line.GUID, "hook": hook.GUID, "reel": reel.GUID} {
+		row, err := db.GetItemByGUID(ctx, guid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before[name] = row.Durability
+	}
+	st := srv.stateFor(uid)
+	st.mu.Lock()
+	st.GearGuid = rod.GUID
+	st.Pending = &RolledFish{FishGUID: newFishGUID(), Species: "perch", Grade: 2,
+		WeightG: 642, LengthM: .28, LocLevel: "level_001_lake"}
+	st.Hooked = true
+	st.mu.Unlock()
+	body, handled := srv.fishingEndSettle(&Ctx{Sess: sess, CallID: 1,
+		Main: 14, Sub: 4, ExpectResponse: true, Log: logging.Discard()})
+	if !handled || len(body) == 0 {
+		t.Fatal("结算未正常返回")
+	}
+	for name, guid := range map[string]string{"rod": rod.GUID, "line": line.GUID, "hook": hook.GUID, "reel": reel.GUID} {
+		row, err := db.GetItemByGUID(ctx, guid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if row.Durability != before[name] {
+			t.Fatalf("%s 不应按尾扣耐久: %v -> %v", name, before[name], row.Durability)
+		}
+	}
+}
+
+// 软饵/泡沫按咬口磨损（baitUseRule），不应再叠加按尾扣；硬饵仍走按尾 0.0008。
+func TestCatchWearExcludesPerBiteLures(t *testing.T) {
+	srv, db := newRigTestServer(t)
+	ctx := context.Background()
+	const uid = int64(1000001)
+	rod, err := srv.CreateItem(ctx, uid, "spin_10223_PF70MH", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line, err := srv.CreateItem(ctx, uid, "mono_40853", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	soft, err := srv.CreateItem(ctx, uid, "softplastic_g_1610", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess := newProbeSess(srv)
+	mountGearForTest(t, srv, sess, rod.GUID, line.GUID)
+	mountGearForTest(t, srv, sess, rod.GUID, soft.GUID)
+	before, err := db.GetItemByGUID(ctx, soft.GUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := srv.stateFor(uid)
+	st.mu.Lock()
+	st.GearGuid = rod.GUID
+	st.Pending = &RolledFish{FishGUID: newFishGUID(), Species: "perch", Grade: 2,
+		WeightG: 642, LengthM: .28, LocLevel: "level_001_lake"}
+	st.Hooked = true
+	st.mu.Unlock()
+	body, handled := srv.fishingEndSettle(&Ctx{Sess: sess, CallID: 1,
+		Main: 14, Sub: 4, ExpectResponse: true, Log: logging.Discard()})
+	if !handled || len(body) == 0 {
+		t.Fatal("结算未正常返回")
+	}
+	after, err := db.GetItemByGUID(ctx, soft.GUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Durability != before.Durability {
+		t.Fatalf("软饵不应再叠加按尾扣耐久: %v -> %v", before.Durability, after.Durability)
+	}
+	// 正控：硬饵（LureType 2）仍按尾磨损。
+	hard, err := srv.CreateItem(ctx, uid, "spoon_lures_1797", "backpack", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hardBefore, err := db.GetItemByGUID(ctx, hard.GUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertRigComponentAt(ctx, rod.GUID, catLure, 1, hard.GUID, 0); err != nil {
+		t.Fatal(err)
+	}
+	st = srv.stateFor(uid)
+	st.mu.Lock()
+	st.Pending = &RolledFish{FishGUID: newFishGUID(), Species: "perch", Grade: 2,
+		WeightG: 642, LengthM: .28, LocLevel: "level_001_lake"}
+	st.Hooked = true
+	st.mu.Unlock()
+	if body, handled := srv.fishingEndSettle(&Ctx{Sess: sess, CallID: 2,
+		Main: 14, Sub: 4, ExpectResponse: true, Log: logging.Discard()}); !handled || len(body) == 0 {
+		t.Fatal("第二次结算未正常返回")
+	}
+	hardAfter, err := db.GetItemByGUID(ctx, hard.GUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(hardAfter.Durability-(hardBefore.Durability-wearPerCatch["lure"])) > 1e-9 {
+		t.Fatalf("硬饵应按尾磨损 %v: %v -> %v", wearPerCatch["lure"], hardBefore.Durability, hardAfter.Durability)
+	}
+}
+
 func TestCatchSettlementOnceAcrossCallsAndRestart(t *testing.T) {
 	srv, db := newDetachTestServer(t)
 	ctx := context.Background()
@@ -86,7 +218,9 @@ func TestCatchSettlementOnceAcrossCallsAndRestart(t *testing.T) {
 	r2, _ := db.GetItemByGUID(ctx, rod.GUID)
 	var count2 int
 	_ = db.SQL.QueryRow(`SELECT COUNT(*) FROM item_damage_log WHERE uid=?`, uid).Scan(&count2)
-	if p1.XP <= 0 || p2.XP != p1.XP || r2.Durability != r1.Durability || count2 != count1 || count1 == 0 {
+	// 按尾磨损停用后，仅带竿/线的装配结算不再产生磨损日志（count 可为 0），
+	// 幂等性只要求重放前后完全一致。
+	if p1.XP <= 0 || p2.XP != p1.XP || r2.Durability != r1.Durability || count2 != count1 {
 		t.Fatalf("重复结算产生副作用: xp=%d/%d wear=%g/%g logs=%d/%d", p1.XP, p2.XP, r1.Durability, r2.Durability, count1, count2)
 	}
 	recovered := restarted.stateFor(uid)

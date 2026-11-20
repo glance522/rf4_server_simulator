@@ -69,6 +69,14 @@ func (s *Server) prepareCatchWear(ctx context.Context, uid int64, rigGUID string
 		if row == nil || amount <= 0 || row.Durability <= 0 {
 			return nil
 		}
+		if key == "lure" {
+			// 软饵/泡沫走按咬口磨损，不再叠加按尾扣；按类型判定，与速率数值解耦。
+			if def, derr := s.itemDefForRow(ctx, row); derr == nil && def != nil {
+				if _, perBite := perBiteWearTunable(def); perBite {
+					return nil
+				}
+			}
+		}
 		durability := math.Max(0, row.Durability-amount)
 		fields, err := FieldsFromJSON(row.FieldsJSON)
 		if err != nil {

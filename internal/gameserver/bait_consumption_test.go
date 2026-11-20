@@ -169,7 +169,7 @@ func TestBaitConsumptionReusableAndAllStaticTypes(t *testing.T) {
 		if err := rows.Scan(&def.NumericID, &def.ItemID, &def.Category, &def.AttrsJSON); err != nil {
 			t.Fatal(err)
 		}
-		consumed, wear := baitUseRule(&def, false)
+		consumed, wear := s.baitUseRule(&def, false)
 		if def.Category == 17 && consumed {
 			t.Fatalf("reusable lure was treated as edible: %s", def.ItemID)
 		}
@@ -713,5 +713,82 @@ func TestBaitRefillsWhenFishIsLanded(t *testing.T) {
 	var pending int
 	if err := db.SQL.QueryRow(`SELECT COUNT(*) FROM rod_setting WHERE guid=? AND key LIKE 'rebait:%'`, rod).Scan(&pending); err != nil || pending != 0 {
 		t.Fatalf("补挂完成后仍残留补饵请求：%d %v", pending, err)
+	}
+}
+
+// 嘬饵（未刺中）不磨拟饵；正常中钩咬口仍按默认速率磨损。
+func TestNibbleBaitDoesNotWearLure(t *testing.T) {
+	t.Parallel()
+	s, db := newRigTestServer(t)
+	rod := baitTestRod(t, s)
+	_, child := baitTestMount(t, s, rod, "softplastic_2627", 3, 350)
+	before, err := db.GetItemByGUID(t.Context(), child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.consumeBaitEvent(t.Context(), 1000001, rod, "fish-nibble-1:nibble", []string{child}, false); err != nil {
+		t.Fatal(err)
+	}
+	after, err := db.GetItemByGUID(t.Context(), child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Durability != before.Durability {
+		t.Fatalf("嘬饵不应磨软饵: %v -> %v", before.Durability, after.Durability)
+	}
+	if _, err := s.consumeBaitEvent(t.Context(), 1000001, rod, "fish-solid-1", []string{child}, false); err != nil {
+		t.Fatal(err)
+	}
+	after2, err := db.GetItemByGUID(t.Context(), child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(after2.Durability-(before.Durability-defaultBiteWearSoftLure)) > 1e-9 {
+		t.Fatalf("中钩咬口应按默认速率磨损: %v -> %v", before.Durability, after2.Durability)
+	}
+}
+
+// 咬口磨损速率走 tunable：后台改值并 reload 后生效。
+func TestBiteWearRatesFromTunables(t *testing.T) {
+	t.Parallel()
+	s, db := newRigTestServer(t)
+	ctx := t.Context()
+	if err := db.TunableSet(ctx, "wear_bite_soft_lure_per_bite", "0.01", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.TunableSet(ctx, "wear_bite_foam_per_bite", "0.002", "test"); err != nil {
+		t.Fatal(err)
+	}
+	s.execAdminCmd(&AdminCommand{Op: "reload_tunables"})
+	rod := baitTestRod(t, s)
+	_, soft := baitTestMount(t, s, rod, "softplastic_2627", 3, 350)
+	softBefore, err := db.GetItemByGUID(ctx, soft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.consumeBaitEvent(ctx, 1000001, rod, "tune-soft", []string{soft}, false); err != nil {
+		t.Fatal(err)
+	}
+	softAfter, err := db.GetItemByGUID(ctx, soft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(softAfter.Durability-(softBefore.Durability-0.01)) > 1e-9 {
+		t.Fatalf("软饵应按 tunable 0.01 磨损: %v -> %v", softBefore.Durability, softAfter.Durability)
+	}
+	_, foam := baitTestMount(t, s, rod, "zbb_mm_bg_13", 3, 351)
+	foamBefore, err := db.GetItemByGUID(ctx, foam)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.consumeBaitEvent(ctx, 1000001, rod, "tune-foam", []string{foam}, false); err != nil {
+		t.Fatal(err)
+	}
+	foamAfter, err := db.GetItemByGUID(ctx, foam)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(foamAfter.Durability-(foamBefore.Durability-0.002)) > 1e-9 {
+		t.Fatalf("泡沫饵应按 tunable 0.002 磨损: %v -> %v", foamBefore.Durability, foamAfter.Durability)
 	}
 }

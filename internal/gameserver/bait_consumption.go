@@ -511,32 +511,65 @@ func (s *Server) canFishWithBait(ctx context.Context, uid int64, gearGUID string
 	return rod == nil || rod.UID == uid && len(s.currentBaits(ctx, gearGUID)) > 0
 }
 
-// baitUseRule 区分可食饵、重复使用的仿生饵及入水消耗的窝料。
-func baitUseRule(def *store.ItemDef, cast bool) (bool, float64) {
+// 咬口磨损速率缺省值（tunable 缺失/非法时回落）：软饵/泡沫橡胶 2%/咬口
+// （50 次磨穿），Zig 泡沫饵 0.5%/咬口（200 次磨穿）。官服无对应抓包样本，
+// 速率属产品口径，后台「饵料咬口磨损」可调。
+const (
+	defaultBiteWearSoftLure = 0.02
+	defaultBiteWearFoam     = 0.005
+)
+
+// perBiteWearTunable 返回按咬口磨损的 tunable 键：软饵/泡沫橡胶拟饵与 Zig 泡沫饵
+// 走咬口通道；其余饵型不走（硬饵仍按钓获磨损）。按类型判定，与速率数值解耦。
+func perBiteWearTunable(def *store.ItemDef) (string, bool) {
 	if def == nil {
-		return false, 0
-	}
-	if cast {
-		return def.Category == 30 || def.Category == 46, 0
+		return "", false
 	}
 	var attrs struct {
 		BaitType int64 `json:"fopbhlmkcpe"`
 		LureType int64 `json:"mbemakijdeh"`
 	}
 	if json.Unmarshal([]byte(def.AttrsJSON), &attrs) != nil {
-		return false, 0
+		return "", false
 	}
-	if def.Category == 27 {
-		if attrs.BaitType == 17 {
-			return false, 0.005
-		}
-		return true, 0
+	if def.Category == 27 && attrs.BaitType == 17 {
+		return "wear_bite_foam_per_bite", true
 	}
 	if def.Category == 17 {
 		switch attrs.LureType {
 		case 3, 8, 9, 13, 14, 16:
-			return false, 0.02
+			return "wear_bite_soft_lure_per_bite", true
 		}
+	}
+	return "", false
+}
+
+// biteWearRate 读咬口磨损速率 tunable：0 合法（关通道），负值/非有限值回落缺省。
+func (s *Server) biteWearRate(key string) float64 {
+	def := defaultBiteWearSoftLure
+	if key == "wear_bite_foam_per_bite" {
+		def = defaultBiteWearFoam
+	}
+	v := s.tunableF(key, def)
+	if v < 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+		return def
+	}
+	return v
+}
+
+// baitUseRule 区分可食饵、按咬口磨损的仿生饵及入水消耗的窝料。
+func (s *Server) baitUseRule(def *store.ItemDef, cast bool) (bool, float64) {
+	if def == nil {
+		return false, 0
+	}
+	if cast {
+		return def.Category == 30 || def.Category == 46, 0
+	}
+	if key, ok := perBiteWearTunable(def); ok {
+		return false, s.biteWearRate(key)
+	}
+	if def.Category == 27 {
+		return true, 0
 	}
 	return false, 0
 }
@@ -565,10 +598,13 @@ func (s *Server) consumeBaitEvent(ctx context.Context, uid int64, rod, event str
 	if s.DB == nil || rod == "" || event == "" {
 		return out, nil
 	}
+	s.warmTunableCache()
 	kind := "bait_bite"
 	if cast {
 		kind = "bait_cast"
 	}
+	// 嘬饵（未刺中）只扣可食饵数量，不磨拟饵耐久。
+	nibble := strings.HasSuffix(event, ":nibble")
 	tx, err := beginEconomyTx(ctx, s.DB)
 	if err != nil {
 		return out, err
@@ -631,12 +667,12 @@ func (s *Server) consumeBaitEvent(ctx context.Context, uid int64, rod, event str
 		if err != nil {
 			return out, err
 		}
-		consumed, wear := baitUseRule(def, cast)
+		consumed, wear := s.baitUseRule(def, cast)
 		if consumed && baitQuantity(row) <= 0 {
 			return out, fmt.Errorf("挂载饵料已用尽")
 		}
 		if !consumed {
-			if wear == 0 {
+			if wear == 0 || nibble {
 				continue
 			}
 			fields, err := FieldsFromJSON(row.FieldsJSON)

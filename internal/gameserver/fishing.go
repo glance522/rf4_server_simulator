@@ -613,6 +613,14 @@ func (s *Server) ensureTunablesLocked() {
 	s.tunAt = time.Now()
 }
 
+// warmTunableCache 在无事务的上下文预加载运行参数：SQLite 写事务内再查
+// tunables 会撞锁超时，导致缓存回落默认值（后台调参看着不生效）。
+func (s *Server) warmTunableCache() {
+	s.tunMu.Lock()
+	s.ensureTunablesLocked()
+	s.tunMu.Unlock()
+}
+
 // tunableF 运行参数读取（数值，缓存 30s；缺省回退）。
 func (s *Server) tunableF(key string, def float64) float64 {
 	s.tunMu.Lock()

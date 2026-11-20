@@ -300,7 +300,9 @@ func TestBrokenRodPersistsZeroDurabilityAndCannotMount(t *testing.T) {
 	}
 }
 
-func TestWearAddsHistoryAndWearsRodBody(t *testing.T) {
+// 官服对拍无"每尾扣一笔"的离散磨损：竿本体与主线都不再随钓获掉耐久，
+// 也不产生磨损历史（仅拟饵保留按尾通道）。
+func TestPerCatchWearSkipsUnsupportedGear(t *testing.T) {
 	t.Parallel()
 	srv, db := newRigTestServer(t)
 	ctx := context.Background()
@@ -319,24 +321,20 @@ func TestWearAddsHistoryAndWearsRodBody(t *testing.T) {
 
 	freshRod, _ := db.GetItemByGUID(ctx, rod.GUID)
 	freshLine, _ := db.GetItemByGUID(ctx, line.GUID)
-	if freshRod.Durability >= 1 {
-		t.Fatalf("竿本体应产生磨损，耐久=%v", freshRod.Durability)
+	if freshRod.Durability != 1 {
+		t.Fatalf("竿本体不应按尾扣耐久，耐久=%v", freshRod.Durability)
 	}
-	if freshLine.Durability >= 1 {
-		t.Fatalf("鱼线应产生磨损，耐久=%v", freshLine.Durability)
+	if freshLine.Durability != 1 {
+		t.Fatalf("主线不应按尾扣耐久，耐久=%v", freshLine.Durability)
 	}
 	logs, err := db.ListItemDamageLogs(ctx, uid, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string]bool{}
 	for _, entry := range logs {
 		if entry.Event == damageEventWear {
-			got[entry.ItemGUID] = true
+			t.Fatalf("不应产生磨损历史: item=%s", entry.ItemID)
 		}
-	}
-	if !got[rod.GUID] || !got[line.GUID] {
-		t.Fatalf("磨损历史缺少竿或线: %+v", got)
 	}
 }
 

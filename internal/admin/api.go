@@ -431,6 +431,9 @@ var reelWearTunableRanges = map[string]tunableRange{
 	"wear_stress_guides_per_s":   {min: 0, max: 0.01},
 	"wear_stress_rodblank_per_s": {min: 0, max: 0.01},
 	"wear_leader_per_stress_sec": {min: 0, max: 0.01},
+	// 咬口磨损速率（寿命比例/咬口）：0 关通道；0.2 已相当于 5 次磨穿。
+	"wear_bite_soft_lure_per_bite": {min: 0, max: 0.2},
+	"wear_bite_foam_per_bite":      {min: 0, max: 0.2},
 	// 负载节拍：太小会让每次上报折算成极短时长，磨损几乎不涨。
 	"reel_load_tick_seconds":     {min: 0.01, max: 600},
 	"reel_load_max_tick_seconds": {min: 0.01, max: 600},

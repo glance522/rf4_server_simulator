@@ -162,11 +162,15 @@ func TestRigWearKeyFollowsAssemblyCategory(t *testing.T) {
 			t.Fatalf("slot %d 应映射到 %q，实得 %q", slot, want, got)
 		}
 	}
-	if !(wearPerCatch[wearKey(catLine)] > wearPerCatch[wearKey(catHook)] &&
-		wearPerCatch[wearKey(catHook)] > wearPerCatch[wearKey(catLure)]) {
-		t.Fatal("主线应比鱼钩磨得快，鱼钩应比拟饵磨得快")
+	// 官服只按搏鱼受力时间磨损：仅拟饵保留按尾磨损（产品口径），其余按尾通道停扣。
+	if wearPerCatch[wearKey(catLine)] != 0 || wearPerCatch[wearKey(catHook)] != 0 ||
+		wearPerCatch[wearKey(catFloat)] != 0 || wearPerCatch[wearKey(catBait)] != 0 {
+		t.Fatal("线/钩/浮漂/饵不应再有按尾扣耐久")
 	}
-	if wearPerCatch[wearKey(catBait)] != 0 {
-		t.Fatal("鱼饵是消耗品，不应按耐久磨损")
+	if wearPerCatch["rod"] != 0 || wearPerCatch["default"] != 0 {
+		t.Fatal("竿本体与未映射件（轮体/前导线等）不应再有按尾扣耐久")
+	}
+	if wearPerCatch[wearKey(catLure)] <= 0 {
+		t.Fatal("拟饵按尾磨损应保留")
 	}
 }
