@@ -16,6 +16,28 @@ func registerAchievementHandlers(d *Dispatch) {
 	d.Register(3, 17, hFishTrophies323)
 }
 
+// playerRewardItems 返回玩家占有的全部奖赏物品（house/backpack/keepnet 中
+// wire 类 enikeammfen、type_id 2015 的行）。3/16 面板与 4/1/4/4/4/5 的
+// 奖赏容器（客户端分组 14）共用这一口径，避免两处筛选条件漂移。
+func (s *Server) playerRewardItems(ctx context.Context, uid int64) ([]*store.Item, error) {
+	if s == nil || s.DB == nil {
+		return nil, nil
+	}
+	rows, err := s.DB.ListItemsByContainers(ctx, uid, []string{"house", "backpack", "keepnet"})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*store.Item, 0, len(rows))
+	for _, it := range rows {
+		// wire 类与 type_id 必须同时匹配，任一不符的异常行都不得混入奖赏列表。
+		if it.WireClass != "enikeammfen" || it.TypeID != 2015 {
+			continue
+		}
+		out = append(out, it)
+	}
+	return out, nil
+}
+
 // hPlayerRewards2015 处理 3/16 奖赏列表。客户端 RPC 签名
 // public iidloljandl[] cfbomeockod() 返回 2015 数组，容器名 "185"
 // （argcode_table by_type_id[2015]=185 = by_cmd[3/16]）。
@@ -28,17 +50,13 @@ func hPlayerRewards2015(ctx *Ctx) ([]byte, bool) {
 	}
 	srv := ctx.Sess.Srv
 	cctx := ctx.Sess.pushCtx()
-	rows, err := srv.DB.ListItemsByContainers(cctx, ctx.Sess.Userid, []string{"house", "backpack", "keepnet"})
+	rows, err := srv.playerRewardItems(cctx, ctx.Sess.Userid)
 	if err != nil {
 		ctx.Log.Error("3/16 奖赏查询失败", "err", err)
 		return encodeArgsCode(ctx, "185")
 	}
 	items := make([]*proto.Value, 0, len(rows))
 	for _, it := range rows {
-		// wire 类与 type_id 必须同时匹配，任一不符的异常行都不得混入 2015 响应。
-		if it.WireClass != "enikeammfen" || it.TypeID != 2015 {
-			continue
-		}
 		obj, merr := makeRewardEntry(it)
 		if merr != nil {
 			ctx.Log.Error("3/16 奖赏条目编码失败", "err", merr, "guid", it.GUID)

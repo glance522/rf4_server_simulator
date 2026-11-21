@@ -69,6 +69,14 @@ func hItemCount(ctx *Ctx) ([]byte, bool) {
 	container, _ := ctx.ArgInt(0)
 	var used, cap, capMember int64
 	cctx := ctx.Sess.pushCtx()
+	// 奖赏物品先落房屋：展示位列表只读房屋容器（4/1/4/4/5 的 10），
+	// 留在背包的奖赏不会出现在「选择物件」里。幂等，只搬一次。
+	if moved, merr := srv.ensureAwardsInHouse(cctx, ctx.Sess.Userid); merr != nil {
+		ctx.Log.Warn("奖赏移入房屋失败", "err", merr)
+	} else if moved > 0 {
+		ctx.Log.Info("奖赏已移入房屋", "uid", ctx.Sess.Userid, "moved", moved)
+	}
+	ctx.afterResponse = append(ctx.afterResponse, ctx.Sess.syncAwardGroupOnce)
 	switch container {
 	case containerBackpack:
 		// 背包列表兜底补发：3/1 的巡检只推 4/22，客户端没消费推送时玩家会以为
@@ -87,6 +95,19 @@ func hItemCount(ctx *Ctx) ([]byte, bool) {
 		// 存放交互在 UI 层就被拦下。
 		used, _ = srv.DB.CountItemsByContainers(cctx, ctx.Sess.Userid, []string{"house"})
 		cap = houseContainerCapacity
+	case containerRewards:
+		// 奖赏分组（客户端容器枚举 14）。房屋奖赏展示位按 E 后，客户端用
+		// 4/1/4/4/4/5 拉这个容器；缺这一组时列表恒为空，表现为
+		// 「未找到一件合适的物件」，尽管 3/16 面板能显示已拥有的奖赏。
+		// 收藏数量即容量：奖赏不是可扩容仓库，不能靠存放增加。
+		rows, rerr := srv.playerRewardItems(cctx, ctx.Sess.Userid)
+		if rerr != nil {
+			ctx.Log.Error("4/1 奖赏容器查询失败", "err", rerr)
+		} else {
+			used = int64(len(rows))
+			cap = used
+			ctx.Log.Info("4/1 奖赏容器", "uid", ctx.Sess.Userid, "used", used)
+		}
 	default:
 		if names := nativeInventoryContainers(container); names != nil {
 			used, _ = srv.DB.CountItemsByContainers(cctx, ctx.Sess.Userid, names)
@@ -114,6 +135,12 @@ func hItemGUIDs(ctx *Ctx) ([]byte, bool) {
 	}
 	container, _ := ctx.ArgInt(0)
 	cctx := ctx.Sess.pushCtx()
+	if moved, merr := srv.ensureAwardsInHouse(cctx, ctx.Sess.Userid); merr != nil {
+		ctx.Log.Warn("奖赏移入房屋失败", "err", merr)
+	} else if moved > 0 {
+		ctx.Log.Info("奖赏已移入房屋", "uid", ctx.Sess.Userid, "moved", moved)
+	}
+	ctx.afterResponse = append(ctx.afterResponse, ctx.Sess.syncAwardGroupOnce)
 	var guids []string
 	switch container {
 	case containerBackpack:
@@ -126,6 +153,17 @@ func hItemGUIDs(ctx *Ctx) ([]byte, bool) {
 			for _, e := range list {
 				guids = append(guids, e.EchoGUID)
 			}
+		}
+	case containerRewards:
+		// 奖赏容器：GUID 来源与 3/16 面板一致（house/backpack/keepnet）。
+		rows, rerr := srv.playerRewardItems(cctx, ctx.Sess.Userid)
+		if rerr != nil {
+			ctx.Log.Error("4/4 奖赏容器查询失败", "err", rerr)
+		} else {
+			for _, it := range rows {
+				guids = append(guids, it.GUID)
+			}
+			ctx.Log.Info("4/4 奖赏容器", "uid", ctx.Sess.Userid, "count", len(guids))
 		}
 	default:
 		if names := nativeInventoryContainers(container); names != nil {
@@ -176,15 +214,47 @@ func hItemDetails(ctx *Ctx) ([]byte, bool) {
 			}
 			out.Items = append(out.Items, srv.keepnetItemTree(cctx, e, srv.currentLevel(ctx.Sess.Userid)))
 		}
+	} else if container == containerRewards {
+		// 奖赏容器的物品树必须把 f4 投影成 14（奖赏分组），不能沿用
+		// house=10/backpack=0；否则客户端物品管理器不会把它挂进奖赏组，
+		// 展示位列表仍然看不到。
+		rows, rerr := srv.playerRewardItems(cctx, ctx.Sess.Userid)
+		if rerr != nil {
+			ctx.Log.Error("4/5 奖赏容器查询失败", "err", rerr)
+		}
+		byGUID := make(map[string]*store.Item, len(rows))
+		for _, it := range rows {
+			byGUID[it.GUID] = it
+		}
+		for _, g := range guids {
+			it := byGUID[g]
+			if it == nil {
+				continue
+			}
+			tree, terr := srv.awardItemTree(cctx, it)
+			if terr != nil {
+				continue
+			}
+			out.Items = append(out.Items, tree)
+		}
+		ctx.Log.Info("4/5 奖赏容器", "uid", ctx.Sess.Userid, "requested", len(guids), "matched", len(out.Items))
 	} else if containers := nativeInventoryContainers(container); containers != nil {
 		for _, g := range guids {
 			row, err := srv.DB.GetItemByGUID(cctx, g)
 			if err != nil || row == nil || row.UID != ctx.Sess.Userid || !inventoryContainerMatches(row.Container, containers) {
 				continue
 			}
-			tree, err := srv.ItemToTree(cctx, row)
-			if err != nil {
+			tree, terr := srv.ItemToTree(cctx, row)
+			if terr != nil {
 				continue
+			}
+			// 奖赏物品无论从哪个容器取，都必须以 f4=14 下发：客户端
+			// 「奖赏」摆放标签按该分组取物，house=10 会被过滤掉。
+			if row.WireClass == "enikeammfen" && row.TypeID == 2015 {
+				tree, terr = srv.awardItemTree(cctx, row)
+				if terr != nil {
+					continue
+				}
 			}
 			out.Items = append(out.Items, tree)
 		}

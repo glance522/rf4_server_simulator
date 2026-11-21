@@ -33,9 +33,10 @@ type Session struct {
 	sendMu sync.Mutex
 	// call_id 由 Server 按 token 共享分配，见 nextCallID；Session 不单独计数。
 
-	closed   atomic.Bool
-	stopCh   chan struct{} // 关闭信号（保活循环等监听）
-	stopOnce sync.Once
+	closed       atomic.Bool
+	awardsSynced atomic.Bool   // 奖赏分组 14 已向本会话推送过
+	stopCh       chan struct{} // 关闭信号（保活循环等监听）
+	stopOnce     sync.Once
 
 	// fishPushMu / fishPushGUID / fishPushAt 抑制同一尾鱼的重复 14/14 推送：
 	// 同一 GUID 短时间内推两次会让客户端重建鱼实体，模型与结算对不上。
