@@ -23,9 +23,10 @@ Status: done
    `diet_json`），全部复用现有缓存/表，无新表无迁移。
 2. **三档节奏**：按分数分好/中/差三档，映射到延迟乘数与单轮判定概率
    （底层杆与路亚轮各一套概率参数）。
-3. **底层杆**（非路亚族，含海底钓 55-60）：延迟采样不变，乘档位乘数后
-   clamp `[6, pace_bottom_max=60]`；海钓海底钓族 clamp `[3, pace_marine_max=30]`。
-   差饵单轮概率 0.12，1 分钟内大概率静默空轮。
+3. **底层杆**（非路亚族，含海底钓 55-60）：延迟采样不变，乘档位乘数后按档位
+   等待区间 clamp（好 `[pace_good_min=6, pace_good_max=60]`、中 `[10,60]`、
+   差 `[pace_bad_min=20, pace_bad_max=60]`）；海钓海底钓族 clamp
+   `[3, pace_marine_max=30]`。差饵单轮概率 0.12，1 分钟内大概率静默空轮。
 4. **打窝压缩**（仅底层杆，路亚豁免与死窝豁免同口径）：
    `groundPace = clamp(1 - pace_groundbait_gain × S × overdoseP, 0.35, 1)`，
    延迟再乘它，clamp 下限降为 3 秒；死窝（overdoseP→0）不加速。
@@ -72,9 +73,13 @@ Status: done
   `hookBiteDelayFactorForRig`（钩型咬口倍率）——查询构造的 state 没有竿实例，
   与既有 `meanBiteDelay` 口径一致，实际等待按钩型略有出入（约 ±10%）。
 - 档位（tunable 可调）：good ≥`pace_score_good`(0.75)、mid ≥`pace_score_mid`(0.45)、
-  其余为 bad。乘数 `pace_factor_mid`=1.6 / `pace_factor_bad`=3.0（good 恒 1.0）；
-  底层杆概率 `pace_prob_good/mid/bad`=1.0/0.5/0.12；路亚轮概率
+  其余为 bad；底层杆概率 `pace_prob_good/mid/bad`=1.0/0.5/0.12；路亚轮概率
   `pace_lure_prob_good/mid/bad`=0.3/0.1/0.02。
+- 等待区间（tunable 可调，2026-11-21 起取代 pace_bottom_max）：底钓/浮钓按档位
+  好 `pace_good_min/max`=6/60、中 `pace_mid_min/max`=10/60、差 `pace_bad_min/max`=
+  20/60（默认值对齐原乘数模型的有效区间）；乘数 `pace_factor_mid/bad`=1.6/3.0
+  （good 恒 1.0）保留为区间内分布形状微调。路亚轮 `pace_lure_min/max`=1.5/6
+  （默认对齐原版收线短窗，pace_lure_max 仍受 bite_delay_lure_max 约束）。
 - 延迟链：pace 分支只替换**非路亚族**的采样后处理（乘数 + clamp），采样分布、
   天气系数、技能、钩型倍率、`bite_delay_scale` 全部沿用；路亚族在 pace 模式下
   走原分支（零差异）。
@@ -85,8 +90,11 @@ Status: done
   （仅打窝压缩时生效，无窝不动）。
 - 恢复：`PaceKnown=false`（重启/重连）时在 timer 触发前惰性重算一次，
   防止重启后差饵鱼变快。
-- 参数面：全部走 tunables（POST /api/tunables + reload_tunables 秒级生效），
-  不做管理页 UI。
+- 参数面：全部走 tunables（POST /api/tunables + reload_tunables 秒级生效）。
+  管理后台（2026-11-21 SPA 改版后）：开关在「玩法规则 → 其他」；数值在
+  「数值调整 → 咬钩」——三组等待区间（好饵/差饵/路亚 min~max）直接可见，
+  中饵区间/档位线/分布乘数/开口率/海钓窗/打窝在「进阶」折叠区；
+  旧版页（legacy.html）只保留开关。
 
 ## Testing Decisions
 

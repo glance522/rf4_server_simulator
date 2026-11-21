@@ -100,7 +100,7 @@ func (s *Server) prepareFishRollRuntime(ctx context.Context, c *fishRollContext,
 		c.runtime.spotPref, c.runtime.spotData = s.loadFishSpotPreference(ctx, statLoc, c)
 	}
 	if !c.runtime.lureKnown && c.rigType != 0 {
-		// 多拟饵取最深（与 lureDiveForGear 种子同源，评审 P3-1），
+		// 多拟饵取最深（与 lureCoreForGear 种子同源，评审 P3-1），
 		// 避免"种子用最深、fallback 用第一枚"的两套口径。
 		for _, id := range c.baits {
 			if lure, ok := s.loadLureAttributes(ctx, id); ok {
@@ -277,21 +277,28 @@ func (s *Server) loadLureAttributes(ctx context.Context, id string) (lureAttribu
 	return lure, true
 }
 
-// lureDiveForGear 取竿上当前装配拟饵的最大名义泳层（DiveDepth）。
-// 多拟饵/多钩钓组取最深：钓组运行水层由最深拟饵决定（评审 P2-3）；
-// 单拟饵不变；无拟饵装配或无证据返回 0。抛竿时种子进 FishState.LureDive，
-// 供 14/7 运动推导钳制与判鱼 fallback 使用，高频路径不再回查 DB。
-func (s *Server) lureDiveForGear(ctx context.Context, gearGUID string) float64 {
+// lureCoreForGear 取竿上当前装配拟饵的名义泳层（DiveDepth）与类型名。
+// 多拟饵/多钩钓组取最深：钓组运行水层由最深拟饵决定（评审 P2-3），类型名取
+// 同一枚最深拟饵——pace 复合分的动作权重按主导拟饵计；单拟饵不变；无拟饵
+// 装配或无证据返回 0/""。抛竿时种子进 FishState.LureDive/LureType，供 14/7
+// 运动推导钳制、判鱼 fallback 与 pace 复合档位使用，高频路径不再回查 DB。
+func (s *Server) lureCoreForGear(ctx context.Context, gearGUID string) (float64, string) {
 	if s == nil || s.DB == nil || gearGUID == "" {
-		return 0
+		return 0, ""
 	}
 	deepest := 0.0
+	typeName := ""
 	for _, bait := range s.currentBaits(ctx, gearGUID) {
-		if lure, ok := s.loadLureAttributes(ctx, bait); ok && lure.DiveDepth > deepest {
+		lure, ok := s.loadLureAttributes(ctx, bait)
+		if !ok {
+			continue
+		}
+		if lure.DiveDepth > deepest || typeName == "" {
 			deepest = lure.DiveDepth
+			typeName = lure.Type
 		}
 	}
-	return deepest
+	return deepest, typeName
 }
 
 func lureIntAttr(attrs map[string]any, key string) int64 {

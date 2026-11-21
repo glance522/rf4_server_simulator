@@ -11,14 +11,18 @@ package gameserver
 //   - paceTierFor：分数 → 好/中/差三档，映射延迟乘数与单轮判定概率
 //     （底层杆与路亚轮各一套）；
 //   - paceStandardBiteDelay / paceStandardClamp：pace 模式下底层杆
-//     （非路亚族）的延迟后处理（乘数 + 按钓组族 clamp）；
+//     （非路亚族）的延迟后处理（乘数 + 按档位区间 clamp）；
 //   - groundbaitPaceFactor：打窝把底层杆延迟压向 3 秒下限；死窝不加速，
 //     路亚族豁免与死窝闸门同口径。
 //
-// 路亚族在 pace 模式下延迟链零改动（保住「14/14 不晚于收线窗口」），
-// 只把单轮判定按档位概率掷骰。饵效只控节奏，不改判鱼候选与权重；
-// 与硬性鱼口门（bite_gate_enabled）/ strict 规则互相独立。
-// 语义与测试口径见 specs/changes/bite-pace/spec.md。
+// 路亚族（含海钓铁板 50-54）在 pace 模式下按「饵分 × 当前动作」的复合档位
+// 取等待窗与 fire 开口率：好动作才给好档（1.5~6s 收线短窗），中/差档拉长到
+// 底钓量级且不受 bite_delay_lure_max 封顶；动作改善时立即重排（只升不降），
+// fire 时动态取档位开口率。原「14/14 晚于收线窗口」的担忧由 fire 时的
+// st.InWater 检查、14/4 收竿停表与 biteTicket 票据失效兜住。
+// 饵效只控节奏，不改判鱼候选与权重；与硬性鱼口门（bite_gate_enabled）/
+// strict 规则互相独立。语义与测试口径见 specs/changes/lure-action-pace/spec.md
+// 与 specs/changes/bite-pace/spec.md。
 
 import (
 	"context"
@@ -76,15 +80,16 @@ func (s *Server) paceEnabled() bool {
 }
 
 // paceTierFor 对口分 → 三档因子与概率。阈值/乘数/概率全部 tunable 可调，
-// good 档乘数恒为 1（好饵的定义就是「不拖慢」）。
+// good 档乘数恒为 1（好饵的定义就是「不拖慢」）。路亚轮概率默认值收敛在
+// paceLureProbForTier 单一来源（好 1.0 / 中 0.5 / 差 0.12，窗口即等待）。
 func (s *Server) paceTierFor(score float64) (factor, prob, lureProb float64, tier int) {
 	switch {
 	case score >= s.tunableF("pace_score_good", 0.75):
-		return 1.0, s.tunableF("pace_prob_good", 1.0), s.tunableF("pace_lure_prob_good", 0.30), 2
+		return 1.0, s.tunableF("pace_prob_good", 1.0), s.paceLureProbForTier(2), 2
 	case score >= s.tunableF("pace_score_mid", 0.45):
-		return s.tunableF("pace_factor_mid", 1.6), s.tunableF("pace_prob_mid", 0.5), s.tunableF("pace_lure_prob_mid", 0.10), 1
+		return s.tunableF("pace_factor_mid", 1.6), s.tunableF("pace_prob_mid", 0.5), s.paceLureProbForTier(1), 1
 	default:
-		return s.tunableF("pace_factor_bad", 3.0), s.tunableF("pace_prob_bad", 0.12), s.tunableF("pace_lure_prob_bad", 0.02), 0
+		return s.tunableF("pace_factor_bad", 3.0), s.tunableF("pace_prob_bad", 0.12), s.paceLureProbForTier(0), 0
 	}
 }
 
@@ -113,14 +118,33 @@ func paceStandardClamp(d, floorS, capS, scale float64) float64 {
 	return math.Max(0.05, d)
 }
 
-// paceStandardFloorCap 按钓组族返回 pace 模式的下限与上限秒数。
-// 海底钓族（marineRigType 且非路亚族）用海钓窗；打窝压缩时下限让位给窝料地板。
-func (s *Server) paceStandardFloorCap(marine bool, ground float64) (floorS, capS float64) {
-	floorS = 6.0
-	capS = s.tunableF("pace_bottom_max", 60)
+// paceFactorFor 档位延迟乘数（采样分布形状微调；好饵恒 1.0 不拖慢）。
+// 等待区间的直接控制在 paceFloorCapFor 的档位区间。
+func (s *Server) paceFactorFor(tier int) float64 {
+	switch tier {
+	case 1:
+		return s.tunableF("pace_factor_mid", 1.6)
+	case 0:
+		return s.tunableF("pace_factor_bad", 3.0)
+	}
+	return 1.0
+}
+
+// paceFloorCapFor 按档位与钓组族返回 pace 模式的等待区间（下限与上限秒数）。
+// 底钓/浮钓按档位各一套区间（管理后台「数值调整 → 咬钩」直接可调：好饵/差饵
+// 在基础区，中饵在进阶）；海底钓族沿用海钓窗；打窝压缩时下限让位给窝料地板。
+func (s *Server) paceFloorCapFor(tier int, marine bool, ground float64) (float64, float64) {
 	if marine {
-		floorS = s.tunableF("pace_marine_min", 3)
-		capS = s.tunableF("pace_marine_max", 30)
+		return s.tunableF("pace_marine_min", 3), s.tunableF("pace_marine_max", 30)
+	}
+	var floorS, capS float64
+	switch tier {
+	case 1:
+		floorS, capS = s.tunableF("pace_mid_min", 10), s.tunableF("pace_mid_max", 60)
+	case 0:
+		floorS, capS = s.tunableF("pace_bad_min", 20), s.tunableF("pace_bad_max", 60)
+	default:
+		floorS, capS = s.tunableF("pace_good_min", 6), s.tunableF("pace_good_max", 60)
 	}
 	if ground < 1 {
 		if g := s.tunableF("pace_groundbait_floor", 3.0); g < floorS {
@@ -130,11 +154,68 @@ func (s *Server) paceStandardFloorCap(marine bool, ground float64) (floorS, capS
 	return floorS, capS
 }
 
-// paceStandardBiteDelay pace 模式底层杆的完整延迟：采样 ×天气×技能×pace×ground
-// 后按钓组族 clamp。调用方需持有 st.mu。
-func (s *Server) paceStandardBiteDelay(sample, weather, speed, pace, ground float64, marine bool, scale float64) float64 {
-	floorS, capS := s.paceStandardFloorCap(marine, ground)
-	return paceStandardClamp(sample*weather*speed*pace*ground, floorS, capS, scale)
+// paceLureRearmDebounce 动作改善重排的最小间隔：14/7 每帧都来，动作位在
+// 收线中会高频切换，防抖避免 timer 反复作废重排。
+const paceLureRearmDebounce = 2 * time.Second
+
+// paceLureActionQuality 动作分 0~1：按路亚类型 × 当前动作的权重归一，口径与
+// 鱼猎阶段 lureHuntActionQuality 一致（(w-0.8)/0.54，顶格动作 1.34 → 1.0，
+// 中性动作 1.0 → 0.37）。无动作上报（刚落水、尚未收线）按 0.45 中性——
+// 「好的动作出来了才算好饵效」，中性不给好档。
+func paceLureActionQuality(lureType, action string) float64 {
+	if action == "" {
+		return 0.45
+	}
+	return clampFloat((lureActionTypeWeight(lureType, action)-0.8)/0.54, 0, 1)
+}
+
+// paceLureCombinedScore 路亚族的复合对口分 = 饵分 × (0.4 + 0.6 × 动作分)。
+// 饵不对口是硬伤（差饵无论什么动作都到不了好档），动作不对也拉不满；
+// 三档阈值沿用 pace_score_good/mid。口径见 specs/changes/lure-action-pace/spec.md。
+func paceLureCombinedScore(baitScore float64, lureType, action string) float64 {
+	return clampFloat(baitScore*(0.4+0.6*paceLureActionQuality(lureType, action)), 0, 1)
+}
+
+// paceLureWindowFor pace 模式路亚族按复合档位的等待区间（秒）。好档沿用
+// pace_lure_min/max（默认 1.5~6 收线短窗，仍受 bite_delay_lure_max 封顶）；
+// 中/差档默认对齐底钓中/差饵区间（10~60 / 20~60）且不再封顶——
+// 「路亚最长等待」在 pace 模式下只管好档。
+func (s *Server) paceLureWindowFor(tier int) (lmin, lmax float64) {
+	switch tier {
+	case 2:
+		return s.tunableF("pace_lure_min", 1.5), s.tunableF("pace_lure_max", 6)
+	case 1:
+		return s.tunableF("pace_lure_mid_min", 10), s.tunableF("pace_lure_mid_max", 60)
+	}
+	return s.tunableF("pace_lure_bad_min", 20), s.tunableF("pace_lure_bad_max", 60)
+}
+
+// paceLureProbForTier pace 模式路亚族 fire 时的开口率。好档 1.0（窗口即等待，
+// 1.5~6s 内必来）；中/差档窗口已是惩罚，低开口率再叠加出底钓同档的干等手感。
+// fire 时动态取值：装排后动作变差的轮次按低概率空掷，再按差档长窗重排。
+func (s *Server) paceLureProbForTier(tier int) float64 {
+	switch tier {
+	case 2:
+		return s.tunableF("pace_lure_prob_good", 1.0)
+	case 1:
+		return s.tunableF("pace_lure_prob_mid", 0.5)
+	}
+	return s.tunableF("pace_lure_prob_bad", 0.12)
+}
+
+// paceLureStateFor 由饵分与当前动作合成路亚族的节奏因子。Score 保留纯饵分
+// （fire 动态开口率要用），Tier 存复合档位。
+func (s *Server) paceLureStateFor(baitScore float64, lureType, action string, ground float64) fishPaceState {
+	factor, prob, lureProb, tier := s.paceTierFor(paceLureCombinedScore(baitScore, lureType, action))
+	return fishPaceState{Known: true, Score: baitScore, Factor: factor, Prob: prob,
+		LureProb: lureProb, Ground: ground, Tier: tier}
+}
+
+// paceStandardBiteDelay pace 模式底层杆的完整延迟：采样 ×天气×技能×档位乘数
+// ×ground 后按档位区间 clamp。调用方需持有 st.mu。
+func (s *Server) paceStandardBiteDelay(sample, weather, speed float64, tier int, ground float64, marine bool, scale float64) float64 {
+	floorS, capS := s.paceFloorCapFor(tier, marine, ground)
+	return paceStandardClamp(sample*weather*speed*s.paceFactorFor(tier)*ground, floorS, capS, scale)
 }
 
 // paceFloorShrink 打窝压缩落水保护：只缩短不拉长，pace_groundbait_floor 兜底；
@@ -161,14 +242,15 @@ func (s *Server) paceFloorShrink(cfg biteDelaySettings, st *FishState, lure bool
 
 // meanPaceStandardDelay pace 模式底层杆的平均判鱼间隔（查鱼助手口径）：
 // 官方样本集本身就是分布，逐条变换后取均值即精确均值。
-func (s *Server) meanPaceStandardDelay(cfg biteDelaySettings, weather, speed, pace, ground float64, marine bool) float64 {
+func (s *Server) meanPaceStandardDelay(cfg biteDelaySettings, weather, speed float64, tier int, ground float64, marine bool) float64 {
 	if len(officialPushDelayEligible) == 0 {
-		return s.paceStandardBiteDelay(officialPushDelay(), weather, speed, pace, ground, marine, cfg.scale)
+		return s.paceStandardBiteDelay(officialPushDelay(), weather, speed, tier, ground, marine, cfg.scale)
 	}
-	floorS, capS := s.paceStandardFloorCap(marine, ground)
+	floorS, capS := s.paceFloorCapFor(tier, marine, ground)
+	factor := s.paceFactorFor(tier)
 	var sum float64
 	for _, sample := range officialPushDelayEligible {
-		sum += paceStandardClamp(sample*weather*speed*pace*ground, floorS, capS, cfg.scale)
+		sum += paceStandardClamp(sample*weather*speed*factor*ground, floorS, capS, cfg.scale)
 	}
 	return sum / float64(len(officialPushDelayEligible))
 }
@@ -395,6 +477,7 @@ func (s *Server) computePaceState(sess *Session, st *FishState, force bool) fish
 	}
 	st.mu.Lock()
 	known, gear, loc, rigType := st.PaceKnown, st.GearGuid, st.Loc, st.RigType
+	lureType, lureAction := st.LureType, st.LureAction
 	x, z, hasPos, spot := st.CastPosX, st.CastPosZ, st.HasCastPos, st.Spot
 	if !hasPos {
 		x, z, hasPos = st.PosX, st.PosZ, st.HasPos
@@ -415,10 +498,16 @@ func (s *Server) computePaceState(sess *Session, st *FishState, force bool) fish
 		ground = s.groundbaitPaceFactor(ctx, uid, loc, x, z, hasPos, spot, rigType)
 	}
 	pace := fishPaceState{Known: true, Score: score, Factor: factor, Prob: prob, LureProb: lureProb, Ground: ground, Tier: tier}
-	s.log.Info("咬钩节奏",
-		"rod", shortGUID(gear), "各钩饵", groups, "score", roundTo(score, 3),
-		"tier", paceTierName(tier), "factor", factor, "prob", prob,
-		"lure_prob", lureProb, "ground", roundTo(ground, 3), "rig_type", rigType)
+	logArgs := []any{"rod", shortGUID(gear), "各钩饵", groups, "score", roundTo(score, 3),
+		"tier", paceTierName(pace.Tier), "factor", pace.Factor, "prob", pace.Prob,
+		"lure_prob", pace.LureProb, "ground", roundTo(pace.Ground, 3), "rig_type", rigType}
+	if rigTypeLureFamily[rigType] {
+		// 路亚族按复合档位（饵分 × 当前动作）：好动作才给好档。
+		pace = s.paceLureStateFor(score, lureType, lureAction, ground)
+		logArgs = append(logArgs, "action", lureAction,
+			"combined", roundTo(paceLureCombinedScore(score, lureType, lureAction), 3))
+	}
+	s.log.Info("咬钩节奏", logArgs...)
 	return pace
 }
 
@@ -480,9 +569,70 @@ func (st *FishState) paceProbFor() float64 {
 
 // rodPaceProb 判定用的整杆概率，受当前开关门控：运行中热关闭
 // bite_pace_enabled 后立即回 1（审查 P2-1），残留的 st.PaceKnown 不再生效。
+// 路亚族 fire 时动态取复合档位（饵分快照 × 当前动作）的开口率：装排后动作
+// 变差的轮次按低概率空掷，随后空轮重排按差档长窗重排。
 func (s *Server) rodPaceProb(st *FishState) float64 {
 	if !s.paceEnabled() {
 		return 1
 	}
+	if rigTypeLureFamily[st.RigType] {
+		if !st.PaceKnown {
+			return 1
+		}
+		_, _, _, tier := s.paceTierFor(paceLureCombinedScore(st.PaceScore, st.LureType, st.LureAction))
+		return s.paceLureProbForTier(tier)
+	}
 	return st.paceProbFor()
+}
+
+// paceLureActionRearm 在动作复合档位升高时按新档重排咬钩 timer（只升不降）：
+// 玩家做好动作的那一刻就进入对应档位的等待窗，好动作即 1.5~6s 短窗，而不是
+// 等旧 timer 按差档长窗慢慢到点。档位不变或下降不重排——恶化由 fire 时的
+// rodPaceProb 动态开口率空掷处理，随后空轮重排按差档长窗重排。
+// 调用方不持 st.mu（14/7/14/9 handler 解锁后调用）；内部自行加锁并在锁内
+// 复核全部守卫。票据机制（armBiteTimerLocked 递增 biteTicket）天然作废旧
+// timer，与 emptyWeatherBiteLocked 的重排互斥安全。
+func (s *Server) paceLureActionRearm(sess *Session, st *FishState) {
+	if !s.paceEnabled() || sess == nil || st == nil {
+		return
+	}
+	st.mu.Lock()
+	baitScore, lureType, lureAction := st.PaceScore, st.LureType, st.LureAction
+	_, _, _, newTier := s.paceTierFor(paceLureCombinedScore(baitScore, lureType, lureAction))
+	if !st.PaceKnown || newTier <= st.PaceTier ||
+		!st.CastActive || !st.InWater || st.NeedBite || st.Hooked || st.Resolved ||
+		st.Pending != nil || st.PushSent || st.pushing != nil {
+		st.mu.Unlock()
+		return
+	}
+	if !st.PaceRearmAt.IsZero() && time.Since(st.PaceRearmAt) < paceLureRearmDebounce {
+		st.mu.Unlock()
+		return
+	}
+	gear, rigType := st.GearGuid, st.RigType
+	ground := st.PaceGround
+	st.PaceRearmAt = time.Now()
+	st.mu.Unlock()
+	bonus := s.fishingBonus(sess.pushCtx(), sess.Userid, rigType, gear)
+	pace := s.paceLureStateFor(baitScore, lureType, lureAction, ground)
+	st.mu.Lock()
+	// 复核：等待期间鱼可能已 Pending/PushSent（timer 到点、客户端确认），
+	// 动作也可能又变了（只升不降）。
+	if !st.PaceKnown || !st.CastActive || st.Hooked || st.Resolved ||
+		st.Pending != nil || st.PushSent || st.pushing != nil {
+		st.mu.Unlock()
+		return
+	}
+	if _, _, _, tierNow := s.paceTierFor(paceLureCombinedScore(st.PaceScore, st.LureType, st.LureAction)); tierNow <= st.PaceTier {
+		st.mu.Unlock()
+		return
+	}
+	st.storePaceState(pace)
+	now := time.Now()
+	delay := s.biteDelayInWeather(st, sess.weatherAt(st.Loc, now), now, bonus)
+	delay *= s.hookBiteDelayFactorForRig(sess.pushCtx(), sess.Userid, gear)
+	s.armBiteTimerLocked(sess.Userid, st, now.Add(time.Duration(delay*float64(time.Second))))
+	st.mu.Unlock()
+	s.log.Info("路亚动作改善，重排咬钩", "rod", shortGUID(gear), "rig_type", rigType,
+		"action", lureAction, "tier", paceTierName(newTier))
 }

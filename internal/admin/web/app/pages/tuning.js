@@ -9,13 +9,40 @@ const G = {
     main: [
       ['bite_probability', '每次抛竿有鱼的概率', '1 表示每竿必有鱼咬；0.5 表示一半的抛竿会空等。', 1, 'float', '', 0, 1],
       ['bite_delay_scale', '咬钩速度', '整体调快或调慢。0.5 = 快一倍，2 = 慢一倍。', 1, 'float', '倍'],
-      ['bite_delay_max', '最长等待', '等这么久一定会有鱼咬（路亚除外）。', 20, 'float', '秒'],
-      ['bite_delay_lure_max', '路亚最长等待', '路亚钓法的最长等待时间。', 6, 'float', '秒'],
+      ['bite_delay_max', '最长等待', '等这么久一定会有鱼咬（路亚除外）。开启「饵效控速」后本项无效：底钓/浮钓的等待上限改由下方「好饵/差饵等待上下限」接管，海钓由进阶里的「海钓等待上下限」接管。', 20, 'float', '秒'],
+      ['bite_delay_lure_max', '路亚最长等待', '路亚钓法的最长等待时间。开启「饵效控速」后只约束好档（饵与动作都对口），路亚中/差档改由下方「路亚中档/差档等待上下限」接管。', 6, 'float', '秒'],
+      ['pace_good_min', '好饵等待下限（饵效控速）', '对口饵的等待区间下限秒。需在「玩法规则」里开启「饵效控速」。', 6, 'float', '秒', 0, 600],
+      ['pace_good_max', '好饵等待上限（饵效控速）', '对口饵的等待区间上限秒；好饵在 下限~上限 秒内随机来鱼。', 60, 'float', '秒', 0, 600],
+      ['pace_bad_min', '差饵等待下限（饵效控速）', '不对口饵的等待区间下限秒。', 20, 'float', '秒', 0, 600],
+      ['pace_bad_max', '差饵等待上限（饵效控速）', '不对口饵的等待区间上限秒；差饵同时受低开口率（见进阶）压制，表现为偶发慢口。', 60, 'float', '秒', 0, 600],
+      ['pace_lure_min', '路亚好档等待下限（饵效控速）', '饵与动作都对口时路亚轮的等待下限秒。默认 1.5 对齐原版收线短窗，拉大可能导致鱼在收线之后才到，一般别动。', 1.5, 'float', '秒', 0, 600],
+      ['pace_lure_max', '路亚好档等待上限（饵效控速）', '饵与动作都对口时路亚轮的等待上限秒；好档在此区间内必来鱼（开口率见进阶）。', 6, 'float', '秒', 0, 600],
+      ['pace_lure_mid_min', '路亚中档等待下限（饵效控速）', '饵或动作一般时路亚轮的等待下限秒，默认与底钓中饵同区间；动作变好会立即重排进好档短窗。', 10, 'float', '秒', 0, 600],
+      ['pace_lure_mid_max', '路亚中档等待上限（饵效控速）', '饵或动作一般时路亚轮的等待上限秒，不受上面「路亚最长等待」约束。', 60, 'float', '秒', 0, 600],
+      ['pace_lure_bad_min', '路亚差档等待下限（饵效控速）', '差饵或明显不对口的动作下路亚轮的等待下限秒，默认与底钓差饵同区间。', 20, 'float', '秒', 0, 600],
+      ['pace_lure_bad_max', '路亚差档等待上限（饵效控速）', '差饵或明显不对口的动作下路亚轮的等待上限秒，不受「路亚最长等待」约束。', 60, 'float', '秒', 0, 600],
     ],
     adv: [
       ['bite_delay_fixed', '固定咬钩时间', '填 0 表示随机；填了数字后每次都在这个时间咬钩。', 0, 'float', '秒'],
       ['bite_empty_retry_scale', '没鱼时重试快慢', '这一轮没有合适的鱼时，下一轮等待时间的倍数。0.25 表示很快重试。', 1, 'float', '倍'],
       ['bite_gate_pity_rounds', '连续空杆保底', '连续空杆这么多轮后，放宽环境条件保证有一口。0 表示关闭。', 0, 'int', '轮'],
+      ['pace_score_good', '好饵线（饵效控速）', '钩上饵对本水域的「对口分」达到这个值算好饵。', 0.75, 'float', '', 0, 1],
+      ['pace_score_mid', '中饵线（饵效控速）', '对口分达到这个值算中饵，低于算差饵。没有任何证据的饵按 0.30 计（差饵但不判死）。', 0.45, 'float', '', 0, 1],
+      ['pace_mid_min', '中饵等待下限（饵效控速）', '中等对口饵的等待区间下限秒。', 10, 'float', '秒', 0, 600],
+      ['pace_mid_max', '中饵等待上限（饵效控速）', '中等对口饵的等待区间上限秒。', 60, 'float', '秒', 0, 600],
+      ['pace_factor_mid', '中饵分布乘数（饵效控速）', '在区间内微调中饵等待分布的倍数，1.6 把样本整体拉慢 60%。一般不用动，直接改上面的等待区间即可。', 1.6, 'float', '倍'],
+      ['pace_factor_bad', '差饵分布乘数（饵效控速）', '在区间内微调差饵等待分布的倍数。一般不用动。', 3, 'float', '倍'],
+      ['pace_prob_good', '好饵开口率·底钓（饵效控速）', '底钓/浮钓每轮判定开口的概率，1 表示好饵每轮必有口。', 1, 'float', '', 0, 1],
+      ['pace_prob_mid', '中饵开口率·底钓（饵效控速）', '', 0.5, 'float', '', 0, 1],
+      ['pace_prob_bad', '差饵开口率·底钓（饵效控速）', '0.12 表示差饵大部分轮次空等，一分钟内大概率无口。', 0.12, 'float', '', 0, 1],
+      ['pace_lure_prob_good', '好档开口率·路亚（饵效控速）', '饵与动作都对口时每轮判定开口的概率，1 表示好档窗口（1.5~6 秒）内必来鱼。', 1, 'float', '', 0, 1],
+      ['pace_lure_prob_mid', '中档开口率·路亚（饵效控速）', '', 0.5, 'float', '', 0, 1],
+      ['pace_lure_prob_bad', '差档开口率·路亚（饵效控速）', '0.12 表示差档大部分轮次空等，表现与底钓差饵一致。', 0.12, 'float', '', 0, 1],
+      ['pace_marine_min', '海钓等待下限·pace', '海底钓族（非路亚）在 pace 模式下的等待下限秒；海钓窗不分档位。', 3, 'float', '秒', 0, 600],
+      ['pace_marine_max', '海钓等待上限·pace', '海底钓族（非路亚）在 pace 模式下的等待上限秒。', 30, 'float', '秒', 0, 600],
+      ['pace_groundbait_floor', '打窝地板·pace', '满窝时底层杆等待压向这个秒数；死窝不加速，路亚豁免。', 3, 'float', '秒', 0, 600],
+      ['pace_groundbait_gain', '打窝压缩力度·pace', '越大压得越狠：压缩系数 = 1 − 力度 × 窝强度 × 过量概率。', 0.62, 'float', '', 0, 1],
+      ['pace_groundbait_min_factor', '打窝压缩下限·pace', '满窝最多把等待压到原来的这个比例，0.35 = 压到 35%。', 0.35, 'float', '', 0, 1],
     ],
   },
   bait: {
@@ -163,14 +190,22 @@ export default async function tuning(params) {
     },
   }, l)));
 
+  // 饵效控速未开启时不渲染 pace_* 行：这些参数只在开关打开后才参与计算，
+  // 关闭时全部走 legacy/中性通路。
+  const paceOn = String(t.bite_pace_enabled ?? '0') === '1';
+  const paceVisible = (d) => paceOn || !d[0].startsWith('pace_');
   let body;
   if (CAT === 'event') body = eventView(form, t, val);
   else {
     const g = G[CAT];
+    const advRows = (g.adv || []).filter(paceVisible);
     body = h('div', {},
       section({
         title: g.title, desc: g.desc,
-        body: h('div', {}, rows(g.main), g.adv ? h('details', { class: 'advanced' }, h('summary', {}, '进阶 ', h('small', { text: `（${g.adv.length} 项，一般不用改）` })), h('div', {}, rows(g.adv))) : null),
+        body: h('div', {},
+          rows(g.main.filter(paceVisible)),
+          CAT === 'bite' && !paceOn ? h('p', { class: 'muted small', text: '「饵效控速」未开启（开关在「玩法规则 → 其他」）：开启后这里才会出现好饵/差饵/路亚等待区间等设置项；未开启时这些参数不参与任何计算。' }) : null,
+          advRows.length ? h('details', { class: 'advanced' }, h('summary', {}, '进阶 ', h('small', { text: `（${advRows.length} 项，一般不用改）` })), h('div', {}, rows(advRows))) : null),
       }),
       (g.groups || []).map(([title, desc, list]) => section({ title, desc, body: h('div', {}, rows(list)) })),
       CAT === 'reward' ? skillGainSection(form, t, val) : null);
