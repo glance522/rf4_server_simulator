@@ -58,6 +58,7 @@ type FishState struct {
 	LureAction      string  // 已识别的运动状态；未知时为空
 	LureLayer       float64 // 0=水面，1=水底；路亚实时水层
 	LureDive        float64 // 仅进程内：当前拟饵名义泳层（loadLureAttributes 的 DiveDepth），0=未知；钳制运动推导值并作抛竿种子
+	LureType        string  // 仅进程内：当前拟饵类型名（loadLureAttributes 的 Type，如 jerkbait/pilker），pace 复合分用；随 14/1 播种，换饵不刷新（与 PaceScore 同口径）
 	LureStateAt     time.Time
 	LureLayerAt     time.Time
 	LurePulseAt     time.Time
@@ -108,6 +109,8 @@ type FishState struct {
 	PaceGround   float64
 	PaceTier     int
 	PaceKnown    bool
+	// PaceRearmAt 是上次「动作改善重排」的时刻（2 秒防抖），仅进程内。
+	PaceRearmAt time.Time
 
 	hookedChatFishGUID string // 仅进程内：同一尾鱼的确认与拒收重推共用播报标记。
 	// 仅进程内：耐力播报的节流时间与鱼标识，不进持久化快照。
@@ -492,8 +495,11 @@ func (s *Server) biteDelayInWeather(st *FishState, weather fishingWeather, now t
 	weatherDelay := s.weatherBiteDelayFactor(st, weather, now)
 	// 饵效控速（bite_pace_enabled）只替换非路亚族的采样后处理：乘对口分档位
 	// 因子与打窝压缩，按档位等待区间 clamp（好饵默认 6~60s、差饵 20~60s，
-	// 海底钓族用海钓窗 3~30s）。路亚窗口默认不动（pace_lure_min/max 可调但
-	// 默认对齐原版 1.5~6s 收线短窗），节奏改走单轮判定概率（st.PaceLureProb）。
+	// 海底钓族用海钓窗 3~30s）。路亚族按复合档位（饵分 × 当前动作）取窗：
+	// 好档沿用 pace_lure_min/max（默认对齐原版 1.5~6s 收线短窗）并保留
+	// bite_delay_lure_max 封顶；中/差档拉长到底钓量级、不再封顶——
+	// 「路亚最长等待」在 pace 模式下只管好档。fire 开口率在 rodPaceProb
+	// 按同一复合档位动态取值。口径见 specs/changes/lure-action-pace/spec.md。
 	// 调用方需持有 st.mu（查鱼路径的 st 为本地对象，无并发）。
 	if st != nil && st.PaceKnown && s.paceEnabled() && !rigTypeLureFamily[st.RigType] {
 		return s.paceStandardBiteDelay(officialPushDelay(), weatherDelay, bonus.BiteSpeed,
@@ -501,14 +507,19 @@ func (s *Server) biteDelayInWeather(st *FishState, weather fishingWeather, now t
 	}
 	if st != nil && rigTypeLureFamily[st.RigType] {
 		lmin, lmax := 1.5, 6.0
+		capS := cfg.lureMax
 		if st.PaceKnown && s.paceEnabled() {
-			lmin = s.tunableF("pace_lure_min", 1.5)
-			if lmax = s.tunableF("pace_lure_max", 6); lmax < lmin {
+			_, _, _, tier := s.paceTierFor(paceLureCombinedScore(st.PaceScore, st.LureType, st.LureAction))
+			lmin, lmax = s.paceLureWindowFor(tier)
+			if lmax < lmin {
 				lmax = lmin
+			}
+			if tier < 2 {
+				capS = 0 // lureBiteDelay 约定 cap<=0 不封顶
 			}
 		}
 		d := (lmin + rand.Float64()*(lmax-lmin)) * weatherDelay
-		return lureBiteDelay(d, bonus.BiteSpeed, cfg.lureMax, cfg.scale)
+		return lureBiteDelay(d, bonus.BiteSpeed, capS, cfg.scale)
 	}
 	d := officialPushDelay() * weatherDelay
 	return standardBiteDelay(d, bonus.BiteSpeed, cfg.maxDelay, cfg.scale)

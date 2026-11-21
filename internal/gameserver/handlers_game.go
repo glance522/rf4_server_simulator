@@ -826,11 +826,12 @@ func hCastPrepare(ctx *Ctx) ([]byte, bool) {
 	st.RigType = newRigType
 	// 新一杆无条件清上一杆拟饵状态：换竿/换饵/同竿换钓组后旧 LureDive 不得
 	// 钳制新饵，旧 LureLayer 不得压过 runtime DiveDepth 兜底，旧 LureAction/
-	// LureMotionMask 也不得漏进非路亚判鱼（评审 P1/P2-1）。
+	// LureMotionMask/LureType 也不得漏进非路亚判鱼（评审 P1/P2-1）。
 	st.LureMotionMask = 0
 	st.LureAction = ""
 	st.LureLayer = 0 // 0=未知：无运动证据时判鱼走 runtime DiveDepth 兜底，不再恒走 .5
 	st.LureDive = 0
+	st.LureType = ""
 	st.LurePulseCount = 0
 	st.LurePulseAt = time.Time{}
 	st.LureToggleCount = 0
@@ -844,15 +845,18 @@ func hCastPrepare(ctx *Ctx) ([]byte, bool) {
 		ctx.Log.Warn("抛竿前补饵失败", "err", err)
 		return nil, false
 	}
-	// 路亚抛竿：按补饵后的实际装配取拟饵名义泳层，种子进实时水层——
-	// 落水瞬间饵在设计泳层，之后由 14/7 运动位动态修正并受该值钳制。
+	// 路亚抛竿：按补饵后的实际装配取拟饵名义泳层与类型名，种子进实时水层与
+	// pace 复合分——落水瞬间饵在设计泳层，之后由 14/7 运动位动态修正并受该值
+	// 钳制；动作权重按主导拟饵（最深）的类型计。
 	if rigTypeLureFamily[rigType] {
-		if dive := srv.lureDiveForGear(ctx.Sess.pushCtx(), gear); dive > 0 {
-			st.mu.Lock()
+		dive, lureType := srv.lureCoreForGear(ctx.Sess.pushCtx(), gear)
+		st.mu.Lock()
+		if dive > 0 {
 			st.LureDive = dive
 			st.LureLayer = dive
-			st.mu.Unlock()
 		}
+		st.LureType = lureType
+		st.mu.Unlock()
 	}
 	// 收敛钓组数据：补齐 f5、rig 行、组件和尖梢。
 	// 尖梢有更新时推送 4/22 全量竿树，因为客户端抛竿前会校验实例 f8。
@@ -1196,7 +1200,8 @@ func hFishingStep(ctx *Ctx) ([]byte, bool) {
 			st.LastAnim = anim
 			previousMask := st.LureMotionMask
 			st.LureMotionMask = anim
-			if rigTypeLureFamily[st.RigType] {
+			isLure := rigTypeLureFamily[st.RigType]
+			if isLure {
 				now := time.Now()
 				if anim != previousMask || st.LureLayerAt.IsZero() || now.Sub(st.LureLayerAt) >= 1500*time.Millisecond {
 					st.LureLayer = lureLayerFromMotion(anim, st.LureLayer, st.LureDive)
@@ -1231,6 +1236,12 @@ func hFishingStep(ctx *Ctx) ([]byte, bool) {
 				ctx.Sess.Srv.scheduleBiteForHooked(ctx.Sess, st)
 			} else if enterWater {
 				ctx.Log.Info("钓组在水中", "rod", shortGUID(st.GearGuid), "f5", fmt.Sprintf("0x%X", anim))
+			}
+			// pace 开启时动作复合档位升高 → 立即按新档重排咬钩（只升不降，
+			// 内部自持锁与守卫复核；好动作一出来即进对应等待窗，见
+			// specs/changes/lure-action-pace/spec.md）。
+			if isLure {
+				ctx.Sess.Srv.paceLureActionRearm(ctx.Sess, st)
 			}
 			// 14/7 每帧都会发送，仅在动画位变化时记录日志。
 			if changed {
@@ -1301,7 +1312,8 @@ func hFishingPull(ctx *Ctx) ([]byte, bool) {
 	wasHooked := st.Hooked
 	pending, gear, rigType := st.Pending, st.GearGuid, st.RigType
 	castActive, resolved := st.CastActive, st.Resolved
-	if rigTypeLureFamily[rigType] {
+	isLure := rigTypeLureFamily[rigType]
+	if isLure {
 		st.recordLurePulseLocked(time.Now())
 	}
 	needsConfirmation := marineRigType(rigType) && pending != nil && castActive && !resolved && !pending.HookConfirmed
@@ -1325,6 +1337,11 @@ func hFishingPull(ctx *Ctx) ([]byte, bool) {
 		hookedFish, announce = st.takeHookedChatFishLocked()
 	}
 	st.mu.Unlock()
+	// pace 开启时动作复合档位升高 → 立即按新档重排咬钩（只升不降，内部自持
+	// 锁与守卫复核；海钓铁板的垂直抖法同样走这里）。
+	if isLure {
+		srv.paceLureActionRearm(ctx.Sess, st)
+	}
 	if needsConfirmation && nibble {
 		finishNibbleHook(ctx, st, pending, gear, castActive, resolved)
 		ctx.Log.Info("14/9 海钓嘬饵未中钩，重新排鱼", "rod", shortGUID(gear),

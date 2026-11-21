@@ -233,7 +233,7 @@ func (s *Server) QueryFish(ctx context.Context, req FishQueryRequest) (*FishQuer
 		if pace.Known {
 			plan.Chance = clampFloat(plan.Chance*pace.probForRig(rig), 0, 1)
 		}
-		delay := s.fishQueryMeanDelay(state, w, at)
+		delay := s.fishQueryMeanDelay(state, w, at, pace)
 		if pace.Known && !rigTypeLureFamily[rig] {
 			if cfg := s.effectiveBiteDelaySettings(state); cfg.fixed <= 0 {
 				delay = s.meanPaceStandardDelay(cfg, s.weatherBiteDelayFactor(state, w, at),
