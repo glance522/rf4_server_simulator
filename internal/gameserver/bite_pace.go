@@ -11,7 +11,7 @@ package gameserver
 //   - paceTierFor：分数 → 好/中/差三档，映射延迟乘数与单轮判定概率
 //     （底层杆与路亚轮各一套）；
 //   - paceStandardBiteDelay / paceStandardClamp：pace 模式下底层杆
-//     （非路亚族）的延迟后处理（乘数 + 按钓组族 clamp）；
+//     （非路亚族）的延迟后处理（乘数 + 按档位区间 clamp）；
 //   - groundbaitPaceFactor：打窝把底层杆延迟压向 3 秒下限；死窝不加速，
 //     路亚族豁免与死窝闸门同口径。
 //
@@ -113,14 +113,33 @@ func paceStandardClamp(d, floorS, capS, scale float64) float64 {
 	return math.Max(0.05, d)
 }
 
-// paceStandardFloorCap 按钓组族返回 pace 模式的下限与上限秒数。
-// 海底钓族（marineRigType 且非路亚族）用海钓窗；打窝压缩时下限让位给窝料地板。
-func (s *Server) paceStandardFloorCap(marine bool, ground float64) (floorS, capS float64) {
-	floorS = 6.0
-	capS = s.tunableF("pace_bottom_max", 60)
+// paceFactorFor 档位延迟乘数（采样分布形状微调；好饵恒 1.0 不拖慢）。
+// 等待区间的直接控制在 paceFloorCapFor 的档位区间。
+func (s *Server) paceFactorFor(tier int) float64 {
+	switch tier {
+	case 1:
+		return s.tunableF("pace_factor_mid", 1.6)
+	case 0:
+		return s.tunableF("pace_factor_bad", 3.0)
+	}
+	return 1.0
+}
+
+// paceFloorCapFor 按档位与钓组族返回 pace 模式的等待区间（下限与上限秒数）。
+// 底钓/浮钓按档位各一套区间（管理后台「数值调整 → 咬钩」直接可调：好饵/差饵
+// 在基础区，中饵在进阶）；海底钓族沿用海钓窗；打窝压缩时下限让位给窝料地板。
+func (s *Server) paceFloorCapFor(tier int, marine bool, ground float64) (float64, float64) {
 	if marine {
-		floorS = s.tunableF("pace_marine_min", 3)
-		capS = s.tunableF("pace_marine_max", 30)
+		return s.tunableF("pace_marine_min", 3), s.tunableF("pace_marine_max", 30)
+	}
+	var floorS, capS float64
+	switch tier {
+	case 1:
+		floorS, capS = s.tunableF("pace_mid_min", 10), s.tunableF("pace_mid_max", 60)
+	case 0:
+		floorS, capS = s.tunableF("pace_bad_min", 20), s.tunableF("pace_bad_max", 60)
+	default:
+		floorS, capS = s.tunableF("pace_good_min", 6), s.tunableF("pace_good_max", 60)
 	}
 	if ground < 1 {
 		if g := s.tunableF("pace_groundbait_floor", 3.0); g < floorS {
@@ -130,11 +149,11 @@ func (s *Server) paceStandardFloorCap(marine bool, ground float64) (floorS, capS
 	return floorS, capS
 }
 
-// paceStandardBiteDelay pace 模式底层杆的完整延迟：采样 ×天气×技能×pace×ground
-// 后按钓组族 clamp。调用方需持有 st.mu。
-func (s *Server) paceStandardBiteDelay(sample, weather, speed, pace, ground float64, marine bool, scale float64) float64 {
-	floorS, capS := s.paceStandardFloorCap(marine, ground)
-	return paceStandardClamp(sample*weather*speed*pace*ground, floorS, capS, scale)
+// paceStandardBiteDelay pace 模式底层杆的完整延迟：采样 ×天气×技能×档位乘数
+// ×ground 后按档位区间 clamp。调用方需持有 st.mu。
+func (s *Server) paceStandardBiteDelay(sample, weather, speed float64, tier int, ground float64, marine bool, scale float64) float64 {
+	floorS, capS := s.paceFloorCapFor(tier, marine, ground)
+	return paceStandardClamp(sample*weather*speed*s.paceFactorFor(tier)*ground, floorS, capS, scale)
 }
 
 // paceFloorShrink 打窝压缩落水保护：只缩短不拉长，pace_groundbait_floor 兜底；
@@ -161,14 +180,15 @@ func (s *Server) paceFloorShrink(cfg biteDelaySettings, st *FishState, lure bool
 
 // meanPaceStandardDelay pace 模式底层杆的平均判鱼间隔（查鱼助手口径）：
 // 官方样本集本身就是分布，逐条变换后取均值即精确均值。
-func (s *Server) meanPaceStandardDelay(cfg biteDelaySettings, weather, speed, pace, ground float64, marine bool) float64 {
+func (s *Server) meanPaceStandardDelay(cfg biteDelaySettings, weather, speed float64, tier int, ground float64, marine bool) float64 {
 	if len(officialPushDelayEligible) == 0 {
-		return s.paceStandardBiteDelay(officialPushDelay(), weather, speed, pace, ground, marine, cfg.scale)
+		return s.paceStandardBiteDelay(officialPushDelay(), weather, speed, tier, ground, marine, cfg.scale)
 	}
-	floorS, capS := s.paceStandardFloorCap(marine, ground)
+	floorS, capS := s.paceFloorCapFor(tier, marine, ground)
+	factor := s.paceFactorFor(tier)
 	var sum float64
 	for _, sample := range officialPushDelayEligible {
-		sum += paceStandardClamp(sample*weather*speed*pace*ground, floorS, capS, cfg.scale)
+		sum += paceStandardClamp(sample*weather*speed*factor*ground, floorS, capS, cfg.scale)
 	}
 	return sum / float64(len(officialPushDelayEligible))
 }

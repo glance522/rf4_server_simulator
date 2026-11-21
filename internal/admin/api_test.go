@@ -502,4 +502,12 @@ func TestSpawnModeEndpoint(t *testing.T) {
 	if code, _ := call("POST", "/api/tunables", token, `{"key":"two_stage_baited_trophy","value":"6"}`); code != 200 {
 		t.Fatalf("两档制合法权重应 200，实得 %d", code)
 	}
+
+	// 饵效控速开关补 0/1 校验（value=2 曾经会被写库，而 tunableF==1 判定下等于关）。
+	if code, _ := call("POST", "/api/tunables", token, `{"key":"bite_pace_enabled","value":"2"}`); code != 400 {
+		t.Fatalf("bite_pace_enabled 非法值应 400，实得 %d", code)
+	}
+	if code, _ := call("POST", "/api/tunables", token, `{"key":"bite_pace_enabled","value":"1"}`); code != 200 {
+		t.Fatalf("bite_pace_enabled 合法值应 200，实得 %d", code)
+	}
 }

@@ -113,10 +113,10 @@
   1.2 秒落水保护、`bite_delay_lure_max` 全部沿用），节奏只走单轮判定概率
   `PaceLureProb`——保住「14/14 不晚于收线窗口」的既有约束。
   - ❌ 放宽路亚延迟窗 → 鱼在收线停顿/收回到位后到达，与客户端行为系统打架。
-- ✅ 底层杆延迟 clamp 跟钓组族走：底/浮 `[6, pace_bottom_max=60]`、海底钓族
-  `[3, pace_marine_max=30]`；打窝压缩（`groundbaitPaceFactor`）同时压下限到
-  `pace_groundbait_floor`（3 秒）并同比缩短落水保护，但**只缩短不拉长**、
-  任何倍率下不早于 800ms（bite-delay-floor 契约）。
+- ✅ 底层杆延迟 clamp 跟档位与钓组族走：底/浮按档位区间（默认好 `[6,60]`、
+  中 `[10,60]`、差 `[20,60]`）、海底钓族 `[3, pace_marine_max=30]`；打窝压缩
+  （`groundbaitPaceFactor`）同时压下限到 `pace_groundbait_floor`（3 秒）并同比
+  缩短落水保护，但**只缩短不拉长**、任何倍率下不早于 800ms（bite-delay-floor 契约）。
   - ❌ 死窝（overdoseP→0）还继续压缩 → 腻死的窝反而变成「发窝快口」。
 - ✅ 三处消费点（延迟分支、`rodPaceProb`、`paceFloorShrink`）都受**当前开关**
   门控：运行中热关闭 `bite_pace_enabled` 后下一次判定/重排立即回 legacy，

@@ -65,21 +65,27 @@ func TestPaceStandardClampAndFloorCap(t *testing.T) {
 	if got := paceStandardClamp(10, 6, 60, 0.5); got != 5 {
 		t.Fatal(got)
 	}
-	if floor, capS := s.paceStandardFloorCap(false, 1); floor != 6 || capS != 60 {
-		t.Fatalf("底/浮窗应为 [6,60]，实得 [%g,%g]", floor, capS)
+	if floor, capS := s.paceFloorCapFor(2, false, 1); floor != 6 || capS != 60 {
+		t.Fatalf("好饵底/浮区间应为 [6,60]，实得 [%g,%g]", floor, capS)
 	}
-	if floor, capS := s.paceStandardFloorCap(true, 1); floor != 3 || capS != 30 {
+	if floor, capS := s.paceFloorCapFor(1, false, 1); floor != 10 || capS != 60 {
+		t.Fatalf("中饵区间应为 [10,60]，实得 [%g,%g]", floor, capS)
+	}
+	if floor, capS := s.paceFloorCapFor(0, false, 1); floor != 20 || capS != 60 {
+		t.Fatalf("差饵区间应为 [20,60]，实得 [%g,%g]", floor, capS)
+	}
+	if floor, capS := s.paceFloorCapFor(2, true, 1); floor != 3 || capS != 30 {
 		t.Fatalf("海底钓窗应为 [3,30]，实得 [%g,%g]", floor, capS)
 	}
-	if floor, capS := s.paceStandardFloorCap(false, 0.38); floor != 3 || capS != 60 {
-		t.Fatalf("打窝压缩后底/浮窗应为 [3,60]，实得 [%g,%g]", floor, capS)
+	if floor, capS := s.paceFloorCapFor(2, false, 0.38); floor != 3 || capS != 60 {
+		t.Fatalf("打窝压缩后好饵区间应为 [3,60]，实得 [%g,%g]", floor, capS)
 	}
 	// 满窝好饵：样本上限 46.6×0.38=17.7，落在 3~18 秒目标带。
-	if got := s.paceStandardBiteDelay(46.6, 1, 1, 1.0, 0.38, false, 1); got < 3 || got > 18 {
+	if got := s.paceStandardBiteDelay(46.6, 1, 1, 2, 0.38, false, 1); got < 3 || got > 18 {
 		t.Fatalf("满窝好饵样本应落在 3~18 秒，实得 %g", got)
 	}
 	// 样本下限 6.48×0.38=2.46 → 窝料地板 3s。
-	if got := s.paceStandardBiteDelay(6.48, 1, 1, 1.0, 0.38, false, 1); got != 3 {
+	if got := s.paceStandardBiteDelay(6.48, 1, 1, 2, 0.38, false, 1); got != 3 {
 		t.Fatalf("窝料地板应为 3s，实得 %g", got)
 	}
 }
@@ -133,8 +139,8 @@ func TestPaceLegacyEquivalenceWhenDisabled(t *testing.T) {
 func TestPaceDelayBoundsAndLureUnchanged(t *testing.T) {
 	s, _ := seedPaceTest(t)
 	now := time.Now()
-	// 底层杆差饵（×3）：单轮 [19.44, 60]；legacy 同上限是 20，越界即证明 pace 生效。
-	bad := &FishState{RigType: 12, PaceKnown: true, PaceFactor: 3, PaceGround: 1, PaceProb: 0.12}
+	// 底层杆差饵（×3，区间 [20,60]）：单轮 [20, 60]；legacy 同上限是 20，越界即证明 pace 生效。
+	bad := &FishState{RigType: 12, PaceKnown: true, PaceTier: 0, PaceFactor: 3, PaceGround: 1, PaceProb: 0.12}
 	over20 := 0
 	for i := 0; i < 50; i++ {
 		got := s.biteDelayInWeather(bad, fishingWeather{}, now)
@@ -149,7 +155,7 @@ func TestPaceDelayBoundsAndLureUnchanged(t *testing.T) {
 		t.Fatal("50 次采样全部 ≤20s，pace 分支未生效")
 	}
 	// 打窝压缩：全部 ≤17.71 且下限踩到 3s 地板（legacy 最低 6s）。
-	compressed := &FishState{RigType: 12, PaceKnown: true, PaceFactor: 1, PaceGround: 0.38}
+	compressed := &FishState{RigType: 12, PaceKnown: true, PaceTier: 2, PaceFactor: 1, PaceGround: 0.38}
 	minGot := 1e9
 	for i := 0; i < 200; i++ {
 		got := s.biteDelayInWeather(compressed, fishingWeather{}, now)
@@ -164,14 +170,14 @@ func TestPaceDelayBoundsAndLureUnchanged(t *testing.T) {
 		t.Fatalf("满窝下限应踩到 3s 地板，最小实得 %g", minGot)
 	}
 	// 海底钓（marineRigType 且非路亚族）：上限 30。
-	marine := &FishState{RigType: 55, PaceKnown: true, PaceFactor: 1, PaceGround: 1}
+	marine := &FishState{RigType: 55, PaceKnown: true, PaceTier: 2, PaceFactor: 1, PaceGround: 1}
 	for i := 0; i < 200; i++ {
 		if got := s.biteDelayInWeather(marine, fishingWeather{}, now); got > 30+1e-9 {
 			t.Fatalf("海底钓上限应为 30s，实得 %g", got)
 		}
 	}
-	// 路亚族在 pace 模式下延迟链零改动：×3 因子也不放大，仍是 1.5~6s 窗。
-	lure := &FishState{RigType: 5, PaceKnown: true, PaceFactor: 3, PaceGround: 1, PaceLureProb: 0.02}
+	// 路亚族在 pace 模式下延迟链默认零改动：×3 因子也不放大，仍是 1.5~6s 窗。
+	lure := &FishState{RigType: 5, PaceKnown: true, PaceTier: 0, PaceFactor: 3, PaceGround: 1, PaceLureProb: 0.02}
 	for i := 0; i < 50; i++ {
 		got := s.biteDelayInWeather(lure, fishingWeather{}, now)
 		if got > 6+1e-9 {
@@ -331,11 +337,11 @@ func TestMeanPaceStandardDelayMatchesClamp(t *testing.T) {
 	}
 	want := sum / float64(len(officialPushDelayEligible))
 	// 好饵无窝：所有样本都在 [6,60] 内 → 均值 = 样本均值。
-	if got := s.meanPaceStandardDelay(cfg, 1, 1, 1, 1, false); math.Abs(got-want) > 1e-9 {
+	if got := s.meanPaceStandardDelay(cfg, 1, 1, 2, 1, false); math.Abs(got-want) > 1e-9 {
 		t.Fatalf("好饵均值应等于样本均值 %g，实得 %g", want, got)
 	}
 	// 满窝好饵：均值落在 3~20 秒带。
-	compressed := s.meanPaceStandardDelay(cfg, 1, 1, 1, 0.38, false)
+	compressed := s.meanPaceStandardDelay(cfg, 1, 1, 2, 0.38, false)
 	if compressed < 3 || compressed > 20 {
 		t.Fatalf("满窝均值应落在 3~20 秒带，实得 %g", compressed)
 	}
@@ -343,7 +349,7 @@ func TestMeanPaceStandardDelayMatchesClamp(t *testing.T) {
 		t.Fatalf("满窝均值应明显压缩（<%.2f），实得 %g", want*0.5, compressed)
 	}
 	// 海底钓：上限 30。
-	if got := s.meanPaceStandardDelay(cfg, 1, 1, 1, 1, true); got > 30 {
+	if got := s.meanPaceStandardDelay(cfg, 1, 1, 2, 1, true); got > 30 {
 		t.Fatalf("海底钓均值应 ≤30，实得 %g", got)
 	}
 }
