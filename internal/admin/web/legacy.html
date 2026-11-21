@@ -409,7 +409,7 @@ const TUNABLE_DEFS=[
   ['bite_probability','上鱼概率',1,'0~1。1=每竿必出；0.5=一半概率出鱼'],
   ['bite_delay_fixed','固定咬钩秒',0,'填 0=按延迟倍率随机；填了以后咬钩时间固定'],
   ['bite_delay_scale','咬钩延迟倍率',1,'整体加快或放慢咬钩：0.5=快一倍，2=慢一倍'],
-  ['bite_delay_max','咬钩上限秒',20,'等待超过这个秒数必定咬钩（路亚除外）'],
+  ['bite_delay_max','咬钩上限秒',20,'等待超过这个秒数必定咬钩（路亚除外）；开启「饵效控速」后本项无效，上限由饵效控速的档位等待区间接管'],
   ['bite_delay_lure_max','路亚上限秒',6,'路亚钓法等待的秒数上限'],
   ['bait_pref_scale','饵效强度',1,'0=鱼不看饵；1=标准效果，按饵料偏好筛鱼'],
   ['bait_pref_weight_shift','饵效偏大体型',1,'越大越偏向个体大的鱼咬钩'],
@@ -437,6 +437,7 @@ const TUNABLE_DEFS=[
   ['reel_load_max_tick_seconds','负载上报最大秒',5,'两条14/8之间最多折算的秒数，防止迟到上报一次烧完。范围 0.01 ~ 600'],
   ['hook_nibble_enabled','嘬饵机制',0,'0=默认关闭，普通鱼和奖杯鱼首次抬竿不判嘬饵；1=恢复钩型嘬饵判定。中钩后的保持率倍率始终生效'],
   ['hook_spawn_match_strength','钩型发鱼软匹配强度',0,'0=默认关闭；1=标准；2=更偏向与钩型匹配的鱼重档位。只影响发鱼，不改后台咬口/保持率倍率'],
+  ['bite_pace_enabled','饵效控速开关',0,'0=默认关闭：来鱼节奏与饵无关；1=按钩上饵对本水域名册的对口分（0~1，好/中/差三档）控节奏：好饵不拖慢，差饵拉长延迟并降低单轮判定概率。只控节奏不改出什么鱼，与硬性鱼口门/strict 规则互相独立；改后最多 30 秒生效，运行中热关闭立即回旧保护'],
   ['grade_ratio_enabled','档位比例开关',1,'三选一发鱼模式之一（在「发鱼模式」卡片切换）；开启时按四档滑杆出鱼并覆盖鱼猎阶段权重与钩型发鱼软匹配'],
   ['grade_pct_below','未达标权重',3,'未达标档的相对权重，保存时自动归一'],
   ['grade_pct_qualified','合格权重',87.5,'合格档的相对权重，保存时自动归一'],
@@ -1197,7 +1198,7 @@ async function loadTunables(){
     const on=parseFloat(String(t[key]??def))>0;
     return `<div class="tunable-field"><div><label for="tun_hook_nibble_enabled">${esc(label)}</label><div class="tunable-hint">${esc(hint)}</div></div><div><button class="btn sm" id="tun_hook_nibble_enabled" style="min-width:230px;${on?'background:#2f7d4f;border-color:#2f7d4f':'opacity:.6'}" onclick="saveTunableVal('hook_nibble_enabled',${on?0:1})">${on?'嘬饵机制：开（点击关闭）':'嘬饵机制：关（点击开启）'}</button></div></div>`;
   }
-  if(key==='condition_health_enabled'||key==='condition_fishing_pause_enabled'){
+  if(key==='condition_health_enabled'||key==='condition_fishing_pause_enabled'||key==='bite_pace_enabled'){
     const on=parseFloat(String(t[key]??def))>0;
     return `<div class="tunable-field"><div><label for="tun_${key}">${esc(label)}</label><div class="tunable-hint">${esc(hint)}</div></div><div><button class="btn sm" id="tun_${key}" style="min-width:230px;${on?'background:#2f7d4f;border-color:#2f7d4f':'opacity:.6'}" onclick="saveTunableVal('${key}',${on?0:1})">${on?esc(label)+'：开（点击关闭）':esc(label)+'：关（点击开启）'}</button></div></div>`;
   }
@@ -1215,6 +1216,7 @@ async function loadTunables(){
   {id:'gameplay',tab:'玩法与钓组',sub:'咬钩 · 手感 · 电轮 · 摩擦片磨损',groups:[
     ['玩法手感','咬钩快慢、饵料偏好、鱼的大小与挣扎力度',['bite_probability','bite_delay_fixed','bite_delay_scale','bite_delay_max','bite_delay_lure_max','bait_pref_scale','bait_pref_weight_shift','bite_gate_lure_diet_min','bite_gate_layer_floor','fish_weight_scale','fish_weight_cap','fight_power_scale','fish_pull_ln_slope','fish_pull_fallback_k','fish_initial_stamina_ratio']],
     ['钩型与咬口','嘬饵总开关与发鱼软匹配；后台钩型倍率仍独立生效',['hook_nibble_enabled','hook_spawn_match_strength']],
+    ['饵效控速','饵好不好决定来鱼快慢：内部按对口分好/中/差三档控节奏（好饵不拖慢，差饵拉长延迟并降低单轮判定概率）；只控节奏不改出什么鱼，默认关；改后最多 30 秒生效',['bite_pace_enabled']],
     ['电轮参数','电轮锁轮倍率与电机功率折算；改后最多 30 秒生效',['electric_locked_multiplier','electric_motor_kg_per_power']],
     ['摩擦片磨损','泄力打滑通道的系数（2026-11-12 拍平：速率不分档位，旧档位键 reel_slip_wear_low/s25~s28/max 已停用不再读取）；改后最多 30 秒生效，只影响后续结算',['reel_slip_wear','reel_slip_calibration_seconds','reel_slip_deadband_ratio']],
     ['受力磨损速率','轮件/竿件/前导按搏鱼受力秒扣磨损的速率；0=关通道',['wear_stress_oil_per_s','wear_stress_gear_per_s','wear_stress_bearing_per_s','wear_stress_spool_per_s','wear_stress_guides_per_s','wear_stress_rodblank_per_s','wear_leader_per_stress_sec']],

@@ -237,7 +237,7 @@ func (s *Server) QueryFish(ctx context.Context, req FishQueryRequest) (*FishQuer
 		if pace.Known && !rigTypeLureFamily[rig] {
 			if cfg := s.effectiveBiteDelaySettings(state); cfg.fixed <= 0 {
 				delay = s.meanPaceStandardDelay(cfg, s.weatherBiteDelayFactor(state, w, at),
-					bonus.BiteSpeed, pace.Factor, pace.Ground, marineRigType(rig))
+					bonus.BiteSpeed, pace.Tier, pace.Ground, marineRigType(rig))
 			}
 		}
 		plan.setTheoreticalRate(delay)

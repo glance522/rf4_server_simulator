@@ -30,6 +30,7 @@ const OTHER = [
   ['condition_health_enabled', '饥饿和寒冷会掉血', '关闭后生命值始终是满的，药品也不会消耗。', '1'],
   ['condition_fishing_pause_enabled', '钓鱼时精力不恢复', '竿在水里时精力暂停恢复，收竿后再恢复。关闭则一直正常恢复。', '1'],
   ['hook_nibble_enabled', '鱼会先嘬饵', '鱼咬钩前先轻嘬几下，抬竿太早会钓空。关闭后第一次抬竿不会判嘬饵。', '0'],
+  ['bite_pace_enabled', '饵效控速', '开启后饵好不好决定来鱼快慢：对口饵不拖慢，不对口的饵拉长等待并降低咬口概率。只控节奏，不改出什么鱼。', '0'],
 ];
 
 export default async function rules() {
