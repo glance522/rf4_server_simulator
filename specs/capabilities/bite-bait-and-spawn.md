@@ -103,46 +103,35 @@
 - ✅ 对口分的证据源与判鱼**同源**（companion 档位、本图 `loc_bait_fish`、
   rf4 占比、生态食性 `diet_json`），拟饵与天然饵共用同一套证据票 + 无证据
   0.30 基线；食性票封顶 0.6——家族对口只给「不差」，「好」必须由证据票给出；
-  拟饵另取名册内最大 `diet_json.lure/2`。路亚族（含海钓铁板 50-54）在此饵分
-  之上按 **饵分 × 动作分** 复合（见下条），三档阈值共用 `pace_score_good/mid`。
+  拟饵另取名册内最大 `diet_json.lure/2`。路亚族（含海钓铁板 50-54）在此饵分上按 **饵分 × 动作分** 复合（见下条）。
   - ❌ 名册内没有任何证据就把无证据饵判满分 → 换什么饵都快，饵效失去意义。
 - ✅ 多钩钓组按 `baitedHookSets` 钩位分组、每钩独立评分取最好一钩（产品决策：
   与 `rollFishForRig` 任意钩可出鱼同语义，不引入「选中主钩」概念——判鱼时
   钩位是随机洗牌的）。
   - ❌ 只拿第一枚钩或全部饵混评 → 与实际出鱼钩位脱节。
 - ✅ 路亚族（含海钓铁板 50-54）在 pace 模式下按**复合档位（饵分 × 当前动作）**
-  取等待窗与开口率（2026-11-21 修约，参数与依据见
-  `specs/changes/lure-action-pace/spec.md`）：好档沿用 `pace_lure_min/max`
-  （默认 1.5~6 秒收线短窗）且开口率 1.0；中/差档默认对齐底钓同档区间
-  （`pace_lure_mid_*`=10~60 / `pace_lure_bad_*`=20~60）且**不受
-  `bite_delay_lure_max` 封顶**——「路亚最长等待」在 pace 模式下只管好档；
-  fire 时按当前动作动态取开口率（1.0/0.5/0.12）；动作复合档位升高时立即
-  重排（只升不降 + 2 秒防抖），落水保护 1.2 秒与 0.8 秒地板沿用。
-  原「14/14 晚于收线窗口」的担忧由既有机制兜住，修约后不变量：
-  - ❌ 14/14 只允许在饵仍在水中（fire 时 `st.InWater` 检查）时到达；
-    「收回到位」由 14/4 收竿感知并停表，timer 不得过夜；
-  - ❌ 放大等待窗不得绕过 biteTicket 票据失效——任何重排必须走
-    `armBiteTimerLocked`，禁止直接另起 timer；
-  - ✅ 收线停顿/水柱悬停/水底静置是合法咬口姿态（客户端动作枚举已知），
-    中/差档长窗 fire 落在这些状态是正常表现。
+  取等待窗与开口率（2026-11-21 修约，依据见 `specs/changes/lure-action-pace/spec.md`）：
+  好档沿用 `pace_lure_min/max`（默认 1.5~6 秒收线短窗）且开口率 1.0；中/差档默认
+  对齐底钓同档区间（`pace_lure_mid_*`=10~60 / `pace_lure_bad_*`=20~60）且**不受
+  `bite_delay_lure_max` 封顶**——「路亚最长等待」只管好档；fire 按当前动作动态取
+  开口率（1.0/0.5/0.12）；档位升高立即重排（只升不降 + 2 秒防抖），落水保护 1.2 秒与 0.8 秒地板沿用。原「14/14 晚于收线窗口」担忧由既有机制兜住，修约后不变量：
+  - ❌ 14/14 只允许在饵仍在水中（fire 检查 `st.InWater`）时到达；「收回到位」由
+    14/4 收竿感知并停表，timer 不得过夜；任何重排必须走 `armBiteTimerLocked`
+    票据失效，禁止直接另起 timer。收线停顿/水柱悬停/水底静置是合法咬口姿态（客户端动作枚举已知），中/差档长窗 fire 落在这些状态是正常表现。
 - ✅ 底层杆延迟 clamp 跟档位与钓组族走：底/浮按档位区间（默认好 `[6,60]`、
   中 `[10,60]`、差 `[20,60]`）、海底钓族 `[3, pace_marine_max=30]`；打窝压缩
   （`groundbaitPaceFactor`）同时压下限到 `pace_groundbait_floor`（3 秒）并同比
   缩短落水保护，但**只缩短不拉长**、任何倍率下不早于 800ms（bite-delay-floor 契约）。
   - ❌ 死窝（overdoseP→0）还继续压缩 → 腻死的窝反而变成「发窝快口」。
-- ✅ 三处消费点（延迟分支、`rodPaceProb`、`paceFloorShrink`）都受**当前开关**
-  门控：运行中热关闭 `bite_pace_enabled` 后下一次判定/重排立即回 legacy，
-  已排定 timer 的绝对时刻不重排。
+- ✅ 三处消费点（延迟分支、`rodPaceProb`、`paceFloorShrink`）都受**当前开关**门控：热关闭 `bite_pace_enabled` 后下一次判定/重排立即回 legacy，已排定 timer 的绝对时刻不重排。
   - ❌ 只检查快照里的 `PaceKnown` → 热关闭后旧因子残留（PR #531 审查 P2-1）。
 - ✅ 名册食性聚合缓存按 statLoc 独立 30 秒过期，`fish_ecology` 重载/失效时
   整体清空（`invalidatePaceDietCache`）。
   - ❌ 单一全局时间戳 → 新图写缓存复活其他图的过期条目（审查 P2-4）。
-- ✅ pace 因子随 `FishState` 走一杆：重启/重连恢复（`PaceKnown=false`）时在
-  timer 触发前惰性重算（`ensurePaceState`），不得按中性因子（无节奏控制）判鱼；
-  补排/嘬饵否决/脱钩重排复用快照时必须带回 `Known=true`（审查 P2-2）。
-- ✅ 查鱼助手的理论条/小时与生产同源：Chance 乘同一档位概率、底层杆平均
-  间隔用 `meanPaceStandardDelay` 同一套 clamp；口径差异（不含
-  `hookBiteDelayFactorForRig` 钩型倍率）与既有 `meanBiteDelay` 一致，非本次引入。
+- ✅ pace 因子随 `FishState` 走一杆：重启/重连恢复（`PaceKnown=false`）时 timer 触发前惰性重算（`ensurePaceState`），不得按中性因子判鱼；补排/嘬饵否决/脱钩重排复用快照时必须带回 `Known=true`（审查 P2-2）。
+- ✅ 查鱼助手的理论条/小时与生产同源：Chance 乘同一档位概率、底层杆平均间隔
+  用 `meanPaceStandardDelay` 同一套 clamp；口径差异（不含 `hookBiteDelayFactorForRig`
+  钩型倍率）与既有 `meanBiteDelay` 一致，非本次引入。
   - ❌ 查询链漏乘 pace 因子 → 「查鱼说很快、实钓等一分钟」。
 
 ## 提交前快速自检
@@ -153,6 +142,6 @@
 - [ ] 轮换改动没有引入定时器；soft/strict 语义没被互换
 - [ ] 嘬饵否决会让客户端知情（14/15），没有静默放走
 - [ ] 发鱼模式切换后四阶段进度没有丢
-- [ ] 节奏开关（bite_pace_enabled）关掉时输出与旧公式逐位一致；pace 开启时
-      路亚好档窗口没被放大，中/差档只经新档位区间放大且 14/14 仍受
-      InWater 检查、14/4 收竿停表与票据失效兜底
+- [ ] 节奏开关（bite_pace_enabled）关掉时输出与旧公式逐位一致；pace 开启时路亚
+      好档窗口没被放大，中/差档放大后 14/14 仍受 InWater 检查、14/4 收竿停表
+      与票据失效兜底
